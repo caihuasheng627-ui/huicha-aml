@@ -34,6 +34,24 @@ npm run dev
 
 首次启动会自动写入 SQLite 合成库 `backend/huicha.db`。若改了种子数据，删掉该文件后重启后端。
 
+## 大模型（必选）
+
+复制 `backend/.env.example` 为 `backend/.env`，填入阿里云百炼 `DASHSCOPE_API_KEY`。  
+默认模型：`deepseek-v4-flash-0731`。Challenger / Reporter **必须走 API**，失败会直接报错，**不再回退模板文案**。  
+结论档位仍由规则打分；事实回查照旧。
+
+**不要把 `.env` 提交到 GitHub。**
+
+## 测试
+
+```bat
+cd huicha-aml\backend
+py -m pip install -r requirements.txt
+py -m pytest -q
+```
+
+会固化路演 A/B/C/D 结论、幻觉拦截、万元格式事实回查（测试中 stub 百炼 HTTP，生产无模板回退）。
+
 ## 演示路径
 
 1. 点「案例 A」→ 启动调查 Agent → 结论应为排除。

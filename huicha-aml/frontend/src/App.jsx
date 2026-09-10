@@ -114,7 +114,7 @@ function auditText(x) {
   return {
     title: `${actor} · ${AUDIT_ACTION[x.action] || x.action}`,
     detail,
-    time: x.created_at ? x.created_at.replace("T", " ") : "",
+    time: x.created_at || "",
   };
 }
 
@@ -472,6 +472,9 @@ export default function App() {
                 )}
                 {inv?.use_challenger === false && <Tag color="orange">质疑角色已关</Tag>}
                 {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
+                {inv?.llm?.reporter || inv?.llm?.challenger ? (
+                  <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
+                ) : null}
               </Space>
               <div className="client-box">
                 {detail?.alert?.upstream}

@@ -5,7 +5,8 @@ import time
 from sqlalchemy.orm import Session
 
 from .knowledge import retrieve_for_alert
-from .tools import collect_bundle, fact_check
+from .llm import enrich_challenger, enrich_report_reason, llm_configured, llm_model
+from .tools import PEER_BASELINE, collect_bundle, fact_check, peer_labels_from_graph, yuan
 
 
 CONCLUSION_LABEL = {
@@ -15,14 +16,6 @@ CONCLUSION_LABEL = {
 }
 
 FAKE_ACCOUNT = "6222-FAKE-9999"
-
-
-def yuan(n) -> str:
-    n = float(n)
-    if abs(n) >= 10000:
-        s = f" {n / 10000:.2f} 万元"
-        return s.replace(" 0 万元", " 0 元").replace(".00 万元", " 万元")
-    return f" {n:,.0f} 元"
 
 
 def _near_threshold(amount: float, band: float = 50000, ratio: float = 0.9) -> bool:
@@ -58,6 +51,7 @@ def run_investigation(
 
     kb_hits = retrieve_for_alert(alert["alert_type"], customer["industry"])
     kb_ids = "、".join(h["id"] for h in kb_hits) or "（无命中）"
+    bundle["facts"]["kb_ids"] = [h["id"] for h in kb_hits]
 
     plan = [
         "读取告警与上游检测来源",
@@ -76,7 +70,8 @@ def run_investigation(
             "title": "生成调查计划",
             "content": f"告警类型「{alert['alert_type']}」。先取数、检索知识库、再分析"
             + ("、再质疑" if use_challenger else "（本轮关闭质疑角色）")
-            + "、最后写理由。结论由规则打分得出，不用案例标签锁死。",
+            + "、最后写理由。结论档位由规则打分保证可复现"
+            + "、最后写理由。结论档位由规则打分保证可复现；质疑与理由文案必须调用百炼 API（无模板回退）。",
             "items": plan,
         }
     )
@@ -130,12 +125,27 @@ def run_investigation(
     if "拆分" in alert["alert_type"] or "归集" in alert["alert_type"]:
         score += 0.16
 
-    if customer["kind"] == "enterprise" and customer["industry"] == "日用百货批发":
+    in_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "in")
+    out_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "out")
+    # 对公 + 有同业基线 + 稳定对手方：用图谱节点名，不写死商户
+    if (
+        customer["kind"] == "enterprise"
+        and customer["industry"] in PEER_BASELINE
+        and len(in_labels) >= 1
+        and len(out_labels) >= 1
+        and customer["industry"] != "贸易代理"
+    ):
+        down = "、".join(in_labels[:3])
+        up = "、".join(out_labels[:3])
         findings.append(
             {
-                "code": "pattern-wholesale",
-                "title": "交易与批发备货特征相符",
-                "detail": f"下游余杭便利连锁反复入账、上游浙北日化供应中心反复出账，样本流入{yuan(baseline['sample_in_sum'])}，约为同业月度区间的 {baseline['in_sum_vs_peer']} 倍。",
+                "code": "pattern-peer",
+                "title": "交易与同业经营特征对照",
+                "detail": (
+                    f"流入对手方主要为{down}，流出对手方主要为{up}；"
+                    f"样本流入{yuan(baseline['sample_in_sum'])}，约为同业月度区间的 {baseline['in_sum_vs_peer']} 倍。"
+                    f"基线说明：{baseline['peer_note']}"
+                ),
                 "evidence_ids": [t["id"] for t in txs[:6]],
             }
         )
@@ -209,46 +219,63 @@ def run_investigation(
     )
 
     challenger = []
+    score_hints: list[dict] = []
     if use_challenger:
-        if customer["industry"] == "日用百货批发":
-            challenger.append(
+        # 分数仍由规则控制；文案一律走 API，不再用模板当展示稿
+        if (
+            customer["kind"] == "enterprise"
+            and customer["industry"] in PEER_BASELINE
+            and customer["industry"] != "贸易代理"
+            and customer["kyc_level"] not in {"高风险", "关注"}
+        ):
+            peers = "、".join((in_labels + out_labels)[:4]) or "图谱对手方"
+            score -= 0.45
+            score_hints.append(
                 {
                     "title": "经营合理性抗辩",
-                    "detail": f"{baseline['peer_note']} 开户于 {customer['opened_at']}，KYC 非高风险，对手方为长期上下游而非散户现金。",
+                    "detail": (
+                        f"{baseline['peer_note']} 开户于 {customer['opened_at']}，"
+                        f"KYC 为{customer['kyc_level']}，主要对手方为{peers}。"
+                    ),
                 }
             )
-            score -= 0.45
-            ind_hit = next((h for h in kb_hits if h["id"] == "KB-IND-01"), None)
+            ind_hit = next((h for h in kb_hits if h["kind"] == "industry"), None)
             if ind_hit:
-                challenger[-1]["detail"] += f" 引用 {ind_hit['id']}：{ind_hit['snippet']}"
+                score_hints[-1]["detail"] += f" 可引用 {ind_hit['id']}"
         if customer["kind"] == "individual" and customer["industry"] == "个人-退休":
-            challenger.append(
+            summary = (customer.get("summary") or "").strip() or "档案摘要缺失"
+            remarks = sorted({t.get("remark") or "" for t in txs if t.get("remark")})
+            remark_txt = "、".join(r for r in remarks if r) or "未见柜面用途备注"
+            score -= 0.30
+            score_hints.append(
                 {
                     "title": "用途可解释",
-                    "detail": "客户档案摘要记载子女购房，单笔柜面大额不一定构成洗钱，需核验收款人亲属关系后排除或观察。",
+                    "detail": f"档案摘要：「{summary}」。近窗备注：{remark_txt}。",
                 }
             )
-            score -= 0.22
         if customer["industry"] == "餐饮":
-            challenger.append(
-                {
-                    "title": "业态抗辩",
-                    "detail": baseline["peer_note"],
-                }
-            )
             score -= 0.28
-        if not challenger:
-            challenger.append(
+            score_hints.append({"title": "业态抗辩", "detail": baseline["peer_note"]})
+        if not score_hints:
+            score_hints.append(
                 {
                     "title": "未找到强开脱理由",
-                    "detail": "开户时间短、职业/行业与资金规模不匹配，或对手方分散后突然收口，反证不足。",
+                    "detail": "开户时间短、职业/行业与资金规模不匹配，或对手方分散后突然收口。",
                 }
             )
+        challenger = enrich_challenger(
+            alert=alert,
+            customer=customer,
+            findings=findings,
+            baseline=baseline,
+            kb_hits=kb_hits,
+            score_hints=score_hints,
+        )
         steps.append(
             {
                 "role": "Challenger",
                 "title": "寻找反证，抑制确认偏误",
-                "content": "对 Analyst 每条疑点尝试给出经营或用途解释，并回写置信度。",
+                "content": f"文案由百炼 {llm_model()} 生成；置信度分数仍由规则控制。",
                 "items": [f"{c['title']}：{c['detail']}" for c in challenger],
             }
         )
@@ -301,6 +328,29 @@ def run_investigation(
         use_challenger,
         kb_hits,
     )
+    sample_ids = "、".join(t["id"] for t in (inflow + outflow)[:6]) or "（无交易）"
+    polished = enrich_report_reason(
+        alert=alert,
+        customer=customer,
+        conclusion_label=CONCLUSION_LABEL[conclusion],
+        findings=findings,
+        challenger=challenger,
+        kb_hits=kb_hits,
+        sample_ids=sample_ids,
+        draft_reason=report["reason"],
+    )
+    report["reason"] = polished
+    report["elements"] = [
+        e if e["key"] != "可疑/排除理由" else {"key": e["key"], "value": polished} for e in report["elements"]
+    ]
+    lines = report["full_text"].split("\n")
+    rebuilt = []
+    for line in lines:
+        if line.startswith("【结论与理由】"):
+            rebuilt.append(f"【结论与理由】{CONCLUSION_LABEL[conclusion]}。{polished}")
+        else:
+            rebuilt.append(line)
+    report["full_text"] = "\n".join(rebuilt)
     if inject_hallucination:
         poison = f"另发现未在工具结果中出现的对手账户 {FAKE_ACCOUNT}。"
         report["reason"] += poison
@@ -312,17 +362,19 @@ def run_investigation(
         {
             "role": "Reporter",
             "title": "监管要素草稿 + 事实回查",
-            "content": "金额、账号、交易编号均须来自工具返回值。不匹配字段标红，不可签发。",
+            "content": f"理由由百炼 {llm_model()} 生成；金额/账号/交易编号须来自工具，不匹配则不可签发。无模板回退。",
             "items": [
                 f"建议结论：{CONCLUSION_LABEL[conclusion]}（置信度 {int(score * 100)}%）",
                 f"事实回查问题数：{len(issues)}",
                 f"知识库引用：{kb_ids}",
                 f"Challenger：{'开启' if use_challenger else '关闭'}",
+                f"大模型：{llm_model()}（已真实调用）",
                 "Agent 不可自动报送，须调查员签发。",
             ],
         }
     )
 
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     return {
         "alert": alert,
         "customer": customer,
@@ -333,6 +385,13 @@ def run_investigation(
         "challenger": challenger,
         "use_challenger": use_challenger,
         "inject_hallucination": inject_hallucination,
+        "llm": {
+            "configured": True,
+            "challenger": use_challenger,
+            "reporter": True,
+            "provider": "阿里云百炼 / DashScope",
+            "model": llm_model(),
+        },
         "conclusion": conclusion,
         "conclusion_label": CONCLUSION_LABEL[conclusion],
         "confidence": round(score, 2),
@@ -345,9 +404,9 @@ def run_investigation(
         "transactions": txs,
         "fact_issues": issues,
         "can_sign": len(issues) == 0,
-        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        "elapsed_ms": elapsed_ms,
         "comparison": {
-            "agent_ms": int((time.perf_counter() - started) * 1000),
+            "agent_ms": elapsed_ms,
             "manual_minutes": 25 if conclusion == "exclude" else 90,
             "tools_called": len(tool_trace),
             "note": "人工分钟数为同业调查作业区间示意，非工行实测。",

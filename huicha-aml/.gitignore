@@ -4,3 +4,7 @@ huicha.db
 node_modules/
 dist/
 .DS_Store
+backend/.env
+.env
+.env.*
+!.env.example

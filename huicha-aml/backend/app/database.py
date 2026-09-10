@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from pathlib import Path
 
-SQLALCHEMY_URL = "sqlite:///./huicha.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "huicha.db"
+SQLALCHEMY_URL = f"sqlite:///{DB_PATH.as_posix()}"
 
 engine = create_engine(
     SQLALCHEMY_URL,

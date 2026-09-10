@@ -1,6 +1,7 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from .agents import run_investigation
 from .database import Base, SessionLocal, engine, get_db
 from .knowledge import list_knowledge, search_knowledge
-from .models import Alert, AuditLog, Customer, Investigation
+from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -19,6 +20,20 @@ DECIDE_LABEL = {
     "modify": "修改后采纳",
     "reject": "已驳回",
 }
+
+CN_TZ = timezone(timedelta(hours=8))
+
+
+def format_cn(dt: datetime | None) -> str:
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_investigation(db: Session, alert_id: str) -> Investigation | None:
+    return db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
 
 
 @asynccontextmanager
@@ -48,7 +63,14 @@ def write_audit(db: Session, alert_id: str, actor: str, action: str, detail: str
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "name": "慧查 AML"}
+    from .llm import llm_configured, llm_model
+
+    return {
+        "ok": True,
+        "name": "慧查 AML",
+        "llm": "bailian" if llm_configured() else "off",
+        "model": llm_model() if llm_configured() else "",
+    }
 
 
 @app.get("/api/kb")
@@ -61,10 +83,18 @@ def kb_index(q: str = ""):
 @app.get("/api/alerts")
 def list_alerts(db: Session = Depends(get_db)):
     rows = db.query(Alert).order_by(Alert.created_at.desc()).all()
+    inv_map = {
+        i.alert_id: i
+        for i in db.query(Investigation).filter(Investigation.alert_id.in_([a.id for a in rows])).all()
+    } if rows else {}
+    cust_ids = {a.customer_id for a in rows}
+    cust_map = {
+        c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()
+    } if cust_ids else {}
     out = []
     for a in rows:
-        c = db.get(Customer, a.customer_id)
-        inv = db.query(Investigation).filter(Investigation.alert_id == a.id).first()
+        c = cust_map.get(a.customer_id)
+        inv = inv_map.get(a.id)
         out.append(
             {
                 "id": a.id,
@@ -90,7 +120,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "告警不存在")
-    inv = db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+    inv = get_investigation(db, alert_id)
     logs = (
         db.query(AuditLog)
         .filter(AuditLog.alert_id == alert_id)
@@ -120,7 +150,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
                 "actor": x.actor,
                 "action": x.action,
                 "detail": x.detail,
-                "created_at": x.created_at.isoformat(timespec="seconds"),
+                "created_at": format_cn(x.created_at),
             }
             for x in logs
         ],
@@ -137,13 +167,16 @@ def investigate(
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "告警不存在")
-    result = run_investigation(
-        db,
-        alert_id,
-        use_challenger=use_challenger,
-        inject_hallucination=inject_hallucination,
-    )
-    inv = db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+    try:
+        result = run_investigation(
+            db,
+            alert_id,
+            use_challenger=use_challenger,
+            inject_hallucination=inject_hallucination,
+        )
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    inv = get_investigation(db, alert_id)
     blob = json.dumps(result, ensure_ascii=False)
     if inv:
         inv.payload_json = blob
@@ -180,15 +213,17 @@ def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
     if body.decision not in {"confirm", "modify", "reject"}:
         raise HTTPException(400, "decision 必须是 confirm / modify / reject")
     alert = db.get(Alert, alert_id)
-    inv = db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+    inv = get_investigation(db, alert_id)
     if not alert or not inv:
         raise HTTPException(400, "请先生成调查草稿")
     payload = json.loads(inv.payload_json)
     if body.decision == "confirm" and not payload.get("can_sign"):
         raise HTTPException(400, "事实回查未通过，不能签发")
+    if body.decision == "modify" and not payload.get("can_sign") and not body.note.strip():
+        raise HTTPException(400, "事实回查未通过时，「修改后采纳」须填写修改说明")
     inv.human_decision = body.decision
     inv.human_note = body.note
-    inv.decided_at = datetime.utcnow()
+    inv.decided_at = utcnow()
     if body.decision == "confirm":
         alert.status = "closed" if payload["conclusion"] == "exclude" else "ready_to_file"
     elif body.decision == "reject":
@@ -225,7 +260,7 @@ def metrics(db: Session = Depends(get_db)):
 
 @app.get("/api/alerts/{alert_id}/export")
 def export_report(alert_id: str, db: Session = Depends(get_db)):
-    inv = db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+    inv = get_investigation(db, alert_id)
     if not inv:
         raise HTTPException(404, "尚无草稿")
     payload = json.loads(inv.payload_json)
@@ -249,4 +284,12 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         "",
         "—— Agent 不可自动报送，须调查员签发 ——",
     ]
-    return PlainTextResponse("\n".join(lines), media_type="text/markdown; charset=utf-8")
+    filename = f"huicha-{alert_id}.md"
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+    }
+    return PlainTextResponse(
+        "\n".join(lines),
+        media_type="text/markdown; charset=utf-8",
+        headers=headers,
+    )

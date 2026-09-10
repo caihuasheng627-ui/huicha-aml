@@ -1,0 +1,22 @@
+# 依赖与构建
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 本地运行数据
+huicha-aml/backend/huicha.db
+*.db
+*.db-journal
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+.env
+.env.*

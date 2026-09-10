@@ -12,7 +12,7 @@ import {
   Timeline,
   message,
 } from "antd";
-import { decide, exportUrl, fetchAlerts, fetchDetail, fetchMetrics, runInvestigate } from "./api";
+import { decide, exportUrl, fetchAlerts, fetchDetail, fetchFeedback, fetchHealth, fetchMetrics, runInvestigate } from "./api";
 
 const HUMAN = {
   confirm: "已签发草稿",
@@ -48,6 +48,7 @@ const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
   { id: "ALT-B-20260910", key: "2", label: "案例 B 拆分" },
   { id: "ALT-C-20260910", key: "3", label: "案例 C 归集" },
+  { id: "ALT-F-20260910", key: "4", label: "案例 F 观察" },
 ];
 
 function yuan(n) {
@@ -227,14 +228,23 @@ export default function App() {
   const [q, setQ] = useState("");
   const [clock, setClock] = useState(nowText());
   const [offline, setOffline] = useState(false);
+  const [llmOff, setLlmOff] = useState(false);
+  const [feedback, setFeedback] = useState(null);
   const inv = detail?.investigation;
 
   async function loadList() {
     try {
-      const [list, m] = await Promise.all([fetchAlerts(), fetchMetrics()]);
+      const [list, m, health, fb] = await Promise.all([
+        fetchAlerts(),
+        fetchMetrics(),
+        fetchHealth(),
+        fetchFeedback().catch(() => null),
+      ]);
       setAlerts(list);
       setMetrics(m);
+      setFeedback(fb);
       setOffline(false);
+      setLlmOff(health?.llm === "off");
     } catch (e) {
       setOffline(true);
       throw e;
@@ -266,7 +276,7 @@ export default function App() {
   }, []);
 
   async function onInvestigate(id = current) {
-    if (!id) return;
+    if (!id || loading) return;
     setCurrent(id);
     setLoading(true);
     try {
@@ -340,7 +350,7 @@ export default function App() {
 
       <div className="toolbar">
         {DEMOS.map((d) => (
-          <Button key={d.id} size="small" type={current === d.id ? "primary" : "default"} onClick={() => onInvestigate(d.id)}>
+          <Button key={d.id} size="small" type={current === d.id ? "primary" : "default"} disabled={loading} onClick={() => onInvestigate(d.id)}>
             {d.label}
           </Button>
         ))}
@@ -368,6 +378,15 @@ export default function App() {
           description="请先启动后端：huicha-aml/backend 下执行 py -m uvicorn app.main:app --reload --port 8000"
         />
       )}
+      {!offline && llmOff && (
+        <Alert
+          type="error"
+          banner
+          showIcon
+          message="未配置 DASHSCOPE_API_KEY"
+          description="Challenger/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
+        />
+      )}
 
       <div className="layout">
         <aside className="col">
@@ -378,9 +397,16 @@ export default function App() {
           <div className="hint">
             上游检测已完成。本台只出草稿。
             <Button type="link" size="small" onClick={() => setOnlyDemo((v) => !v)}>
-              {onlyDemo ? "全部告警" : "路演三条"}
+              {onlyDemo ? "全部告警" : "路演案"}
             </Button>
           </div>
+          {feedback && feedback.decisions && (
+            <div className="hint" style={{ marginBottom: 8 }}>
+              反馈闭环：采纳 {feedback.decisions.confirm} · 修改 {feedback.decisions.modify} · 驳回{" "}
+              {feedback.decisions.reject}
+              {metrics?.labeled ? ` · 精标 ${metrics.labeled}` : ""}
+            </div>
+          )}
           <Input
             size="small"
             allowClear
@@ -462,7 +488,7 @@ export default function App() {
                 </div>
               </div>
               <Space wrap style={{ marginBottom: 10 }}>
-                <Button type="primary" onClick={() => onInvestigate()}>
+                <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
                   {inv ? "按当前策略重跑" : "开始调查"}
                 </Button>
                 {detail?.human_decision ? (
@@ -479,7 +505,9 @@ export default function App() {
               <div className="client-box">
                 {detail?.alert?.upstream}
                 {inv?.customer?.summary ? `。${inv.customer.summary}` : ""}
-                {inv?.comparison ? ` 人工调查示意约 ${inv.comparison.manual_minutes} 分钟。` : ""}
+                {inv?.comparison
+                  ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
+                  : ""}
               </div>
               {inv?.fact_issues?.length > 0 && (
                 <Alert
@@ -660,7 +688,13 @@ export default function App() {
       </div>
       <footer className="footer">
         <span>内部演示系统　不得用于真实客户数据　Agent 结论须人工签发</span>
-        <span>队列 {metrics?.alerts ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签 {metrics?.signed ?? "—"}</span>
+        <span>
+          队列 {metrics?.alerts ?? "—"}　精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
+          {metrics?.signed ?? "—"}
+          {feedback?.rates
+            ? `　采纳率 ${Math.round((feedback.rates.confirm || 0) * 100)}%`
+            : ""}
+        </span>
       </footer>
     </div>
   );

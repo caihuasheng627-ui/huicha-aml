@@ -22,9 +22,21 @@ export async function fetchDetail(id) {
   return r.json();
 }
 
+export async function fetchHealth() {
+  const r = await fetch(`${API}/api/health`);
+  if (!r.ok) throw new Error(await readError(r, "无法加载健康检查"));
+  return r.json();
+}
+
 export async function fetchMetrics() {
   const r = await fetch(`${API}/api/metrics`);
   if (!r.ok) throw new Error(await readError(r, "无法加载指标"));
+  return r.json();
+}
+
+export async function fetchFeedback() {
+  const r = await fetch(`${API}/api/feedback`);
+  if (!r.ok) throw new Error(await readError(r, "无法加载反馈看板"));
   return r.json();
 }
 

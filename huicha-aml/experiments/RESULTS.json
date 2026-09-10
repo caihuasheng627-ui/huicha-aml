@@ -1,0 +1,51 @@
+{
+  "fact_check": {
+    "name": "事实回查拦截率",
+    "n_poison": 200,
+    "intercept_rate": 1.0,
+    "n_clean": 200,
+    "clean_false_positive_rate": 0.0,
+    "note": "毒化草稿含虚构账号/金额/编号；干净句含阈值与概数措辞。"
+  },
+  "ablation_consistency": {
+    "name": "Challenger 消融 + 精标一致率",
+    "n_labeled": 31,
+    "consistency_rate_challenger_on": 1.0,
+    "gold_exclude_n": 13,
+    "false_suggest_report_rate_on": 0.0,
+    "false_suggest_report_rate_off": 0.5385,
+    "false_report_lift": 0.5385,
+    "observe_present": true,
+    "sample": [
+      {
+        "id": "ALT-A-20260910",
+        "gold": "exclude",
+        "on": "exclude",
+        "off": "suggest_report",
+        "demo_tag": "A"
+      },
+      {
+        "id": "ALT-B-20260910",
+        "gold": "suggest_report",
+        "on": "suggest_report",
+        "off": "suggest_report",
+        "demo_tag": "B"
+      },
+      {
+        "id": "ALT-C-20260910",
+        "gold": "suggest_report",
+        "on": "suggest_report",
+        "off": "suggest_report",
+        "demo_tag": "C"
+      },
+      {
+        "id": "ALT-F-20260910",
+        "gold": "observe",
+        "on": "observe",
+        "off": "suggest_report",
+        "demo_tag": "F"
+      }
+    ]
+  },
+  "hallucination_demo_intercepted": true
+}

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .agents import run_investigation
 from .database import Base, SessionLocal, engine, get_db
 from .knowledge import list_knowledge, search_knowledge
+from .llm import llm_configured, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .seed import seed_if_empty
 
@@ -58,18 +59,17 @@ app.add_middleware(
 
 
 def write_audit(db: Session, alert_id: str, actor: str, action: str, detail: str) -> None:
-    db.add(AuditLog(alert_id=alert_id, actor=actor, action=action, detail=detail))
+    db.add(AuditLog(alert_id=alert_id, actor=actor, action=action, detail=detail, created_at=utcnow()))
 
 
 @app.get("/api/health")
 def health():
-    from .llm import llm_configured, llm_model
-
     return {
         "ok": True,
         "name": "慧查 AML",
         "llm": "bailian" if llm_configured() else "off",
         "model": llm_model() if llm_configured() else "",
+        "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
     }
 
 
@@ -250,11 +250,57 @@ def metrics(db: Session = Depends(get_db)):
     for a in alerts:
         by_status[a.status] = by_status.get(a.status, 0) + 1
     signed = sum(1 for i in invs if i.human_decision == "confirm")
+    labeled = sum(1 for a in alerts if (a.gold_label or ""))
     return {
         "alerts": len(alerts),
+        "labeled": labeled,
         "drafts": len(invs),
         "signed": signed,
         "by_status": by_status,
+    }
+
+
+@app.get("/api/feedback")
+def feedback(db: Session = Depends(get_db)):
+    """人机闭环看板：采纳/修改/驳回率，及人工改结论与 Agent 建议对照。"""
+    invs = db.query(Investigation).all()
+    alerts = {a.id: a for a in db.query(Alert).all()}
+    counts = {"confirm": 0, "modify": 0, "reject": 0, "undecided": 0}
+    by_type: dict[str, dict] = {}
+    flipped = []
+    for inv in invs:
+        d = inv.human_decision or ""
+        if d in counts:
+            counts[d] += 1
+        else:
+            counts["undecided"] += 1
+        alert = alerts.get(inv.alert_id)
+        atype = alert.alert_type if alert else "未知"
+        bucket = by_type.setdefault(atype, {"confirm": 0, "modify": 0, "reject": 0, "total": 0})
+        if d in {"confirm", "modify", "reject"}:
+            bucket[d] += 1
+            bucket["total"] += 1
+        if d in {"modify", "reject"} and inv.conclusion:
+            flipped.append(
+                {
+                    "alert_id": inv.alert_id,
+                    "alert_type": atype,
+                    "agent_conclusion": inv.conclusion,
+                    "human_decision": d,
+                    "note": (inv.human_note or "")[:120],
+                }
+            )
+    decided = counts["confirm"] + counts["modify"] + counts["reject"]
+    return {
+        "decisions": counts,
+        "rates": {
+            "confirm": round(counts["confirm"] / decided, 4) if decided else 0,
+            "modify": round(counts["modify"] / decided, 4) if decided else 0,
+            "reject": round(counts["reject"] / decided, 4) if decided else 0,
+        },
+        "by_alert_type": by_type,
+        "human_flipped": flipped[:50],
+        "note": "信号已入库供离线优化；竞赛原型不做在线再训练。",
     }
 
 

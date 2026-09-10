@@ -1,10 +1,14 @@
 from sqlalchemy.orm import Session
 
 from .models import Account, Alert, Customer, Transaction
+from .seed_extended import seed_extended_cases
 
 
 def seed_if_empty(db: Session) -> None:
     if db.query(Alert).count() > 0:
+        # 旧库可能缺扩展集 / gold_label：尽量补齐
+        seed_extended_cases(db)
+        _backfill_gold(db)
         return
 
     customers = [
@@ -323,6 +327,7 @@ def seed_if_empty(db: Session) -> None:
             status="pending",
             demo_tag="A",
             upstream="规则引擎：单日对公进出超过阈值",
+            gold_label="exclude",
         ),
         Alert(
             id="ALT-B-20260910",
@@ -335,6 +340,7 @@ def seed_if_empty(db: Session) -> None:
             status="pending",
             demo_tag="B",
             upstream="规则引擎：拆分特征 + 快进快出",
+            gold_label="suggest_report",
         ),
         Alert(
             id="ALT-C-20260910",
@@ -347,6 +353,7 @@ def seed_if_empty(db: Session) -> None:
             status="pending",
             demo_tag="C",
             upstream="图规则模拟：多对一归集",
+            gold_label="suggest_report",
         ),
         Alert(
             id="ALT-D-20260909",
@@ -359,6 +366,7 @@ def seed_if_empty(db: Session) -> None:
             status="pending",
             demo_tag="",
             upstream="规则引擎：个人大额",
+            gold_label="exclude",
         ),
         Alert(
             id="ALT-E-20260908",
@@ -371,7 +379,28 @@ def seed_if_empty(db: Session) -> None:
             status="pending",
             demo_tag="",
             upstream="规则引擎：夜间交易笔数",
+            gold_label="exclude",
         ),
     ]
     db.add_all(alerts)
     db.commit()
+    seed_extended_cases(db)
+
+
+def _backfill_gold(db: Session) -> None:
+    mapping = {
+        "ALT-A-20260910": "exclude",
+        "ALT-B-20260910": "suggest_report",
+        "ALT-C-20260910": "suggest_report",
+        "ALT-D-20260909": "exclude",
+        "ALT-E-20260908": "exclude",
+        "ALT-F-20260910": "observe",
+    }
+    changed = False
+    for aid, gold in mapping.items():
+        row = db.get(Alert, aid)
+        if row and not (getattr(row, "gold_label", None) or ""):
+            row.gold_label = gold
+            changed = True
+    if changed:
+        db.commit()

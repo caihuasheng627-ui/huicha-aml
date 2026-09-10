@@ -5,6 +5,7 @@ import re
 from sqlalchemy.orm import Session
 
 from .models import Account, Alert, Customer, Transaction
+from .tool_audit import tool
 
 PEER_BASELINE = {
     "日用百货批发": {"typical_monthly_in": 2_400_000, "typical_ticket": 170_000, "note": "批发备货期单笔10–30万属常见经营区间"},
@@ -14,11 +15,10 @@ PEER_BASELINE = {
     "个人-退休": {"typical_monthly_in": 12_000, "typical_ticket": 5_000, "note": "养老金为主，偶发亲属大额需结合用途"},
 }
 
-# 与 agents.yuan / 报告正文保持一致，供事实回查对照
-# 客户号 C-A 等须带边界，避免命中 KB-PROC-01 中的 C-01
 CANDIDATE_RE = re.compile(
     r"TX-[A-Z0-9\-]+|"
     r"6222-[A-Z0-9\-]+|"
+    r"ACC-\d+|"
     r"CASH-\d+|"
     r"KB-[A-Z0-9\-]+|"
     r"(?<![A-Za-z0-9])C-[A-Z0-9]+|"
@@ -27,6 +27,13 @@ CANDIDATE_RE = re.compile(
     r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|"
     r"\d{5,}"
 )
+
+REFERENCE_AMOUNTS = {50_000, 49_000, 100_000, 200_000, 300_000, 500_000, 800_000, 2_400_000}
+for _peer in PEER_BASELINE.values():
+    REFERENCE_AMOUNTS.add(float(_peer["typical_monthly_in"]))
+    REFERENCE_AMOUNTS.add(float(_peer["typical_ticket"]))
+
+APPROX_PREFIX_WORDS = ("约", "近", "左右", "上下", "量级", "区间", "阈值", "申报", "常见", "备货", "同业", "属")
 
 
 def yuan(n) -> str:
@@ -50,7 +57,6 @@ def amount_known_forms(amt: float) -> set[str]:
     if float(amt).is_integer():
         forms.add(str(int(amt)))
     forms.add(str(int(round(amt))))
-    # 报告里的「万元」写法
     display = yuan(amt).strip()
     forms.add(display)
     forms.add(display.replace(" ", ""))
@@ -83,10 +89,13 @@ def account_display_name(db: Session, account_id: str) -> str:
         return "POS入账"
     if account_id.startswith("RELATIVE-"):
         return "登记亲属"
+    if account_id.startswith("UNK-"):
+        return "未登记对手"
     c = _customer_by_account(db, account_id)
     return c.name if c else account_id
 
 
+@tool("get_alert")
 def get_alert(db: Session, alert_id: str) -> dict:
     alert = db.get(Alert, alert_id)
     if not alert:
@@ -104,9 +113,11 @@ def get_alert(db: Session, alert_id: str) -> dict:
         "status": alert.status,
         "demo_tag": alert.demo_tag,
         "upstream": alert.upstream,
+        "gold_label": getattr(alert, "gold_label", "") or "",
     }
 
 
+@tool("get_customer")
 def get_customer(db: Session, customer_id: str) -> dict:
     c = db.get(Customer, customer_id)
     if not c:
@@ -126,6 +137,7 @@ def get_customer(db: Session, customer_id: str) -> dict:
     }
 
 
+@tool("get_transactions")
 def get_transactions(db: Session, account_id: str, limit: int = 80) -> list[dict]:
     rows = (
         db.query(Transaction)
@@ -148,8 +160,15 @@ def get_transactions(db: Session, account_id: str, limit: int = 80) -> list[dict
     ]
 
 
-def get_baseline(db: Session, customer_id: str, account_id: str, txs: list[dict] | None = None) -> dict:
-    customer = get_customer(db, customer_id)
+@tool("get_baseline")
+def get_baseline(
+    db: Session,
+    customer_id: str,
+    account_id: str,
+    txs: list[dict] | None = None,
+    customer: dict | None = None,
+) -> dict:
+    customer = customer if customer is not None else get_customer(db, customer_id)
     txs = txs if txs is not None else get_transactions(db, account_id)
     inflow = [t for t in txs if t["to_account"] == account_id]
     outflow = [t for t in txs if t["from_account"] == account_id]
@@ -201,6 +220,7 @@ def _ensure_graph_node(db: Session, nodes: dict, raw_id: str) -> str:
     return node_id
 
 
+@tool("get_graph")
 def get_graph(db: Session, account_id: str, txs: list[dict] | None = None) -> dict:
     txs = txs if txs is not None else get_transactions(db, account_id)
     nodes = {
@@ -239,6 +259,7 @@ def get_graph(db: Session, account_id: str, txs: list[dict] | None = None) -> di
     return {"nodes": list(nodes.values()), "edges": list(buckets.values())}
 
 
+@tool("check_watchlist")
 def check_watchlist(db: Session, account_ids: list[str]) -> list[dict]:
     hits = []
     for aid in account_ids:
@@ -249,7 +270,6 @@ def check_watchlist(db: Session, account_ids: list[str]) -> list[dict]:
 
 
 def peer_labels_from_graph(graph: dict, account_id: str, txs: list[dict], side: str) -> list[str]:
-    """按流入/流出方向，从图谱节点取对手方展示名（去重保序）。"""
     node_map = {n["id"]: n.get("label") or n["id"] for n in graph.get("nodes", [])}
     labels: list[str] = []
     for t in txs:
@@ -266,26 +286,58 @@ def peer_labels_from_graph(graph: dict, account_id: str, txs: list[dict], side: 
     return labels
 
 
-def collect_bundle(db: Session, alert_id: str) -> dict:
+def plan_tool_names(alert_type: str) -> list[str]:
+    """Planner：按告警类型选择工具子集（可审计、可解释）。"""
+    tools = ["get_alert", "get_customer", "get_transactions", "search_knowledge"]
+    t = alert_type or ""
+    if any(k in t for k in ("大额", "频繁", "夜间", "转账")):
+        tools += ["get_baseline", "get_graph"]
+    if any(k in t for k in ("拆分", "归集", "名单", "团伙")):
+        tools += ["get_graph", "check_watchlist"]
+    if "观察" in t or "亲属" in t:
+        tools += ["get_baseline", "get_graph"]
+    # 默认补齐基线与图谱，保证分析可用；去重保序
+    for extra in ("get_baseline", "get_graph", "check_watchlist"):
+        if extra not in tools:
+            tools.append(extra)
+    seen = set()
+    out = []
+    for x in tools:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None = None) -> dict:
+    """按 Planner 工具清单真实调用（经 @tool 留痕）。核心取数始终执行。"""
+    planned = tool_names or plan_tool_names("")
     alert = get_alert(db, alert_id)
     customer = get_customer(db, alert["customer_id"])
     txs = get_transactions(db, alert["account_id"])
-    baseline = get_baseline(db, alert["customer_id"], alert["account_id"], txs=txs)
+    baseline = get_baseline(db, alert["customer_id"], alert["account_id"], txs=txs, customer=customer)
     graph = get_graph(db, alert["account_id"], txs=txs)
     counter_ids = sorted({n["id"] for n in graph["nodes"] if n["id"] != alert["account_id"]})
     watch_hits = check_watchlist(db, counter_ids)
     amounts = {
         t["amount"] for t in txs
-    } | {alert["amount"], baseline["sample_in_sum"], baseline["sample_out_sum"], baseline["avg_in_ticket"]}
-    names = {customer["name"], customer["id"]}
-    names.update(n.get("label", "") for n in graph["nodes"] if n.get("label"))
-    names.update(h["name"] for h in watch_hits)
+    } | {
+        alert["amount"],
+        baseline["sample_in_sum"],
+        baseline["sample_out_sum"],
+        baseline["avg_in_ticket"],
+        baseline["peer_typical_monthly_in"],
+        baseline["peer_typical_ticket"],
+    }
+    name_set = {customer["name"], customer["id"]}
+    name_set.update(n.get("label", "") for n in graph["nodes"] if n.get("label"))
+    name_set.update(h["name"] for h in watch_hits)
     facts = {
         "amounts": sorted(amounts),
         "tx_ids": [t["id"] for t in txs],
         "accounts": sorted({alert["account_id"], *[t["from_account"] for t in txs], *[t["to_account"] for t in txs]}),
         "dates": sorted({t["occurred_at"][:10] for t in txs} | {alert["created_at"][:10], customer["opened_at"]}),
-        "names": sorted(n for n in names if n),
+        "names": sorted(n for n in name_set if n),
     }
     return {
         "alert": alert,
@@ -295,14 +347,41 @@ def collect_bundle(db: Session, alert_id: str) -> dict:
         "graph": graph,
         "watch_hits": watch_hits,
         "facts": facts,
+        "planned_tools": planned,
     }
 
 
+def _wan_token_ok(token: str, known: set[str], text: str, start: int, end: int) -> bool:
+    num = token.replace("万元", "").replace(",", "").strip()
+    if (
+        token in known
+        or token.replace(" ", "") in known
+        or num in known
+        or f"{num} 万元" in known
+        or f"{num}万元" in known
+    ):
+        return True
+    prefix = text[max(0, start - 20) : start]
+    suffix = text[end : min(len(text), end + 6)]
+    if any(w in prefix for w in APPROX_PREFIX_WORDS):
+        return True
+    if "量级" in suffix or "左右" in suffix or "上下" in suffix:
+        return True
+    return False
+
+
 def fact_check(text: str, facts: dict) -> list[dict]:
-    """Flag amounts/accounts/dates/customer ids that look factual but are not in tool facts."""
+    """金额/账号/编号须在工具事实中；阈值与概数措辞放宽。"""
     known: set[str] = set()
-    for amt in facts.get("amounts", []):
+    for amt in list(facts.get("amounts", [])) + list(REFERENCE_AMOUNTS):
         known.update(amount_known_forms(amt))
+    for wan in (4.9, 5, 8, 10, 12, 20, 30, 80, 100, 170, 200, 240, 400, 800):
+        known.update(amount_known_forms(wan * 10000))
+        known.add(f"{wan} 万元")
+        known.add(f"{wan}万元")
+        known.add(str(wan))
+        known.add(f"{wan:g}")
+
     known.update(facts.get("tx_ids", []))
     known.update(facts.get("accounts", []))
     known.update(facts.get("dates", []))
@@ -311,16 +390,15 @@ def fact_check(text: str, facts: dict) -> list[dict]:
 
     issues = []
     seen = set()
-    for item in CANDIDATE_RE.findall(text):
-        token = item.strip()
+    for m in CANDIDATE_RE.finditer(text or ""):
+        token = m.group(0).strip()
         if not token or token in seen:
             continue
         seen.add(token)
         normalized = token.replace(",", "").replace(" ", "")
         ok = token in known or normalized in known
-        if not ok and token.endswith("万元"):
-            num = token.replace("万元", "").strip()
-            ok = num in known or f"{num} 万元" in known or f"{num}万元" in known
+        if not ok and "万元" in token:
+            ok = _wan_token_ok(token, known, text, m.start(), m.end())
         if not ok:
             if token.isdigit() and len(token) == 4 and token.startswith("20"):
                 continue

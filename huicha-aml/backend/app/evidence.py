@@ -64,15 +64,17 @@ def build_evidence_graph(case_id: str, bundle: dict, kb_hits: list[dict]) -> lis
             metadata={"amount": t["amount"], "channel": t["channel"]},
         )
     for e in graph.get("edges") or []:
+        tx_ids = [str(x) for x in (e.get("tx_ids") or []) if x]
+        first_tx = tx_ids[0] if tx_ids else ""
         _add(
             evidence_type="RELATIONSHIP",
             source_type="graph_edge",
-            source_id=f"{e.get('source')}->{e.get('target')}",
+            source_id=first_tx or f"{e.get('source')}->{e.get('target')}",
             description=f"转账边 {e.get('source')} → {e.get('target')} 合计{yuan(e.get('amount') or 0).strip()} / {e.get('count') or 1}笔",
-            raw_reference=",".join(e.get("tx_ids") or []),
+            raw_reference=",".join(tx_ids),
             polarity="support",
             timestamp="",
-            metadata={"edge": "TRANSFER"},
+            metadata={"edge": "TRANSFER", "src": e.get("source"), "dst": e.get("target")},
         )
     for h in kb_hits:
         _add(

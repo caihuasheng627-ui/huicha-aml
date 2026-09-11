@@ -13,10 +13,10 @@ import {
   message,
 } from "antd";
 import { decide, exportUrl, fetchAlerts, fetchDetail, fetchFeedback, fetchHealth, fetchMetrics, runInvestigate } from "./api";
-import { CounterfactualBox, EvidenceLists, RegulationBox, RiskFactors, TxTimeline } from "./CasePanels.jsx";
+import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline } from "./CasePanels.jsx";
 
 const HUMAN = {
-  confirm: "已签发草稿",
+  confirm: "已记录签发",
   modify: "修改后采纳",
   reject: "已驳回",
 };
@@ -25,6 +25,7 @@ const STATUS = {
   pending: { text: "待调查", color: "default" },
   investigating: { text: "调查中", color: "processing" },
   closed: { text: "已排除关闭", color: "success" },
+  monitoring: { text: "持续监测", color: "warning" },
   ready_to_file: { text: "待复核上报", color: "error" },
   modified: { text: "人工已改", color: "warning" },
 };
@@ -42,8 +43,8 @@ const AUDIT_ACTION = {
   tools: "调取工具",
 };
 
-const TOKEN_SPLIT = /(TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
-const TOKEN_ONE = /^(TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)$/;
+const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
+const TOKEN_ONE = /^(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)$/;
 
 const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
@@ -75,7 +76,7 @@ function isChannelToken(id, prefix) {
 
 function evidenceMatches(e, selected) {
   if (!selected) return true;
-  if (String(selected).startsWith("KB-")) return true;
+  if (String(selected).startsWith("KB-") || String(selected).startsWith("EV-")) return false;
   if (e.id === selected) return true;
   if (e.from_account === selected || e.to_account === selected) return true;
   if (isChannelToken(selected, "CASH") && (e.from_account?.startsWith("CASH-") || e.to_account?.startsWith("CASH-"))) {
@@ -405,9 +406,23 @@ export default function App() {
   }
 
   function selectEvidence(id) {
-    setSelected(id);
+    const graph = inv?.evidence_graph || [];
+    let resolved = id;
+    if (String(id || "").startsWith("EV-")) {
+      const hit = graph.find((e) => e.evidence_id === id);
+      if (hit) {
+        const raw = String(hit.raw_reference || "");
+        const tx = raw
+          .split(",")
+          .map((s) => s.trim())
+          .find((s) => /^(TX-|KB-)/.test(s));
+        resolved = tx || hit.source_id || id;
+      }
+    }
+    setSelected(resolved);
     requestAnimationFrame(() => {
-      document.getElementById(`ev-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const el = document.getElementById(`ev-${resolved}`) || document.getElementById(`ev-${id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }
 
@@ -632,6 +647,7 @@ export default function App() {
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
+              {inv && <RejectedClaims rows={inv.rejected_claims} onSelect={selectEvidence} />}
               {inv?.fact_issues?.length > 0 && (
                 <Alert
                   type="error"
@@ -710,6 +726,10 @@ export default function App() {
                       导出底稿
                     </Button>
                   </div>
+                  {!inv.can_sign && (
+                    <div className="hint">事实回查未通过：不能「签发结论」。可填写修改说明后「修改后采纳」，或驳回重查。</div>
+                  )}
+                  <div className="hint">签发只记录人工处置，系统不会向监测中心自动报送。</div>
                 </>
               )}
             </Spin>

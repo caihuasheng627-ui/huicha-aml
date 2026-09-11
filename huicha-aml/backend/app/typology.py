@@ -8,6 +8,7 @@ FINDING_TO_TAG = {
     "funnel": "suspicious_network",
     "watchlist": "suspicious_network",
     "night-out": "rapid_transfer",
+    "layering": "layering",
     "unregistered-counterparty": "mule_account",
     "pattern-peer": "other",
     "thin": "other",

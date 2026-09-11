@@ -1,3 +1,15 @@
+export function clickSource(e) {
+  const raw = String(e?.raw_reference || "");
+  const tx = raw
+    .split(",")
+    .map((s) => s.trim())
+    .find((s) => /^(TX-|KB-)/.test(s));
+  if (tx) return tx;
+  const src = e?.source_id || "";
+  if (src.includes("->")) return tx || raw.split(",")[0] || src;
+  return src || raw || e?.evidence_id;
+}
+
 export function RiskFactors({ risk, onSelect }) {
   const factors = risk?.factors || [];
   if (!factors.length) return null;
@@ -60,7 +72,7 @@ export function EvidenceLists({ graph, claims, onSelect }) {
           className="ev"
           role="button"
           tabIndex={0}
-          onClick={() => onSelect(e.source_id || e.raw_reference || e.evidence_id)}
+          onClick={() => onSelect(clickSource(e))}
         >
           <code>
             {e.evidence_id} · {e.evidence_type}
@@ -72,13 +84,40 @@ export function EvidenceLists({ graph, claims, onSelect }) {
         <>
           <div className="v2-hd">Counter Evidence</div>
           {counters.map((c) => (
-            <div key={c.claim} className="ev">
+            <div
+              key={c.claim}
+              className="ev"
+              role="button"
+              tabIndex={0}
+              onClick={() => c.evidence_ids?.[0] && onSelect(c.evidence_ids[0])}
+            >
               <div>{c.claim}</div>
               <div className="hint">{(c.evidence_ids || []).join("、")}</div>
             </div>
           ))}
         </>
       )}
+    </div>
+  );
+}
+
+export function RejectedClaims({ rows, onSelect }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">Validator 拒绝（未进分）</div>
+      {rows.slice(0, 8).map((r, i) => (
+        <div
+          key={`${r.claim || r.title || i}`}
+          className="ev"
+          role="button"
+          tabIndex={0}
+          onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
+        >
+          <code>{r.validation?.reason || "已拒绝"}</code>
+          <div>{r.claim || r.title}</div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -93,7 +93,10 @@ def persist_human_decision(db: Session, case_id: str, decision: str, note: str, 
         rec.human_decision = decision
         rec.updated_at = utcnow()
         if decision == "confirm":
-            rec.status = "CLOSED" if recommendation == "CLOSE" else "PENDING_REVIEW"
+            if recommendation in {"CLOSE", "MONITOR"}:
+                rec.status = "CLOSED"
+            else:
+                rec.status = "PENDING_REVIEW"
         elif decision == "reject":
             rec.status = "OPEN"
         else:

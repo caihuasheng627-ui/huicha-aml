@@ -431,6 +431,34 @@ def _run_investigation_inner(
             }
         )
 
+    hops = sorted(txs, key=lambda t: t.get("occurred_at") or "")
+    hop_nodes = {t.get("from_account") for t in hops} | {t.get("to_account") for t in hops}
+    if "多层" in (alert.get("alert_type") or "") and len(hops) >= 3 and len(hop_nodes) >= 3:
+        hop_ids = [t["id"] for t in hops[:4]]
+        score += 0.10
+        findings.append(
+            {
+                "code": "layering",
+                "title": "短时多层资金转移",
+                "detail": (
+                    f"近窗 {len(hops)} 笔途经 {len(hop_nodes)} 个账户，"
+                    f"{hops[0]['from_account']} → … → {hops[-1]['to_account']}，"
+                    f"首笔 {hops[0]['id']} {hops[0]['occurred_at']}，末笔 {hops[-1]['id']} {hops[-1]['occurred_at']}。"
+                ),
+                "evidence_ids": hop_ids,
+            }
+        )
+        risk_factors.append(
+            {
+                "code": "layering",
+                "label": "多层转移",
+                "delta": 0.10,
+                "evidence_ids": hop_ids,
+                "source": "rule",
+                "tag": "layering",
+            }
+        )
+
     if not findings:
         findings.append(
             {

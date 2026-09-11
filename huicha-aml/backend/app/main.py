@@ -18,7 +18,7 @@ from .case_store import persist_human_decision, seed_prompt_versions
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
-    "confirm": "已签发草稿",
+    "confirm": "已记录签发",
     "modify": "修改后采纳",
     "reject": "已驳回",
 }
@@ -32,6 +32,28 @@ def format_cn(dt: datetime | None) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _alert_status_after_decide(decision: str, conclusion: str) -> str:
+    if decision == "reject":
+        return "pending"
+    if decision == "modify":
+        return "modified"
+    if conclusion == "exclude":
+        return "closed"
+    if conclusion == "observe":
+        return "monitoring"
+    return "ready_to_file"
+
+
+def _case_status_after_decide(decision: str, conclusion: str) -> str:
+    if decision == "reject":
+        return "OPEN"
+    if decision != "confirm":
+        return "PENDING_REVIEW"
+    if conclusion in {"exclude", "observe"}:
+        return "CLOSED"
+    return "PENDING_REVIEW"
 
 
 def get_investigation(db: Session, alert_id: str) -> Investigation | None:
@@ -257,12 +279,16 @@ def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
     inv.human_decision = body.decision
     inv.human_note = body.note
     inv.decided_at = utcnow()
-    if body.decision == "confirm":
-        alert.status = "closed" if payload["conclusion"] == "exclude" else "ready_to_file"
-    elif body.decision == "reject":
-        alert.status = "pending"
-    else:
-        alert.status = "modified"
+    alert.status = _alert_status_after_decide(body.decision, payload.get("conclusion") or "")
+    v2 = payload.setdefault("case_v2", {})
+    v2["status"] = _case_status_after_decide(body.decision, payload.get("conclusion") or "")
+    v2["human_decision"] = body.decision
+    payload["human_review"] = {
+        "decision": body.decision,
+        "note": body.note,
+        "at": format_cn(inv.decided_at),
+    }
+    inv.payload_json = json.dumps(payload, ensure_ascii=False)
     note = f"：{body.note}" if body.note else ""
     write_audit(
         db,
@@ -353,14 +379,24 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "尚无草稿")
     payload = json.loads(inv.payload_json)
     report = payload.get("report", {})
+    signed = inv.human_decision or ""
+    signed_line = DECIDE_LABEL.get(signed, signed) if signed else "否（本文件仅为草稿）"
+    v2 = payload.get("case_v2") or {}
+    scoring = payload.get("scoring") or {}
+    rejected = payload.get("rejected_claims") or []
     lines = [
         "# 慧查 AML 可疑交易调查草稿（非报送报文）",
         "",
         f"- 告警：{alert_id}",
         f"- 建议结论：{payload.get('conclusion_label')}",
+        f"- AI 建议档：{v2.get('recommendation') or ''}",
+        f"- 风险等级：{v2.get('risk_level') or ''}",
+        f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
         f"- 置信度：{payload.get('confidence')}",
-        f"- 人工签发：否（本文件仅为草稿）",
+        f"- 人工签发：{signed_line}",
+        f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
+        f"- 数据：{payload.get('data_note') or 'synthetic'}",
         "",
         report.get("full_text", ""),
         "",
@@ -369,6 +405,13 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         "",
         "## 证据编号",
         *[f"- {e['id']} {e.get('summary','')}" for e in payload.get("evidence", [])[:30]],
+        "",
+        "## Validator 拒绝项",
+        *(
+            [f"- {r.get('validation', {}).get('reason') or r.get('claim') or r}" for r in rejected[:12]]
+            if rejected
+            else ["- （无）"]
+        ),
         "",
         "—— Agent 不可自动报送，须调查员签发 ——",
     ]

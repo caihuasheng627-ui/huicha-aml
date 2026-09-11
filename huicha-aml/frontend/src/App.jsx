@@ -145,16 +145,16 @@ function Graph({ graph, selected, onSelect }) {
   const edges = graph?.edges || [];
   const layout = useMemo(() => {
     const cx = 180;
-    const cy = 108;
+    const cy = 100;
     const others = nodes.filter((n) => n.kind !== "center");
     const map = {};
     nodes.forEach((n) => {
       if (n.kind === "center") map[n.id] = { x: cx, y: cy, ...n };
     });
-    const r = others.length > 6 ? 72 : 88;
+    const r = others.length > 6 ? 68 : 84;
     others.forEach((n, i) => {
       const a = (Math.PI * 2 * i) / Math.max(others.length, 1) - Math.PI / 2;
-      map[n.id] = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * 70, ...n };
+      map[n.id] = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * 64, ...n };
     });
     return map;
   }, [nodes]);
@@ -163,22 +163,31 @@ function Graph({ graph, selected, onSelect }) {
 
   return (
     <div className="graph">
-      <svg viewBox="0 0 360 220" preserveAspectRatio="xMidYMid meet">
+      <svg viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet">
         {edges.map((e) => {
           const a = layout[e.source];
           const b = layout[e.target];
           if (!a || !b) return null;
           const hot = edgeHot(e, selected);
+          const mx = (a.x + b.x) / 2;
+          const my = (a.y + b.y) / 2;
           return (
-            <line
-              key={`${e.source}-${e.target}-${e.id}`}
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke={hot ? "#c8161d" : "#94a3b8"}
-              strokeWidth={hot ? 2.4 : 1.1}
-            />
+            <g key={`${e.source}-${e.target}-${e.id}`}>
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={hot ? "#c8161d" : "#94a3b8"}
+                strokeWidth={hot ? 2.4 : 1.1}
+              />
+              {e.amount != null && (
+                <text x={mx} y={my - 4} textAnchor="middle" fill={hot ? "#9f1239" : "#64748b"} fontSize="8">
+                  {yuan(e.amount)}
+                  {e.count > 1 ? ` · ${e.count}笔` : ""}
+                </text>
+              )}
+            </g>
           );
         })}
         {Object.values(layout).map((n) => {
@@ -197,12 +206,98 @@ function Graph({ graph, selected, onSelect }) {
                 strokeWidth="2"
               />
               <text x={n.x} y={n.y + 22} textAnchor="middle" fill="#334155" fontSize="10">
-                {shortLabel(n.label || n.id)}
+                {shortLabel(n.label || n.id, 7)}
               </text>
             </g>
           );
         })}
       </svg>
+      <div className="graph-legend" aria-hidden="true">
+        <span>
+          <i className="dot center" />
+          主体
+        </span>
+        <span>
+          <i className="dot peer" />
+          对手方
+        </span>
+        <span>
+          <i className="dot channel" />
+          渠道
+        </span>
+        <span>
+          <i className="dot watch" />
+          关注名单
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBreakdown({ scoring, label }) {
+  if (!scoring) return null;
+  const rows = [
+    { k: "规则底分", v: scoring.base },
+    { k: "质疑先验", v: scoring.rule_prior },
+    { k: "模型 Δ", v: scoring.llm_delta },
+  ];
+  const final = Number(scoring.final ?? 0);
+  const pin = Math.max(2, Math.min(98, final * 100));
+  return (
+    <div className="score-break">
+      <div className="score-break-hd">
+        打分拆解
+        <b className={conclusionTone(label)}>{label}</b>
+      </div>
+      <ul>
+        {rows.map((r) => {
+          const n = Number(r.v ?? 0);
+          return (
+            <li key={r.k}>
+              <span>{r.k}</span>
+              <em className={n < 0 ? "down" : n > 0 ? "up" : ""}>
+                {n > 0 ? "+" : ""}
+                {n.toFixed(2)}
+              </em>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="score-track" title="0.35 排除 / 0.55 上报">
+        <i className="tick" style={{ left: "35%" }} />
+        <i className="tick" style={{ left: "55%" }} />
+        <i className="pin" style={{ left: `${pin}%` }} />
+      </div>
+      <div className="score-track-cap">
+        <span>排除</span>
+        <span>观察</span>
+        <span>上报</span>
+      </div>
+    </div>
+  );
+}
+
+function FlowBars({ baseline }) {
+  if (!baseline) return null;
+  const inn = Number(baseline.sample_in_sum || 0);
+  const out = Number(baseline.sample_out_sum || 0);
+  const max = Math.max(inn, out, 1);
+  return (
+    <div className="flow-bars">
+      <div className="flow-row">
+        <span>流入 {baseline.sample_in_count ?? 0} 笔</span>
+        <div className="flow-bar">
+          <i className="in" style={{ width: `${(inn / max) * 100}%` }} />
+        </div>
+        <b>{yuan(inn)}</b>
+      </div>
+      <div className="flow-row">
+        <span>流出 {baseline.sample_out_count ?? 0} 笔</span>
+        <div className="flow-bar">
+          <i className="out" style={{ width: `${(out / max) * 100}%` }} />
+        </div>
+        <b>{yuan(out)}</b>
+      </div>
     </div>
   );
 }
@@ -482,6 +577,11 @@ export default function App() {
                 <div className="kpi-card">
                   <div className="k">置信度</div>
                   <div className="v">{inv ? `${Math.round(inv.confidence * 100)}%` : "—"}</div>
+                  {inv && (
+                    <div className="conf-bar" aria-hidden="true">
+                      <i style={{ width: `${Math.round(inv.confidence * 100)}%` }} />
+                    </div>
+                  )}
                 </div>
                 <div className="kpi-card">
                   <div className="k">耗时 / 工具次数</div>
@@ -512,6 +612,12 @@ export default function App() {
                   ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
                   : ""}
               </div>
+              {inv && (
+                <div className="viz-row">
+                  <ScoreBreakdown scoring={inv.scoring} label={inv.conclusion_label} />
+                  <FlowBars baseline={inv.baseline} />
+                </div>
+              )}
               {inv?.fact_issues?.length > 0 && (
                 <Alert
                   type="error"

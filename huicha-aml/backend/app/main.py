@@ -15,7 +15,16 @@ from .knowledge import corpus_size, list_knowledge, search_knowledge
 from .llm import llm_mode, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
-from .security import auth_mode, cors_origins, demo_token
+from .security import (
+    auth_mode,
+    cors_origins,
+    create_session,
+    demo_token,
+    destroy_session,
+    list_demo_accounts,
+    require_user,
+    resolve_session,
+)
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -88,7 +97,15 @@ app.add_middleware(
 @app.middleware("http")
 async def demo_token_guard(request: Request, call_next):
     path = request.url.path
-    if path in {"/api/health", "/docs", "/openapi.json", "/redoc"} or not path.startswith("/api/"):
+    open_paths = {
+        "/api/health",
+        "/api/auth/login",
+        "/api/auth/accounts",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+    }
+    if path in open_paths or not path.startswith("/api/"):
         return await call_next(request)
     expected = demo_token()
     if expected:
@@ -120,13 +137,44 @@ def health():
         "kb_docs": corpus_size(),
         "kb_retrieval": "keyword-overlap",
         "limitations": [
-            "无银行 SSO；HUICHA_DEMO_TOKEN 为空则接口开放",
+            "无银行 SSO；演示登录绑定签发人，HUICHA_DEMO_TOKEN 为空则接口开放",
             "SQLite 文件库",
             "知识库为公开要求转述，关键词检索，条数见 kb_docs",
             "告警为合成数据，gold_label 与规则模板同源",
             "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
     }
+
+
+class LoginBody(BaseModel):
+    staff_id: str
+    password: str
+
+
+@app.get("/api/auth/accounts")
+def auth_accounts():
+    return {"accounts": list_demo_accounts(), "note": "竞赛演示账号，口令均为 aml123"}
+
+
+@app.post("/api/auth/login")
+def auth_login(body: LoginBody):
+    token, user = create_session(body.staff_id, body.password)
+    return {"ok": True, "token": token, "user": user.as_dict()}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    token = request.headers.get("x-huicha-session") or ""
+    destroy_session(token)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = resolve_session(request.headers.get("x-huicha-session"))
+    if not user:
+        raise HTTPException(401, "未登录或会话已过期")
+    return {"ok": True, "user": user.as_dict()}
 
 
 @app.get("/api/kb")
@@ -212,6 +260,9 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
         "investigation": payload,
         "human_decision": inv.human_decision if inv else "",
         "human_note": inv.human_note if inv else "",
+        "signed_by_id": (inv.signed_by_id if inv else "") or "",
+        "signed_by_name": (inv.signed_by_name if inv else "") or "",
+        "decided_at": format_cn(inv.decided_at) if inv else "",
         "audit": [
             {
                 "id": x.id,
@@ -256,6 +307,8 @@ def investigate(
         inv.conclusion = result["conclusion"]
         inv.human_decision = ""
         inv.human_note = ""
+        inv.signed_by_id = ""
+        inv.signed_by_name = ""
         inv.decided_at = None
     else:
         inv = Investigation(alert_id=alert_id, payload_json=blob, conclusion=result["conclusion"])
@@ -298,7 +351,8 @@ class DecideBody(BaseModel):
 
 
 @app.post("/api/alerts/{alert_id}/decide")
-def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
+def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depends(get_db)):
+    user = require_user(request)
     if body.decision not in {"confirm", "modify", "reject"}:
         raise HTTPException(400, "decision 必须是 confirm / modify / reject")
     alert = db.get(Alert, alert_id)
@@ -312,6 +366,8 @@ def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
         raise HTTPException(400, "事实回查未通过时，「修改后采纳」须填写修改说明")
     inv.human_decision = body.decision
     inv.human_note = body.note
+    inv.signed_by_id = user.staff_id
+    inv.signed_by_name = user.name
     inv.decided_at = utcnow()
     alert.status = _alert_status_after_decide(body.decision, payload.get("conclusion") or "")
     v2 = payload.setdefault("case_v2", {})
@@ -321,23 +377,36 @@ def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
         "decision": body.decision,
         "note": body.note,
         "at": format_cn(inv.decided_at),
+        "signed_by_id": user.staff_id,
+        "signed_by_name": user.name,
+        "signed_by": user.label(),
     }
     inv.payload_json = json.dumps(payload, ensure_ascii=False)
     note = f"：{body.note}" if body.note else ""
     write_audit(
         db,
         alert_id,
-        "investigator",
+        user.label(),
         "decide",
         f"{DECIDE_LABEL[body.decision]}{note}",
     )
     reco = (payload.get("case_v2") or {}).get("recommendation") or ""
-    persist_human_decision(db, alert_id, body.decision, body.note, reco)
+    persist_human_decision(
+        db,
+        alert_id,
+        body.decision,
+        body.note,
+        reco,
+        signed_by_id=user.staff_id,
+        signed_by_name=user.name,
+    )
     db.commit()
     return {
         "ok": True,
         "status": alert.status,
         "human_decision": body.decision,
+        "signed_by_id": user.staff_id,
+        "signed_by_name": user.name,
         "ai_recommendation": reco,
         "final_action": "human_only",
         "note": "AI 建议已记录，最终处置以人工为准，系统不会自动报送。",
@@ -417,6 +486,10 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
     report = payload.get("report", {})
     signed = inv.human_decision or ""
     signed_line = DECIDE_LABEL.get(signed, signed) if signed else "否（本文件仅为草稿）"
+    if inv.signed_by_name and inv.signed_by_id:
+        signer = f"{inv.signed_by_name}（{inv.signed_by_id}）"
+    else:
+        signer = inv.signed_by_name or inv.signed_by_id or "（未绑定用户）"
     v2 = payload.get("case_v2") or {}
     scoring = payload.get("scoring") or {}
     rejected = payload.get("rejected_claims") or []
@@ -435,6 +508,7 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
         f"- 规则分：{payload.get('confidence')}（{payload.get('confidence_kind') or 'rule_score_not_calibrated'}，非校准置信度）",
         f"- 人工签发：{signed_line}",
+        f"- 签发人：{signer}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
         f"- 数据：{payload.get('data_note') or 'synthetic'}",

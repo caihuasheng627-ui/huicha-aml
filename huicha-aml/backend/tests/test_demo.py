@@ -78,7 +78,7 @@ def test_demo_conclusions(client, alert_id, use_challenger, expected):
     assert "manual_minutes" not in data["comparison"]
 
 
-def test_hallucination_blocks_sign(client):
+def test_hallucination_blocks_sign(client, auth_headers):
     r = client.post(
         "/api/alerts/ALT-A-20260910/investigate",
         params={"use_challenger": True, "inject_hallucination": True},
@@ -89,11 +89,13 @@ def test_hallucination_blocks_sign(client):
     blocked = client.post(
         "/api/alerts/ALT-A-20260910/decide",
         json={"decision": "confirm", "note": ""},
+        headers=auth_headers,
     )
     assert blocked.status_code == 400
     ok = client.post(
         "/api/alerts/ALT-A-20260910/decide",
         json={"decision": "modify", "note": "已人工删除幻觉账号"},
+        headers=auth_headers,
     )
     assert ok.status_code == 200
 
@@ -123,9 +125,13 @@ def test_audit_time_is_cn_local(client, monkeypatch):
     assert format_cn(frozen.replace(tzinfo=None)) == "2026-09-10 12:00:00"
 
 
-def test_feedback_endpoint(client):
+def test_feedback_endpoint(client, auth_headers):
     client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
-    client.post("/api/alerts/ALT-A-20260910/decide", json={"decision": "confirm", "note": ""})
+    client.post(
+        "/api/alerts/ALT-A-20260910/decide",
+        json={"decision": "confirm", "note": ""},
+        headers=auth_headers,
+    )
     r = client.get("/api/feedback")
     assert r.status_code == 200
     assert r.json()["decisions"]["confirm"] >= 1

@@ -18,6 +18,14 @@ Base = declarative_base()
 # 旧库缺的列：只 ALTER，不删数据
 _SQLITE_ADDS = {
     "alerts": [("gold_label", "VARCHAR DEFAULT ''")],
+    "investigations": [
+        ("signed_by_id", "VARCHAR DEFAULT ''"),
+        ("signed_by_name", "VARCHAR DEFAULT ''"),
+    ],
+    "human_decisions": [
+        ("signed_by_id", "VARCHAR DEFAULT ''"),
+        ("signed_by_name", "VARCHAR DEFAULT ''"),
+    ],
 }
 
 

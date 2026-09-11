@@ -3,7 +3,9 @@ import {
   Alert,
   Button,
   Divider,
+  Form,
   Input,
+  Modal,
   Space,
   Switch,
   Table,
@@ -12,14 +14,20 @@ import {
   message,
 } from "antd";
 import {
+  clearSession,
   decide,
   downloadExport,
   fetchAlerts,
+  fetchAuthAccounts,
   fetchDetail,
   fetchFeedback,
   fetchHealth,
+  fetchMe,
   fetchMetrics,
   getDemoToken,
+  getStoredUser,
+  login,
+  logout,
   runInvestigate,
   setDemoToken,
 } from "./api";
@@ -126,7 +134,7 @@ function auditText(x) {
   } catch {
     /* already human text */
   }
-  const actor = x.actor === "agent" ? "系统" : "调查员";
+  const actor = x.actor === "agent" ? "系统" : x.actor || "调查员";
   return {
     title: `${actor} · ${AUDIT_ACTION[x.action] || x.action}`,
     detail,
@@ -342,9 +350,14 @@ export default function App() {
   const [llmOff, setLlmOff] = useState(false);
   const [healthInfo, setHealthInfo] = useState(null);
   const [needsToken, setNeedsToken] = useState(false);
-  const [tokenDraft, setTokenDraft] = useState(() => getDemoToken());
   const [feedback, setFeedback] = useState(null);
   const [invError, setInvError] = useState(false);
+  const [honestyHint, setHonestyHint] = useState(true);
+  const [user, setUser] = useState(() => getStoredUser());
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [demoAccounts, setDemoAccounts] = useState([]);
+  const [loginForm] = Form.useForm();
   const openSeq = useRef(0);
   const inv = detail?.investigation;
   const playback = usePipelinePlayback({ running: loading, failed: invError });
@@ -396,6 +409,17 @@ export default function App() {
   useEffect(() => {
     loadList().catch((e) => message.error(e.message.includes("调查服务") || e.message.includes("fetch") ? "无法连接调查服务，请先启动后端 8000 端口" : e.message));
     const t = setInterval(() => setClock(nowText()), 1000);
+    if (getStoredUser()) {
+      fetchMe()
+        .then((d) => setUser(d.user))
+        .catch(() => {
+          clearSession();
+          setUser(null);
+        });
+    }
+    fetchAuthAccounts()
+      .then((d) => setDemoAccounts(d.accounts || []))
+      .catch(() => {});
     return () => clearInterval(t);
   }, []);
 
@@ -414,6 +438,12 @@ export default function App() {
       message.success("调查草稿已生成，待人工签发");
     }
   }, [playback.phase]);
+
+  useEffect(() => {
+    if (!honestyHint || !healthInfo?.limitations?.[0]) return undefined;
+    const t = setTimeout(() => setHonestyHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [honestyHint, healthInfo?.limitations?.[0]]);
 
   async function onInvestigate(id = current) {
     if (!id || loading) return;
@@ -436,14 +466,47 @@ export default function App() {
 
   async function onDecide(decision) {
     if (!current) return;
+    if (!user) {
+      message.warning("请先登录后再签发");
+      setLoginOpen(true);
+      return;
+    }
     try {
       await decide(current, decision, note);
       await open(current);
       await loadList();
-      message.success("处置意见已写入审计");
+      message.success(`处置意见已由 ${user.name} 写入审计`);
     } catch (e) {
+      if (String(e.message || "").includes("登录")) {
+        clearSession();
+        setUser(null);
+        setLoginOpen(true);
+      }
       message.error(e.message);
     }
+  }
+
+  async function onLogin(values) {
+    setLoginLoading(true);
+    try {
+      if (values.demo_token != null) setDemoToken(values.demo_token || "");
+      const data = await login(values.staff_id, values.password);
+      setUser(data.user);
+      setLoginOpen(false);
+      loginForm.resetFields(["password"]);
+      message.success(`${data.user.name} 已登录`);
+      loadList().catch(() => {});
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function onLogout() {
+    await logout();
+    setUser(null);
+    message.success("已退出登录");
   }
 
   function selectEvidence(id) {
@@ -494,32 +557,31 @@ export default function App() {
           </div>
           <div className="brand-text">
             <strong>慧查 AML</strong>
-            <span>AI 推理 · 规则边界 · 证据事实 · 人做决策</span>
           </div>
         </div>
         <div className="staff">
-          <span>
-            岗位 <b>反洗钱合规</b>
-          </span>
-          <span>
-            调查员 <b>陈析</b>　002183
-          </span>
-          <span>{clock}</span>
-          <span className="env">
-            合成数据 · 竞赛原型 · 须人签
-            {healthInfo?.auth === "demo_token" ? " · 演示口令" : " · 接口开放"}
-            {healthInfo?.kb_docs != null ? ` · 知识库 ${healthInfo.kb_docs} 条` : ""}
-          </span>
+          <span className="top-clock">{clock}</span>
+          {user ? (
+            <div className="user-chip">
+              <div className="user-meta">
+                <b>{user.name}</b>
+                <span>
+                  {user.role} · {user.staff_id}
+                </span>
+              </div>
+              <button type="button" className="ghost-btn" onClick={onLogout}>
+                退出
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="ghost-btn primary" onClick={() => setLoginOpen(true)}>
+              登录
+            </button>
+          )}
         </div>
       </header>
 
       <div className="toolbar">
-        {DEMOS.map((d) => (
-          <Button key={d.id} size="small" type={current === d.id ? "primary" : "default"} disabled={loading} onClick={() => onInvestigate(d.id)}>
-            {d.label}
-          </Button>
-        ))}
-        <span className="toolbar-sep" />
         <label>
           质疑复核
           <Switch size="small" checked={useChallenger} onChange={setUseChallenger} />
@@ -529,30 +591,62 @@ export default function App() {
           <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
         </label>
         <span className="hint" style={{ margin: 0 }}>
-          快捷键 1–5 打开 A/B/C/F/L；按钮会直接跑调查。AI 不得自动报送。
+          签发须登录；AI 不得自动报送。
         </span>
-        {healthInfo?.auth === "demo_token" && (
-          <>
-            <span className="toolbar-sep" />
-            <Input.Password
-              size="small"
-              placeholder="演示口令 X-Huicha-Token"
-              value={tokenDraft}
-              onChange={(e) => setTokenDraft(e.target.value)}
-              style={{ width: 220 }}
-            />
-            <Button
-              size="small"
-              onClick={() => {
-                setDemoToken(tokenDraft);
-                loadList().catch((err) => message.error(err.message));
-              }}
-            >
-              保存口令
-            </Button>
-          </>
-        )}
       </div>
+
+      <Modal
+        title="调查员登录"
+        open={loginOpen}
+        onCancel={() => setLoginOpen(false)}
+        footer={null}
+        destroyOnClose
+        width={420}
+      >
+        <p className="hint" style={{ marginTop: 0 }}>
+          演示账号口令均为 <code>aml123</code>。签发结论将绑定当前登录人。
+        </p>
+        {demoAccounts.length > 0 && (
+          <div className="login-accounts">
+            {demoAccounts.map((a) => (
+              <button
+                key={a.staff_id}
+                type="button"
+                className="login-account"
+                onClick={() =>
+                  loginForm.setFieldsValue({ staff_id: a.staff_id, password: "aml123" })
+                }
+              >
+                <b>{a.name}</b>
+                <span>
+                  {a.role} · {a.staff_id}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <Form
+          form={loginForm}
+          layout="vertical"
+          onFinish={onLogin}
+          initialValues={{ staff_id: "002183", demo_token: getDemoToken() }}
+        >
+          <Form.Item name="staff_id" label="工号" rules={[{ required: true, message: "请输入工号" }]}>
+            <Input placeholder="如 002183" autoFocus />
+          </Form.Item>
+          <Form.Item name="password" label="口令" rules={[{ required: true, message: "请输入口令" }]}>
+            <Input.Password placeholder="演示口令" />
+          </Form.Item>
+          {healthInfo?.auth === "demo_token" && (
+            <Form.Item name="demo_token" label="接口演示口令">
+              <Input.Password placeholder="X-Huicha-Token" />
+            </Form.Item>
+          )}
+          <Button type="primary" htmlType="submit" block loading={loginLoading}>
+            登录
+          </Button>
+        </Form>
+      </Modal>
 
       <div className="workspace">
       {offline && (
@@ -579,14 +673,24 @@ export default function App() {
           banner
           showIcon
           message="需要演示口令"
-          description="后端启用了 HUICHA_DEMO_TOKEN。这不是银行 SSO，只是竞赛原型的接口口令。请在上方填入口令后保存。"
+          description={
+            <span>
+              后端启用了 HUICHA_DEMO_TOKEN。请
+              <Button type="link" size="small" style={{ padding: "0 4px" }} onClick={() => setLoginOpen(true)}>
+                登录
+              </Button>
+              并填写接口演示口令。
+            </span>
+          }
         />
       )}
-      {healthInfo?.limitations?.[0] && (
+      {honestyHint && healthInfo?.limitations?.[0] && (
         <Alert
           type="info"
           banner
           showIcon
+          closable
+          afterClose={() => setHonestyHint(false)}
           message="诚实边界"
           description={`${healthInfo.limitations[0]}；知识库为关键词重叠检索（${healthInfo.kb_retrieval || "keyword-overlap"}），不是语义向量库。`}
         />
@@ -734,10 +838,19 @@ export default function App() {
                   {inv ? "按当前策略重跑" : "开始调查"}
                 </Button>
                 {detail?.human_decision ? (
-                  <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
+                  <>
+                    <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
+                    {(detail.signed_by_name || detail.signed_by_id) && (
+                      <Tag color="blue">
+                        签发人 {detail.signed_by_name}
+                        {detail.signed_by_id ? ` · ${detail.signed_by_id}` : ""}
+                      </Tag>
+                    )}
+                  </>
                 ) : (
                   <Tag>待签发</Tag>
                 )}
+                {!user && <Tag color="default">未登录 · 不可签发</Tag>}
                 {inv?.use_challenger === false && <Tag color="orange">质疑角色已关</Tag>}
                 {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
                 {inv?.llm?.reporter || inv?.llm?.challenger ? (
@@ -849,6 +962,15 @@ export default function App() {
                       导出底稿
                     </Button>
                   </div>
+                  {!user && (
+                    <div className="hint">
+                      请先
+                      <Button type="link" size="small" style={{ padding: "0 4px" }} onClick={() => setLoginOpen(true)}>
+                        登录
+                      </Button>
+                      ，签发结论将绑定当前用户。
+                    </div>
+                  )}
                   {!inv.can_sign && (
                     <div className="hint">事实回查未通过：不能「签发结论」。可填写修改说明后「修改后采纳」，或驳回重查。</div>
                   )}

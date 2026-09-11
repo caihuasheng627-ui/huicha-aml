@@ -110,7 +110,16 @@ def persist_investigation(db: Session, result: dict) -> None:
         )
 
 
-def persist_human_decision(db: Session, case_id: str, decision: str, note: str, recommendation: str) -> None:
+def persist_human_decision(
+    db: Session,
+    case_id: str,
+    decision: str,
+    note: str,
+    recommendation: str,
+    *,
+    signed_by_id: str = "",
+    signed_by_name: str = "",
+) -> None:
     rec = db.get(AmlCase, case_id)
     if rec:
         rec.human_decision = decision
@@ -130,6 +139,8 @@ def persist_human_decision(db: Session, case_id: str, decision: str, note: str, 
             decision=decision,
             note=note or "",
             ai_recommendation=recommendation,
+            signed_by_id=signed_by_id or "",
+            signed_by_name=signed_by_name or "",
         )
     )
 

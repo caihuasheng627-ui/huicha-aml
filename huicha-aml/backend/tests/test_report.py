@@ -37,12 +37,17 @@ def test_export_is_draft_not_filing(client):
     assert "风险等级" in text
 
 
-def test_export_reflects_human_sign(client):
+def test_export_reflects_human_sign(client, auth_headers):
     client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
-    ok = client.post("/api/alerts/ALT-A-20260910/decide", json={"decision": "confirm", "note": "同意排除"})
+    ok = client.post(
+        "/api/alerts/ALT-A-20260910/decide",
+        json={"decision": "confirm", "note": "同意排除"},
+        headers=auth_headers,
+    )
     assert ok.status_code == 200
     text = client.get("/api/alerts/ALT-A-20260910/export").text
     assert "已记录签发" in text
     assert "同意排除" in text
+    assert "陈析（002183）" in text
     assert "否（本文件仅为草稿）" not in text
     assert "CLOSE" in text or "排除" in text

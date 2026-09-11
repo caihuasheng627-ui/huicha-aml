@@ -1,6 +1,8 @@
 const API = "";
 const INVESTIGATE_TIMEOUT_MS = 90000;
 const TOKEN_KEY = "huicha_demo_token";
+const SESSION_KEY = "huicha_session";
+const USER_KEY = "huicha_user";
 
 export function getDemoToken() {
   try {
@@ -17,6 +19,38 @@ export function setDemoToken(token) {
   } catch {
     /* ignore */
   }
+}
+
+export function getSessionToken() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function getStoredUser() {
+  try {
+    const raw = sessionStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSession(token, user) {
+  try {
+    if (token) sessionStorage.setItem(SESSION_KEY, token);
+    else sessionStorage.removeItem(SESSION_KEY);
+    if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    else sessionStorage.removeItem(USER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSession() {
+  setSession("", null);
 }
 
 async function readError(r, fallback) {
@@ -48,6 +82,7 @@ async function request(path, { method = "GET", headers, body, timeoutMs, signal 
       method,
       headers: {
         ...(getDemoToken() ? { "X-Huicha-Token": getDemoToken() } : {}),
+        ...(getSessionToken() ? { "X-Huicha-Session": getSessionToken() } : {}),
         ...headers,
       },
       body,
@@ -90,6 +125,44 @@ export async function fetchFeedback() {
   const r = await request("/api/feedback");
   if (!r.ok) throw new Error(await readError(r, "无法加载反馈看板"));
   return r.json();
+}
+
+export async function fetchAuthAccounts() {
+  const r = await request("/api/auth/accounts");
+  if (!r.ok) throw new Error(await readError(r, "无法加载演示账号"));
+  return r.json();
+}
+
+export async function login(staffId, password) {
+  const r = await request("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staff_id: staffId, password }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "登录失败");
+  setSession(data.token, data.user);
+  return data;
+}
+
+export async function logout() {
+  try {
+    await request("/api/auth/logout", { method: "POST" });
+  } catch {
+    /* ignore */
+  }
+  clearSession();
+}
+
+export async function fetchMe() {
+  const r = await request("/api/auth/me");
+  if (!r.ok) {
+    clearSession();
+    throw new Error(await readError(r, "未登录"));
+  }
+  const data = await r.json();
+  if (data?.user) setSession(getSessionToken(), data.user);
+  return data;
 }
 
 export async function runInvestigate(id, { useChallenger = true, injectHallucination = false } = {}) {

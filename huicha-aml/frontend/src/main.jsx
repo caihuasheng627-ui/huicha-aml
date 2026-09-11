@@ -18,7 +18,7 @@ createRoot(document.getElementById("root")).render(
         borderRadius: 4,
         fontFamily:
           '"IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
-        fontSize: 13,
+        fontSize: 14,
         colorText: "#1c2838",
         colorTextSecondary: "#5b6b80",
         colorBorder: "#d5dde8",
@@ -26,7 +26,7 @@ createRoot(document.getElementById("root")).render(
         colorBgContainer: "#fbfcfe",
       },
       components: {
-        Button: { controlHeight: 32, fontWeight: 600 },
+        Button: { controlHeight: 34, fontWeight: 600 },
         Table: { headerBg: "#eef3f8", headerColor: "#1c2838" },
         Tag: { borderRadiusSM: 2 },
       },

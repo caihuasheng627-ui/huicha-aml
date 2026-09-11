@@ -74,6 +74,8 @@ class Investigation(Base):
     conclusion: Mapped[str] = mapped_column(String)
     human_decision: Mapped[str] = mapped_column(String, default="")
     human_note: Mapped[str] = mapped_column(Text, default="")
+    signed_by_id: Mapped[str] = mapped_column(String, default="")
+    signed_by_name: Mapped[str] = mapped_column(String, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -183,6 +185,8 @@ class HumanDecision(Base):
     decision: Mapped[str] = mapped_column(String)
     note: Mapped[str] = mapped_column(Text, default="")
     ai_recommendation: Mapped[str] = mapped_column(String, default="")
+    signed_by_id: Mapped[str] = mapped_column(String, default="")
+    signed_by_name: Mapped[str] = mapped_column(String, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -210,4 +214,4 @@ class Regulation(Base):
     source: Mapped[str] = mapped_column(String, default="")
     version: Mapped[str] = mapped_column(String, default="")
     data_note: Mapped[str] = mapped_column(String, default="synthetic")
-
+

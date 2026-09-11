@@ -14,6 +14,17 @@ from app.predicates import stub_challenger_item
 from app.seed import seed_if_empty
 
 
+def login_headers(client, staff_id="002183", password="aml123"):
+    r = client.post("/api/auth/login", json={"staff_id": staff_id, "password": password})
+    assert r.status_code == 200, r.text
+    return {"X-Huicha-Session": r.json()["token"]}
+
+
+@pytest.fixture()
+def auth_headers(client):
+    return login_headers(client)
+
+
 @pytest.fixture()
 def client(monkeypatch):
     def fake_chat(messages, *, temperature=0.0, max_tokens=900):

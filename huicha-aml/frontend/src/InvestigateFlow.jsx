@@ -213,9 +213,12 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
   const current = stage || PIPELINE[0];
   const ticks = current.ticks || [];
   const logs = current.logs || [];
-  const visibleTicks = ticks.slice(0, Math.max(1, (subTick % ticks.length) + 1));
-  const logLine = logs[subTick % Math.max(logs.length, 1)] || "";
+  const feed = [
+    ...ticks.map((text) => ({ kind: "tick", text })),
+    ...logs.map((text) => ({ kind: "log", text })),
+  ];
   const failed = phase === "error";
+  const rolling = !failed && phase !== "done";
 
   return (
     <div className={`theater${failed ? " is-error" : ""}`} role="status" aria-live="polite">
@@ -249,12 +252,15 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
             }}
           />
         </div>
-        <ul className="theater-ticks">
-          {visibleTicks.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
-        <code className="theater-log">{failed ? "pipeline_aborted" : logLine}</code>
+        <div className="theater-feed" aria-hidden="true">
+          <div key={current.id} className={`theater-feed-track${rolling ? " is-rolling" : ""}`}>
+            {(failed ? [{ kind: "log", text: "pipeline_aborted" }] : [...feed, ...feed]).map((item, i) => (
+              <div key={`${item.kind}-${item.text}-${i}`} className={`theater-feed-row is-${item.kind}`}>
+                {item.kind === "log" ? <code>{item.text}</code> : <span>{item.text}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
         {injectHallucination && current.id === "reporter" && (
           <p className="theater-warn">幻觉演示已开：签发将被事实回查拦住</p>
         )}

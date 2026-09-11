@@ -6,7 +6,75 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.llm import _extract_json_array, _strip_fence, chat, validate_challenger_items
+from app.llm import _extract_json_array, _strip_fence, chat, llm_mode, normalize_challenger_items, validate_challenger_items
+
+
+def test_normalize_keeps_predicate_and_args():
+    rows = normalize_challenger_items(
+        [
+            {
+                "claim": "过桥",
+                "detail": "链",
+                "evidence_ids": ["TX-L-01"],
+                "predicate": "consecutive_transfer_chain",
+                "args": {"tx_ids": ["TX-L-02", "TX-L-03"]},
+                "delta": -0.1,
+            }
+        ]
+    )
+    assert rows[0]["predicate"] == "consecutive_transfer_chain"
+    assert rows[0]["evidence_ids"] == ["TX-L-01", "TX-L-02", "TX-L-03"]
+
+
+def test_stub_mode_chat(monkeypatch):
+    monkeypatch.setenv("HUICHA_LLM_STUB", "1")
+    import app.llm as llm_mod
+
+    llm_mod._ENV_LOADED = False
+    assert llm_mode() == "stub"
+    text, usage = chat(
+        [
+            {"role": "system", "content": "你是反洗钱 Challenger。predicate 必填。"},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "transactions": [
+                            {
+                                "id": "TX-L-01",
+                                "from_account": "A",
+                                "to_account": "B",
+                                "amount": 3,
+                                "occurred_at": "2026-09-10 09:01:00",
+                                "channel": "网银",
+                            },
+                            {
+                                "id": "TX-L-02",
+                                "from_account": "B",
+                                "to_account": "C",
+                                "amount": 2,
+                                "occurred_at": "2026-09-10 09:07:00",
+                                "channel": "网银",
+                            },
+                            {
+                                "id": "TX-L-03",
+                                "from_account": "C",
+                                "to_account": "D",
+                                "amount": 1,
+                                "occurred_at": "2026-09-10 09:16:00",
+                                "channel": "网银",
+                            },
+                        ],
+                        "allowed_evidence_ids": ["TX-L-01", "TX-L-02", "TX-L-03"],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ]
+    )
+    items = _extract_json_array(text)
+    assert items[0]["predicate"] == "consecutive_transfer_chain"
+    assert usage["model"] == "stub"
 
 
 def test_strip_fence_removes_language_tag():
@@ -41,6 +109,7 @@ def test_validate_delta_bounds_and_evidence():
 
 
 def test_chat_timeout_becomes_runtime_error(monkeypatch):
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
 
@@ -55,6 +124,7 @@ def test_chat_timeout_becomes_runtime_error(monkeypatch):
 
 
 def test_chat_http_error_becomes_runtime_error(monkeypatch):
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
     import urllib.error
@@ -76,6 +146,7 @@ def test_chat_http_error_becomes_runtime_error(monkeypatch):
 
 
 def test_chat_parses_usage(monkeypatch):
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
 

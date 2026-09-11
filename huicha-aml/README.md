@@ -20,7 +20,7 @@
 
 1. **Evidence Graph**：Claim → Evidence → Source，禁止无证据结论。
 2. **Bounded Challenger**：主动找反证；`delta` 必须 ∈ [−0.15, +0.15]，否则 Reject。
-3. **Evidence Validator**：无证据 / 假证据 / 跨案证据不得进分。
+3. **Evidence Validator**：无证据 / 假证据 / 跨案证据不得进分。调分 Claim 必须带封闭谓词，由后端在本案交易快照上重新执行，不成立则 Reject。
 4. **Human-in-the-loop**：`REPORT` 不能由 Agent 执行，只能 `REPORT_REVIEW` + 人签。
 
 ## 4. System Architecture
@@ -54,9 +54,9 @@ Case → Planner → Evidence Collector → Risk Analyst
 
 ## 7. Bounded Challenger
 
-输出结构化 JSON：`claim` / `counter_claim` / `evidence_ids` / `confidence` / `delta` / `reason`。
+输出结构化 JSON：`claim` / `predicate` / `args` / `evidence_ids` / `delta`。
 
-越界、无证据、未知编号、跨案 → **Reject**。最终分 = 规则因子合计 + **通过校验**的 delta，夹紧到 [0, 1]。
+越界、无证据、未知编号、跨案、未知谓词、谓词经数据核验不成立 → **Reject**。最终分 = 规则因子合计 + **通过校验**的 delta，夹紧到 [0, 1]。
 
 ## 8. Privacy & Security
 
@@ -88,7 +88,7 @@ cd ../frontend
 npm install
 ```
 
-复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。
+复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Challenger/Reporter 走内置 stub（不是百炼）。
 
 ## 12. Usage
 
@@ -116,7 +116,7 @@ huicha-aml/
 
 调查流水线拆分：`agents.py` 只编排；取数在 `tools.py`；规则打底在 `analyst_rules.py`；Challenger 校验只走 `validator.py`；报告模板在 `report_draft.py`；落库在 `case_store.py`。
 
-工作台「规则分」来自规则因子合计 + 通过校验的 delta，字段 `confidence_kind=rule_score_not_calibrated`。Validator 的 `support_score` 只表示证据编号是否属于本案（`score_kind=id_membership`），**不是语义置信度**。
+工作台「规则分」来自规则因子合计 + 通过校验的 delta，字段 `confidence_kind=rule_score_not_calibrated`。调分 Claim 的 `support_score` 在 `score_kind=predicate_verified` 时表示封闭谓词已在本案快照上执行为真，**不是语义置信度或校准概率**。无谓词的中性说明（delta=0）仍可为 `id_membership`。
 
 ## 14. Limitations
 

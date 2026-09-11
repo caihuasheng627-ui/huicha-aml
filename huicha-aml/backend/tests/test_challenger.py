@@ -12,12 +12,59 @@ def test_challenger_cannot_change_final_without_validation():
 
 
 def test_bounded_delta_accepted():
+    facts = {
+        "transactions": [
+            {
+                "id": "TX-1",
+                "from_account": "A",
+                "to_account": "RELATIVE-01",
+                "amount": 300000,
+                "occurred_at": "2026-08-20 10:00:00",
+                "channel": "柜面",
+            }
+        ]
+    }
     kept, total, _ = filter_challenger_items(
-        [{"claim": "经营解释", "evidence_ids": ["TX-1"], "delta": -0.10}],
+        [
+            {
+                "claim": "经营解释",
+                "evidence_ids": ["TX-1"],
+                "predicate": "counterparty_has_prefix",
+                "args": {"tx_ids": ["TX-1"], "prefix": "RELATIVE-", "side": "to"},
+                "delta": -0.10,
+            }
+        ],
         allowed={"TX-1"},
+        facts=facts,
     )
     assert kept[0]["delta"] == -0.10
+    assert kept[0]["validation"]["score_kind"] == "predicate_verified"
     assert total == -0.10
+
+
+def test_false_predicate_with_real_ids_rejected_in_pipeline(client, monkeypatch):
+    def fake_enrich(**_kwargs):
+        return (
+            [
+                {
+                    "claim": "金额递增（假）",
+                    "detail": "引用真编号但陈述为假",
+                    "evidence_ids": ["TX-L-01", "TX-L-02", "TX-L-03"],
+                    "predicate": "amount_monotonic_increasing",
+                    "args": {"tx_ids": ["TX-L-01", "TX-L-02", "TX-L-03"]},
+                    "delta": -0.10,
+                }
+            ],
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    r = client.post("/api/alerts/ALT-L-20260910/investigate", params={"use_challenger": True})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    reasons = " ".join((x.get("validation") or {}).get("reason") or "" for x in data["rejected_claims"])
+    assert "不成立" in reasons
+    assert data["scoring"]["llm_delta"] == 0.0
 
 
 def test_pipeline_records_rejected(client):

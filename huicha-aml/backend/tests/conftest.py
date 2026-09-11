@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.predicates import stub_challenger_item
 from app.seed import seed_if_empty
 
 
@@ -25,26 +26,19 @@ def client(monkeypatch):
             "model": "deepseek-v4-flash-0731",
         }
         sys = messages[0]["content"]
-        if "Challenger" in sys or "质疑" in sys or "delta" in sys:
+        if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
             try:
                 data = json.loads(user)
-                eids = (data.get("allowed_evidence_ids") or ["TX-A-IN-01"])[:2]
             except Exception:
-                eids = ["TX-A-IN-01"]
+                data = {}
+            item = stub_challenger_item(
+                data if isinstance(data, dict) else {},
+                claim="测试反证",
+                detail="仅用于单测的 API 返回文案，不含虚构账号。",
+                delta=-0.12,
+            )
             return (
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "claim": "测试反证",
-                                "detail": "仅用于单测的 API 返回文案，不含虚构账号。",
-                                "evidence_ids": eids,
-                                "delta": -0.12,
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                ),
+                json.dumps({"items": [item]}, ensure_ascii=False),
                 usage,
             )
         data = json.loads(user)

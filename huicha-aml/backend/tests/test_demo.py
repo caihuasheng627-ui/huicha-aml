@@ -73,6 +73,7 @@ def test_demo_conclusions(client, alert_id, use_challenger, expected):
     if use_challenger:
         assert data["challenger"]
         assert data["challenger"][0].get("claim") == "测试反证" or data["challenger"][0].get("title") == "测试反证"
+        assert data["challenger"][0].get("validation", {}).get("score_kind") == "predicate_verified"
     assert "须人工签发" in data["report"]["reason"]
     assert "manual_minutes" not in data["comparison"]
 

@@ -15,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from .agents import run_investigation
 from .database import Base
+from .predicates import stub_challenger_item
 from .seed import seed_if_empty
 
 
@@ -22,23 +23,18 @@ def _stub_chat(messages, *, temperature=0.0, max_tokens=900):
     usage = {"prompt_tokens": 8, "completion_tokens": 16, "total_tokens": 24, "cached": False, "model": "stub"}
     sys = messages[0]["content"]
     user = messages[-1]["content"]
-    if "Challenger" in sys or "质疑" in sys or "delta" in sys:
+    if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
         try:
             data = json.loads(user)
-            eids = (data.get("allowed_evidence_ids") or ["TX-L-01"])[:2]
         except Exception:
-            eids = ["TX-L-01"]
-        payload = {
-            "items": [
-                {
-                    "claim": "或为正常过桥结算",
-                    "detail": "时间窗短但金额递减，需核验合同。合成反证。",
-                    "evidence_ids": eids,
-                    "delta": -0.10,
-                }
-            ]
-        }
-        return json.dumps(payload, ensure_ascii=False), usage
+            data = {}
+        item = stub_challenger_item(
+            data if isinstance(data, dict) else {},
+            claim="或为正常过桥结算",
+            detail="时间窗短但金额递减，需核验合同。合成反证。",
+            delta=-0.10,
+        )
+        return json.dumps({"items": [item]}, ensure_ascii=False), usage
     data = json.loads(user)
     text = (
         f"结论为{data['conclusion']}。相关交易编号：{data['allowed_tx_ids']}。"

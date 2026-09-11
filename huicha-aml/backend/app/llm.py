@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from .predicates import catalog_for_prompt, case_facts, stub_challenger_item
 from .privacy import PrivacyMap
 from .validator import DELTA_BOUND, filter_challenger_items
 
@@ -48,12 +49,63 @@ def llm_model() -> str:
     return os.getenv("DASHSCOPE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
+def llm_stub_enabled() -> bool:
+    _load_env()
+    return os.getenv("HUICHA_LLM_STUB", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def llm_configured() -> bool:
+    if llm_stub_enabled():
+        return True
     try:
         require_api_key()
         return True
     except RuntimeError:
         return False
+
+
+def llm_mode() -> str:
+    if llm_stub_enabled():
+        return "stub"
+    try:
+        require_api_key()
+        return "bailian"
+    except RuntimeError:
+        return "off"
+
+
+def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
+    usage = {
+        "prompt_tokens": 8,
+        "completion_tokens": 16,
+        "total_tokens": 24,
+        "cached": False,
+        "model": "stub",
+    }
+    sys = messages[0]["content"] if messages else ""
+    user = messages[-1]["content"] if messages else ""
+    if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
+        try:
+            data = json.loads(user)
+        except json.JSONDecodeError:
+            data = {}
+        item = stub_challenger_item(
+            data if isinstance(data, dict) else {},
+            claim="测试反证",
+            detail="仅用于本地 stub，不含虚构账号。",
+            delta=-0.12,
+        )
+        return json.dumps({"items": [item]}, ensure_ascii=False), usage
+    try:
+        data = json.loads(user)
+    except json.JSONDecodeError:
+        data = {}
+    text = (
+        f"结论为{data.get('conclusion') or '待审'}。"
+        f"客户{data.get('customer_name') or ''}（{data.get('customer_id') or ''}，账户{data.get('account_id') or ''}）"
+        f"相关交易编号：{data.get('allowed_tx_ids') or ''}。须人工签发，不可自动报送。"
+    )
+    return text, usage
 
 
 def _cache_key(kind: str, payload: dict) -> str:
@@ -105,6 +157,8 @@ def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict) 
 
 
 def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 900) -> tuple[str, dict]:
+    if llm_stub_enabled():
+        return _offline_stub_chat(messages)
     api_key = require_api_key()
     base = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
     model = llm_model()
@@ -187,6 +241,18 @@ def _extract_json_array(text: str) -> list:
     raise RuntimeError(f"Challenger 返回非 JSON：{text[:400]}") from last_err
 
 
+def _unmask_value(value, privacy: PrivacyMap | None):
+    if privacy is None:
+        return value
+    if isinstance(value, str):
+        return privacy.unmask_text(value)
+    if isinstance(value, list):
+        return [_unmask_value(v, privacy) for v in value]
+    if isinstance(value, dict):
+        return {k: _unmask_value(v, privacy) for k, v in value.items()}
+    return value
+
+
 def normalize_challenger_items(items: list, *, privacy: PrivacyMap | None = None) -> list[dict]:
     """脱敏还原 Challenger JSON，不做编号校验。"""
     rows: list[dict] = []
@@ -195,9 +261,12 @@ def normalize_challenger_items(items: list, *, privacy: PrivacyMap | None = None
             continue
         claim = str(it.get("claim") or it.get("title") or "").strip()
         detail = str(it.get("detail") or "").strip()
+        predicate = str(it.get("predicate") or "").strip()
+        args = it.get("args") if isinstance(it.get("args"), dict) else {}
         if privacy:
             claim = privacy.unmask_text(claim)
             detail = privacy.unmask_text(detail)
+            args = _unmask_value(args, privacy)
         raw_ids = it.get("evidence_ids") or []
         if isinstance(raw_ids, str):
             raw_ids = [raw_ids]
@@ -206,7 +275,11 @@ def normalize_challenger_items(items: list, *, privacy: PrivacyMap | None = None
             eid = str(eid).strip()
             if privacy:
                 eid = privacy.unmask_text(eid)
-            if eid:
+            if eid and eid not in evidence_ids:
+                evidence_ids.append(eid)
+        for eid in args.get("tx_ids") or [] if isinstance(args, dict) else []:
+            eid = str(eid).strip()
+            if eid and eid not in evidence_ids:
                 evidence_ids.append(eid)
         try:
             delta = float(it.get("delta", 0))
@@ -218,6 +291,8 @@ def normalize_challenger_items(items: list, *, privacy: PrivacyMap | None = None
                 "claim": claim,
                 "detail": detail or claim,
                 "evidence_ids": evidence_ids,
+                "predicate": predicate,
+                "args": args,
                 "delta": round(delta, 4),
             }
         )
@@ -229,10 +304,11 @@ def validate_challenger_items(
     *,
     allowed_evidence: set[str],
     privacy: PrivacyMap | None = None,
+    facts: dict | None = None,
 ) -> tuple[list[dict], float]:
     """脱敏还原后交给 validator，不再另写一套 delta/证据规则。"""
     rows = normalize_challenger_items(items, privacy=privacy)
-    kept, total, _rejected = filter_challenger_items(rows, allowed=set(allowed_evidence))
+    kept, total, _rejected = filter_challenger_items(rows, allowed=set(allowed_evidence), facts=facts)
     return kept, total
 
 
@@ -247,7 +323,9 @@ def enrich_challenger(
     kb_hits: list[dict],
     score_hints: list[dict],
     allowed_evidence: list[str],
+    transactions: list[dict] | None = None,
 ) -> tuple[list[dict], dict]:
+    facts = case_facts(transactions=transactions, customer=customer, account_id=alert.get("account_id") or "")
     context = {
         "alert_type": alert["alert_type"],
         "customer": {
@@ -263,20 +341,22 @@ def enrich_challenger(
         "findings": [{"title": f["title"], "detail": f["detail"], "evidence_ids": f.get("evidence_ids", [])} for f in findings],
         "kb": [{"id": h["id"], "title": h["title"], "snippet": h["snippet"]} for h in kb_hits[:5]],
         "score_hints": score_hints,
-        "allowed_evidence_ids": allowed_evidence[:40],
+        "allowed_evidence_ids": list(dict.fromkeys([*(t["id"] for t in facts["transactions"] if t.get("id")), *allowed_evidence]))[:80],
         "delta_bound": DELTA_BOUND,
+        "transactions": facts["transactions"][:24],
+        "allowed_predicates": catalog_for_prompt(),
     }
     if privacy:
         context = privacy.mask_obj(context)
 
-    key = _cache_key("challenger_v2", context)
+    key = _cache_key("challenger_v3", context)
     cached = _cache_get(db, key)
     if cached:
         text, usage = cached
     else:
         from .prompts import PROMPTS
 
-        system = PROMPTS["challenger_v2"]
+        system = PROMPTS["challenger_v3"]
         text, usage = chat(
             [
                 {"role": "system", "content": system},
@@ -290,13 +370,19 @@ def enrich_challenger(
         except RuntimeError:
             text, usage = chat(
                 [
-                    {"role": "system", "content": '只输出 {"items":[{"claim":"...","detail":"...","evidence_ids":[],"delta":0}]}'},
+                    {
+                        "role": "system",
+                        "content": (
+                            '只输出 {"items":[{"claim":"...","detail":"...","evidence_ids":[],'
+                            '"predicate":"...","args":{"tx_ids":[]},"delta":0}]}'
+                        ),
+                    },
                     {"role": "user", "content": text[:2000]},
                 ],
                 temperature=0.0,
                 max_tokens=500,
             )
-        _cache_put(db, key, "challenger_v2", text, usage)
+        _cache_put(db, key, "challenger_v3", text, usage)
 
     items = _extract_json_array(text)
     rows = normalize_challenger_items(items, privacy=privacy)

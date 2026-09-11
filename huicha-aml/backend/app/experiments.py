@@ -18,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 from .agents import FAKE_ACCOUNT, run_investigation
 from .database import Base
 from .models import Alert
+from .predicates import stub_challenger_item
 from .seed import seed_if_empty
 from .tools import fact_check
 
@@ -135,7 +136,7 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
         "sample": [r for r in rows if r["demo_tag"] in {"A", "B", "C", "F"}][:8],
         "caveat": (
             "gold_label 由生成模板写入，与规则分支同源；"
-            "LLM 为固定 stub delta（默认 -0.12），不是真实百炼。"
+            "LLM 为 stub：先挑选一条对本案为真的封闭谓词，再给固定 delta（默认 -0.12），不是真实百炼。"
             "数字证明流水线可复现，不代表调查准确率。"
         ),
     }
@@ -145,23 +146,18 @@ def _stub_chat(messages, *, temperature=0.0, max_tokens=900):
     usage = {"prompt_tokens": 8, "completion_tokens": 16, "total_tokens": 24, "cached": False, "model": "stub"}
     sys = messages[0]["content"]
     user = messages[-1]["content"]
-    if "Challenger" in sys or "质疑" in sys or "delta" in sys:
+    if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
         try:
             data = json.loads(user)
-            eids = (data.get("allowed_evidence_ids") or ["TX-A-IN-01"])[:2]
         except Exception:
-            eids = ["TX-A-IN-01"]
-        # 默认给出温和负向 delta，帮助排除类案件
-        payload = {
-            "items": [
-                {
-                    "claim": "实验反证",
-                    "detail": "合成实验用反证，不含虚构账号。",
-                    "evidence_ids": eids,
-                    "delta": -0.12,
-                }
-            ]
-        }
+            data = {}
+        item = stub_challenger_item(
+            data if isinstance(data, dict) else {},
+            claim="实验反证",
+            detail="合成实验用反证，不含虚构账号。",
+            delta=-0.12,
+        )
+        payload = {"items": [item]}
         return json.dumps(payload, ensure_ascii=False), usage
     data = json.loads(user)
     text = (

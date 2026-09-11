@@ -24,7 +24,7 @@ import {
   runInvestigate,
   setDemoToken,
 } from "./api";
-import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline } from "./CasePanels.jsx";
+import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 
 const HUMAN = {
   confirm: "已记录签发",
@@ -718,6 +718,7 @@ export default function App() {
                 </div>
               )}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
+              {inv && <VerifiedClaims rows={inv.challenger} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}

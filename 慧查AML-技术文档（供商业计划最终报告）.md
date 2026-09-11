@@ -8,7 +8,7 @@
 数据性质：**本地合成数据**，不对接银行核心、不使用真实客户信息  
 
 版本对应代码：慧查 AML V2.1（仓库 `huicha-aml/`）  
-配套材料：根目录《慧查AML-作品报告.md》、`huicha-aml/README.md`、`huicha-aml/路演.md`、`huicha-aml/experiments/RESULTS.md`
+配套材料：根目录《慧查AML-作品报告.md》、《慧查AML-变更记录.md》、`huicha-aml/README.md`、`huicha-aml/路演.md`、`huicha-aml/experiments/RESULTS.md`
 
 ---
 
@@ -37,6 +37,7 @@
 | 验证与效果 | 第 11 节 | RESULTS 表 + 必写口径 |
 | 商业价值 / 差异化 | 第 14 节 | 与智盾链、与纯大模型对比 |
 | 风险与后续 | 第 13、15 节 | 诚实边界、落地路径 |
+| 迭代过程 / 版本演进 | 《慧查AML-变更记录.md》 | V1.0 → V2.1 对照表 |
 | 附录 | 第 16 节、附录 A–C | 术语、接口、启动方式 |
 
 ---
@@ -473,4 +474,4 @@ huicha-aml/
 
 ## 附录 C　与《作品报告》的关系
 
-根目录《慧查AML-作品报告.md》是偏答辩提纲的短稿；本文是给商业计划组扩写最终提交件用的技术事实源。数字、边界、创新点三者应保持一致。若代码后续变更，以 `huicha-aml/README.md` 与 `experiments/RESULTS.md` 为准更新本文第 11、13 节。
+根目录《慧查AML-作品报告.md》是偏答辩提纲的短稿；本文是给商业计划组扩写最终提交件用的技术事实源；《慧查AML-变更记录.md》供写迭代过程。数字、边界、创新点三者应保持一致。若代码后续变更，以 `huicha-aml/README.md` 与 `experiments/RESULTS.md` 为准更新本文第 11、13 节，并在变更记录追加版本节。

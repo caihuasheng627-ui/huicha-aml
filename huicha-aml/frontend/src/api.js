@@ -165,10 +165,11 @@ export async function fetchMe() {
   return data;
 }
 
-export async function runInvestigate(id, { useChallenger = true, injectHallucination = false } = {}) {
+export async function runInvestigate(id, { useChallenger = true, injectHallucination = false, experimentMode = false } = {}) {
   const q = new URLSearchParams({
     use_challenger: String(useChallenger),
     inject_hallucination: String(injectHallucination),
+    experiment_mode: String(experimentMode),
   });
   const r = await request(`/api/alerts/${id}/investigate?${q}`, {
     method: "POST",

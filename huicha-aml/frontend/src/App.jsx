@@ -31,7 +31,7 @@ import {
   runInvestigate,
   setDemoToken,
 } from "./api";
-import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
 const HUMAN = {
@@ -60,6 +60,7 @@ const AUDIT_ACTION = {
   decide: "人工处置",
   tool: "调取工具",
   tools: "调取工具",
+  validator: "证据校验",
 };
 
 const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
@@ -258,19 +259,28 @@ function Graph({ graph, selected, onSelect }) {
   );
 }
 
-function ScoreBreakdown({ scoring, label }) {
+function ScoreBreakdown({ scoring, label, ablation }) {
   if (!scoring) return null;
-  const rows = [
-    { k: "规则底分", v: scoring.base },
-    { k: "质疑先验", v: scoring.rule_prior },
-    { k: "模型 Δ", v: scoring.llm_delta },
-  ];
+  const base = Number(scoring.base ?? 0);
+  const prior = Number(scoring.rule_prior ?? 0);
+  const delta = Number(scoring.llm_delta ?? 0);
   const final = Number(scoring.final ?? 0);
+  const rows = ablation
+    ? [
+        { k: "规则基础分", v: final },
+        { k: "Challenger", v: 0 },
+        { k: "最终风险", v: final },
+      ]
+    : [
+        { k: "规则基础分", v: base + prior },
+        { k: "Challenger", v: delta },
+        { k: "最终风险", v: final },
+      ];
   const pin = Math.max(2, Math.min(98, final * 100));
   return (
     <div className="score-break">
       <div className="score-break-hd">
-        打分拆解
+        可解释风险评分
         <b className={conclusionTone(label)}>{label}</b>
       </div>
       <ul>
@@ -279,14 +289,16 @@ function ScoreBreakdown({ scoring, label }) {
           return (
             <li key={r.k}>
               <span>{r.k}</span>
-              <em className={n < 0 ? "down" : n > 0 ? "up" : ""}>
-                {n > 0 ? "+" : ""}
-                {n.toFixed(2)}
+              <em className={n < 0 ? "down" : n > 0 && r.k !== "最终风险" && r.k !== "规则基础分" ? "up" : ""}>
+                {r.k === "最终风险" ? n.toFixed(2) : `${n > 0 ? "+" : ""}${n.toFixed(2)}`}
               </em>
             </li>
           );
         })}
       </ul>
+      <div className="hint" style={{ margin: "6px 0 0" }}>
+        Challenger 最大影响范围 ±0.15{ablation ? " · 本案为 Challenger OFF 消融结果" : ""}
+      </div>
       <div className="score-track" title="0.35 排除 / 0.55 上报">
         <i className="tick" style={{ left: "35%" }} />
         <i className="tick" style={{ left: "55%" }} />
@@ -339,7 +351,8 @@ export default function App() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
-  const [useChallenger, setUseChallenger] = useState(true);
+  const [currentChallengerEnabled, setCurrentChallengerEnabled] = useState(true);
+  const [experimentMode, setExperimentMode] = useState(false);
   const [injectHallucination, setInjectHallucination] = useState(false);
   const [selected, setSelected] = useState("");
   const [openSteps, setOpenSteps] = useState({});
@@ -362,6 +375,8 @@ export default function App() {
   const inv = detail?.investigation;
   const playback = usePipelinePlayback({ running: loading, failed: invError });
   const showTheater = playback.phase === "playing" || playback.phase === "holding" || playback.phase === "error";
+  const caseChallengerEnabled = inv ? inv.case_challenger_enabled !== false && inv.use_challenger !== false : null;
+  const nextChallengerEnabled = experimentMode ? currentChallengerEnabled : true;
 
   async function loadList() {
     let health = null;
@@ -453,7 +468,11 @@ export default function App() {
     setLoading(true);
     open(id).catch(() => {});
     try {
-      await runInvestigate(id, { useChallenger, injectHallucination });
+      await runInvestigate(id, {
+        useChallenger: experimentMode ? currentChallengerEnabled : true,
+        injectHallucination,
+        experimentMode,
+      });
       await open(id);
       await loadList();
     } catch (e) {
@@ -582,16 +601,50 @@ export default function App() {
       </header>
 
       <div className="toolbar">
-        <label>
-          质疑复核
-          <Switch size="small" checked={useChallenger} onChange={setUseChallenger} />
+        <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
+          {experimentMode ? "实验模式：用于 Challenger 消融实验" : "AI反向质询 · 已启用"}
+        </span>
+        <label title="仅影响下一次重跑，不会改写已打开的历史草稿">
+          AI反向质询（Challenger）
+          <Switch
+            size="small"
+            checked={nextChallengerEnabled}
+            disabled={!experimentMode}
+            onChange={setCurrentChallengerEnabled}
+          />
         </label>
+        {!experimentMode && (
+          <span className="hint" style={{ margin: 0 }}>
+            正常模式默认启用
+          </span>
+        )}
+        {experimentMode && (
+          <span className="hint" style={{ margin: 0 }}>
+            下次重跑：{currentChallengerEnabled ? "开" : "关（消融）"}
+          </span>
+        )}
         <label>
-          幻觉演示
-          <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
+          实验模式
+          <Switch
+            size="small"
+            checked={experimentMode}
+            onChange={(on) => {
+              setExperimentMode(on);
+              if (!on) {
+                setCurrentChallengerEnabled(true);
+                setInjectHallucination(false);
+              }
+            }}
+          />
         </label>
+        {experimentMode && (
+          <label>
+            幻觉演示
+            <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
+          </label>
+        )}
         <span className="hint" style={{ margin: 0 }}>
-          签发须登录；AI 不得自动报送。
+          快捷键 1–5 打开历史案（不重跑）；顶部策略只作用于「按当前策略重跑」。签发须登录；AI 不得自动报送。
         </span>
       </div>
 
@@ -789,19 +842,18 @@ export default function App() {
               <h4>领取告警，走完调查流水线</h4>
               <p className="hint">本台接在监测系统之后，只生成调查草稿，不上报、不记账。</p>
               <ol>
-                <li>案例 A：批发企业大额频繁 → 建议排除（有经营反证）</li>
-                <li>关闭「质疑复核」再跑 A：同一案可能变为建议上报</li>
+                <li>案例 A：批发企业。AI反向质询 ON → 排除；实验模式关掉质询再重跑 → 建议上报（消融）</li>
                 <li>案例 B / C：拆分与多账户归集 → 建议进入上报复核</li>
-                <li>案例 L：A→B→C→D 短时多层转移（一键 Demo）</li>
-                <li>打开「幻觉演示」：签发将被事实回查拦住</li>
-                <li>右侧 Evidence Graph / 法规 / 流水均可点回原始数据</li>
+                <li>案例 L：A→B→C→D 短时多层转移（合成 Demo）</li>
+                <li>实验模式打开「幻觉演示」：签发将被事实回查拦住</li>
+                <li>左侧点开历史案不会因顶部开关改写结果；只有「按当前策略重跑」才会重算</li>
               </ol>
             </div>
           )}
           {current && showTheater && (
             <InvestigateTheater
               playback={playback}
-              useChallenger={useChallenger}
+              useChallenger={nextChallengerEnabled}
               injectHallucination={injectHallucination}
               onRetry={() => onInvestigate()}
               onBack={() => playback.reset()}
@@ -815,7 +867,7 @@ export default function App() {
                   <div className="v">{inv ? inv.conclusion_label : "未生成"}</div>
                 </div>
                 <div className="kpi-card">
-                  <div className="k">规则分</div>
+                  <div className="k">可解释风险评分</div>
                   <div className="v">{inv ? Number(inv.confidence).toFixed(2) : "—"}</div>
                   {inv && (
                     <div className="conf-bar" aria-hidden="true">
@@ -851,7 +903,20 @@ export default function App() {
                   <Tag>待签发</Tag>
                 )}
                 {!user && <Tag color="default">未登录 · 不可签发</Tag>}
-                {inv?.use_challenger === false && <Tag color="orange">质疑角色已关</Tag>}
+                {inv && caseChallengerEnabled && (
+                  <>
+                    <Tag color="green">AI反向质询已参与本次调查</Tag>
+                    {inv.scoring?.llm_delta != null && (
+                      <Tag>
+                        模型调整 Δ = {Number(inv.scoring.llm_delta) > 0 ? "+" : ""}
+                        {Number(inv.scoring.llm_delta).toFixed(2)}
+                      </Tag>
+                    )}
+                  </>
+                )}
+                {inv && caseChallengerEnabled === false && (
+                  <Tag color="orange">本案为消融结果</Tag>
+                )}
                 {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
                 {inv?.llm?.reporter || inv?.llm?.challenger ? (
                   <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
@@ -864,9 +929,34 @@ export default function App() {
                   ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
                   : ""}
               </div>
+              <div className="ch-state-strip">
+                <span>
+                  当前运行策略：
+                  {experimentMode
+                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} AI反向质询`
+                    : "正常模式 · 下次重跑默认启用 AI反向质询"}
+                </span>
+                {inv && (
+                  <span>
+                    本案历史结果：
+                    {caseChallengerEnabled
+                      ? "生成时已启用 AI反向质询"
+                      : "生成时未启用（消融结果，不是当前系统关闭）"}
+                  </span>
+                )}
+              </div>
+              {inv && caseChallengerEnabled === false && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message="本案为消融结果"
+                  description="本案生成时未启用 AI 反向质询，当前展示的是 Challenger OFF 的历史调查结果。顶部开关只代表下一次重跑策略，不会改写这份草稿。可点「按当前策略重跑」。"
+                />
+              )}
               {inv && (
                 <div className="viz-row">
-                  <ScoreBreakdown scoring={inv.scoring} label={inv.conclusion_label} />
+                  <ScoreBreakdown scoring={inv.scoring} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} />
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
@@ -876,6 +966,7 @@ export default function App() {
                   数据 {inv.data_note || "synthetic"} · Agent 不得自动报送
                 </div>
               )}
+              {inv && <ChallengerPanel run={inv.challenger_run} onSelect={selectEvidence} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <VerifiedClaims rows={inv.challenger} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
@@ -995,7 +1086,14 @@ export default function App() {
           {inv ? (
             <>
               <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} />
-              <EvidenceLists graph={inv.evidence_graph} claims={inv.claims} onSelect={selectEvidence} />
+              <EvidenceLists
+                graph={inv.evidence_graph}
+                claims={inv.claims}
+                kbHits={inv.kb_hits}
+                ablation={caseChallengerEnabled === false}
+                selected={selected}
+                onSelect={selectEvidence}
+              />
               <Divider plain orientation="left">
                 制度与类型学
               </Divider>

@@ -31,7 +31,7 @@ from .tools import (
     yuan,
 )
 from .typology import tags_from_findings
-from .validator import filter_challenger_items
+from .validator import DELTA_BOUND, filter_challenger_items
 
 FAKE_ACCOUNT = "6222-FAKE-9999"
 
@@ -47,6 +47,7 @@ def run_investigation(
     *,
     use_challenger: bool = True,
     inject_hallucination: bool = False,
+    experiment_mode: bool = False,
 ) -> dict:
     started = time.perf_counter()
     tool_trace: list = []
@@ -57,6 +58,7 @@ def run_investigation(
             alert_id,
             use_challenger=use_challenger,
             inject_hallucination=inject_hallucination,
+            experiment_mode=experiment_mode,
             started=started,
             tool_trace=tool_trace,
         )
@@ -130,7 +132,15 @@ def _challenger_stage(
     use_challenger: bool,
 ) -> dict:
     if not use_challenger:
-        return {"challenger": [], "usage": {}, "rule_prior": 0.0, "llm_delta": 0.0, "rejected": [], "hints": []}
+        return {
+            "challenger": [],
+            "usage": {},
+            "rule_prior": 0.0,
+            "llm_delta": 0.0,
+            "raw_delta": 0.0,
+            "rejected": [],
+            "hints": [],
+        }
     prior, hints = rule_prior(
         use_challenger=True,
         customer=customer,
@@ -190,11 +200,13 @@ def _challenger_stage(
                 "tag": None,
             }
         )
+    raw_delta = round(sum(float(c.get("delta") or 0) for c in challenger), 4)
     return {
         "challenger": challenger,
         "usage": usage,
         "rule_prior": prior,
         "llm_delta": llm_delta,
+        "raw_delta": raw_delta,
         "rejected": rejected,
         "hints": hints,
     }
@@ -206,6 +218,7 @@ def _run_investigation_inner(
     *,
     use_challenger: bool,
     inject_hallucination: bool,
+    experiment_mode: bool,
     started: float,
     tool_trace: list,
 ) -> dict:
@@ -342,6 +355,7 @@ def _run_investigation_inner(
     rule_prior_v = ch["rule_prior"]
     rejected_claims = ch["rejected"]
     challenger_usage = ch["usage"]
+    raw_delta = float(ch.get("raw_delta") or 0)
 
     if use_challenger:
         for i, c in enumerate(challenger, start=1):
@@ -502,6 +516,83 @@ def _run_investigation_inner(
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     elements_ok = sum(1 for e in report["elements"] if (e.get("value") or "").strip())
+    initial_conclusion = score_to_conclusion(base_score)
+    delta_clamped = abs(raw_delta - llm_delta) > 1e-9
+    overbound = [
+        r
+        for r in rejected_claims
+        if "超出" in str((r.get("validation") or {}).get("reason") or "")
+    ]
+    validator_failed = bool(use_challenger and rejected_claims and not challenger)
+    support_ids = []
+    seen_s: set[str] = set()
+    for f in findings:
+        if f.get("code") in {"pattern-peer", "thin"}:
+            continue
+        for eid in f.get("evidence_ids") or []:
+            if eid and eid not in seen_s:
+                seen_s.add(eid)
+                support_ids.append(eid)
+    counter_ids = []
+    seen_c: set[str] = set()
+    for c in challenger:
+        for eid in c.get("evidence_ids") or []:
+            if eid and eid not in seen_c:
+                seen_c.add(eid)
+                counter_ids.append(eid)
+    invalid_ids = []
+    seen_i: set[str] = set()
+    for r in rejected_claims:
+        for eid in r.get("evidence_ids") or []:
+            if eid and eid not in seen_i:
+                seen_i.add(eid)
+                invalid_ids.append(eid)
+    kb_rule_ids = [h["id"] for h in kb_hits if h.get("kind") == "regulation"]
+    validator_result = {
+        "passed": not validator_failed,
+        "score_kind": "id_membership",
+        "kept": len(challenger),
+        "rejected": len(rejected_claims),
+        "overbound": len(overbound),
+        "delta_clamped": delta_clamped,
+        "reason": (
+            "Challenger 输出未通过证据校验"
+            if validator_failed
+            else "证据编号属于本案件工具结果（不是语义支持度）"
+        ),
+    }
+    challenger_run = {
+        "enabled": use_challenger,
+        "experiment_mode": experiment_mode,
+        "ablation": not use_challenger,
+        "label": "AI反向质询",
+        "delta_bound": DELTA_BOUND,
+        "initial_score": round(base_score, 4),
+        "initial_conclusion": initial_conclusion,
+        "initial_label": CONCLUSION_LABEL[initial_conclusion],
+        "rule_prior": rule_prior_v,
+        "llm_delta": llm_delta,
+        "raw_delta": raw_delta,
+        "delta_clamped": delta_clamped,
+        "final_score": round(score, 4),
+        "final_conclusion": conclusion,
+        "final_label": CONCLUSION_LABEL[conclusion],
+        "support_ids": support_ids[:12],
+        "counter_ids": counter_ids[:12],
+        "invalid_ids": invalid_ids[:12],
+        "rule_ids": kb_rule_ids[:8],
+        "claims": [
+            {
+                "claim": c.get("claim") or c.get("title") or "",
+                "detail": c.get("detail") or "",
+                "evidence_ids": c.get("evidence_ids") or [],
+                "delta": c.get("delta") or 0,
+                "polarity": "counter" if float(c.get("delta") or 0) < 0 else "support",
+            }
+            for c in challenger
+        ],
+        "validator": validator_result,
+    }
     payload = {
         "alert": alert,
         "customer": customer,
@@ -511,7 +602,11 @@ def _run_investigation_inner(
         "findings": findings,
         "challenger": challenger,
         "use_challenger": use_challenger,
+        "case_challenger_enabled": use_challenger,
+        "experiment_mode": experiment_mode,
         "inject_hallucination": inject_hallucination,
+        "challenger_run": challenger_run,
+        "validator_result": validator_result,
         "scoring": {
             "base": round(base_score, 4),
             "rule_prior": rule_prior_v,

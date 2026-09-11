@@ -1,4 +1,9 @@
-"""Evidence Validator：无证据 / 跨案 / 越界 delta / 谓词不成立的 Claim 不得进分。"""
+"""Evidence Validator：无证据 / 跨案 / 越界 delta / 谓词不成立的 Claim 不得进分。
+
+单条 |delta| > 0.15：拒绝进分（不把 0.99 夹成 0.15 后仍改结论）。
+多条合计超出 ±0.15：对合计 llm_delta 做 clamp，并在调查结果中记录 delta_clamped。
+校验失败的 Claim 不得创造/引用不存在或跨案 Evidence，也不得改规则基础分。
+"""
 
 from __future__ import annotations
 

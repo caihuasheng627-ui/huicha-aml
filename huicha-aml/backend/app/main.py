@@ -286,6 +286,7 @@ def investigate(
     alert_id: str,
     use_challenger: bool = True,
     inject_hallucination: bool = False,
+    experiment_mode: bool = False,
     db: Session = Depends(get_db),
 ):
     alert = db.get(Alert, alert_id)
@@ -297,6 +298,7 @@ def investigate(
             alert_id,
             use_challenger=use_challenger,
             inject_hallucination=inject_hallucination,
+            experiment_mode=experiment_mode,
         )
     except RuntimeError as e:
         raise HTTPException(502, str(e)) from e
@@ -315,6 +317,9 @@ def investigate(
         db.add(inv)
     if alert.status in {"pending", "closed", "ready_to_file", "modified"}:
         alert.status = "investigating"
+    scoring = result.get("scoring") or {}
+    run = result.get("challenger_run") or {}
+    validator = result.get("validator_result") or {}
     tools = "、".join(f"{c['tool']} {c['records']} 条" for c in result["tool_trace"])
     write_audit(
         db,
@@ -325,22 +330,54 @@ def investigate(
             {
                 "summary": (
                     f"生成调查草稿，建议结论「{result['conclusion_label']}」，"
-                    f"质疑复核{'开启' if use_challenger else '关闭'}，"
+                    f"AI反向质询{'开启' if use_challenger else '关闭'}，"
+                    f"{'实验模式' if experiment_mode else '正常模式'}，"
                     f"幻觉演示{'开启' if inject_hallucination else '关闭'}。{tools}"
                 ),
                 "case_id": alert_id,
+                "timestamp": format_cn(utcnow()),
                 "agent": "pipeline",
                 "model": (result.get("llm") or {}).get("model") or "",
+                "prompt_version": (result.get("prompt_versions") or {}).get("challenger") or "",
                 "prompt_versions": result.get("prompt_versions") or {},
-                "risk_score": (result.get("scoring") or {}).get("final"),
-                "delta": (result.get("scoring") or {}).get("llm_delta"),
+                "challenger_enabled": use_challenger,
+                "experiment_mode": experiment_mode,
+                "challenger_off_reason": (
+                    ""
+                    if use_challenger
+                    else ("实验模式消融" if experiment_mode else "请求关闭 AI反向质询")
+                ),
+                "rule_prior": scoring.get("rule_prior"),
+                "llm_delta": scoring.get("llm_delta"),
+                "final_score": scoring.get("final"),
                 "evidence_ids": [e.get("id") for e in (result.get("evidence") or [])[:20]],
+                "counter_evidence_ids": (result.get("structured_report") or {}).get("counter_evidence_ids") or [],
+                "validator_result": validator,
+                "delta_clamped": run.get("delta_clamped"),
                 "human_decision": "",
                 "data_note": "synthetic",
             },
             ensure_ascii=False,
         ),
     )
+    if validator.get("overbound") or run.get("delta_clamped") or not validator.get("passed", True):
+        write_audit(
+            db,
+            alert_id,
+            "agent",
+            "validator",
+            json.dumps(
+                {
+                    "summary": validator.get("reason") or "Evidence Validator 已处理越界/无效 Claim",
+                    "case_id": alert_id,
+                    "challenger_enabled": use_challenger,
+                    "llm_delta": scoring.get("llm_delta"),
+                    "validator_result": validator,
+                    "data_note": "synthetic",
+                },
+                ensure_ascii=False,
+            ),
+        )
     db.commit()
     return result
 
@@ -383,12 +420,28 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
     }
     inv.payload_json = json.dumps(payload, ensure_ascii=False)
     note = f"：{body.note}" if body.note else ""
+    scoring = payload.get("scoring") or {}
     write_audit(
         db,
         alert_id,
         user.label(),
         "decide",
-        f"{DECIDE_LABEL[body.decision]}{note}",
+        json.dumps(
+            {
+                "summary": f"{DECIDE_LABEL[body.decision]}{note}",
+                "case_id": alert_id,
+                "timestamp": format_cn(inv.decided_at),
+                "agent": "human",
+                "challenger_enabled": payload.get("case_challenger_enabled", payload.get("use_challenger")),
+                "experiment_mode": payload.get("experiment_mode", False),
+                "rule_prior": scoring.get("rule_prior"),
+                "llm_delta": scoring.get("llm_delta"),
+                "final_score": scoring.get("final"),
+                "human_decision": body.decision,
+                "data_note": "synthetic",
+            },
+            ensure_ascii=False,
+        ),
     )
     reco = (payload.get("case_v2") or {}).get("recommendation") or ""
     persist_human_decision(

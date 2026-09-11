@@ -34,8 +34,8 @@ const PIPELINE = [
   {
     id: "challenger",
     role: "Challenger",
-    title: "质疑",
-    caption: "有界反证与调分",
+    title: "质询",
+    caption: "AI反向质询 · 有界反证",
     dwell: 1600,
     linger: false,
     ticks: ["寻找反证", "规则先验", "有界 delta ±0.15"],

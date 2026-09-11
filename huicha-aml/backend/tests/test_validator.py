@@ -117,3 +117,50 @@ def test_filter_drops_rejected_from_score():
     assert len(rejected) == 2
     assert total == -0.10
     assert abs(total) <= DELTA_BOUND
+
+
+def test_sum_delta_clamped_to_bound():
+    facts = {
+        "transactions": [
+            {
+                "id": "TX-1",
+                "from_account": "A",
+                "to_account": "RELATIVE-01",
+                "amount": 1,
+                "occurred_at": "2026-08-20 10:00:00",
+                "channel": "柜面",
+            },
+            {
+                "id": "TX-2",
+                "from_account": "A",
+                "to_account": "RELATIVE-02",
+                "amount": 1,
+                "occurred_at": "2026-08-20 11:00:00",
+                "channel": "柜面",
+            },
+        ]
+    }
+    kept, total, rejected = filter_challenger_items(
+        [
+            {
+                "claim": "a",
+                "evidence_ids": ["TX-1"],
+                "predicate": "counterparty_has_prefix",
+                "args": {"tx_ids": ["TX-1"], "prefix": "RELATIVE-", "side": "to"},
+                "delta": 0.10,
+            },
+            {
+                "claim": "b",
+                "evidence_ids": ["TX-2"],
+                "predicate": "counterparty_has_prefix",
+                "args": {"tx_ids": ["TX-2"], "prefix": "RELATIVE-", "side": "to"},
+                "delta": 0.10,
+            },
+        ],
+        allowed={"TX-1", "TX-2"},
+        facts=facts,
+    )
+    assert len(kept) == 2
+    assert not rejected
+    assert total == 0.15
+    assert abs(total) <= DELTA_BOUND

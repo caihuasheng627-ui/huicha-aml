@@ -1,3 +1,5 @@
+import json
+
 from app.validator import filter_challenger_items
 
 
@@ -130,3 +132,96 @@ def test_seed_tx_mapped_to_own_alert(client):
         assert "KB-REG-01" not in idx
     finally:
         db.close()
+
+
+def test_challenger_run_payload_on(client):
+    r = client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["case_challenger_enabled"] is True
+    assert data["use_challenger"] is True
+    run = data["challenger_run"]
+    assert run["enabled"] is True
+    assert run["ablation"] is False
+    assert abs(run["llm_delta"]) <= 0.15
+    assert abs(data["scoring"]["llm_delta"]) <= 0.15
+    assert run["delta_bound"] == 0.15
+    assert run["initial_label"]
+    assert run["final_label"]
+    assert data["validator_result"]["passed"] is True
+
+
+def test_case_history_keeps_challenger_off(client):
+    off = client.post(
+        "/api/alerts/ALT-C-20260910/investigate",
+        params={"use_challenger": False, "experiment_mode": True},
+    )
+    assert off.status_code == 200, off.text
+    payload = off.json()
+    assert payload["case_challenger_enabled"] is False
+    assert payload["use_challenger"] is False
+    assert payload["challenger_run"]["ablation"] is True
+    assert payload["experiment_mode"] is True
+    stored_score = payload["scoring"]["final"]
+    stored_conc = payload["conclusion"]
+
+    loaded = client.get("/api/alerts/ALT-C-20260910").json()["investigation"]
+    assert loaded["case_challenger_enabled"] is False
+    assert loaded["scoring"]["final"] == stored_score
+    assert loaded["conclusion"] == stored_conc
+
+    client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
+    still = client.get("/api/alerts/ALT-C-20260910").json()["investigation"]
+    assert still["case_challenger_enabled"] is False
+    assert still["conclusion"] == stored_conc
+    assert still["scoring"]["final"] == stored_score
+
+    rerun = client.post(
+        "/api/alerts/ALT-C-20260910/investigate",
+        params={"use_challenger": True, "experiment_mode": True},
+    )
+    assert rerun.status_code == 200, rerun.text
+    updated = rerun.json()
+    assert updated["case_challenger_enabled"] is True
+    assert updated["challenger_run"]["ablation"] is False
+
+
+def test_audit_records_challenger_flags(client):
+    r = client.post(
+        "/api/alerts/ALT-C-20260910/investigate",
+        params={"use_challenger": False, "experiment_mode": True},
+    )
+    assert r.status_code == 200, r.text
+    d = client.get("/api/alerts/ALT-C-20260910").json()
+    inv_row = [a for a in d["audit"] if a["action"] == "investigate"][-1]
+    detail = json.loads(inv_row["detail"])
+    assert detail["case_id"] == "ALT-C-20260910"
+    assert detail["challenger_enabled"] is False
+    assert detail["experiment_mode"] is True
+    assert detail["challenger_off_reason"] == "实验模式消融"
+    assert "rule_prior" in detail
+    assert "llm_delta" in detail
+    assert "final_score" in detail
+    assert "validator_result" in detail
+    assert "evidence_ids" in detail
+    assert "counter_evidence_ids" in detail
+    assert "prompt_versions" in detail
+
+
+def test_invalid_challenger_evidence_zeroes_delta(client, monkeypatch):
+    def fake_enrich(**_kwargs):
+        return (
+            [{"claim": "不存在的流水", "detail": "应被拒绝", "evidence_ids": ["TX-NOPE-99"], "delta": -0.10}],
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    r = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["scoring"]["llm_delta"] == 0.0
+    assert data["validator_result"]["passed"] is False
+    assert "未通过证据校验" in data["validator_result"]["reason"]
+    assert data["rejected_claims"]
+    actions = [a["action"] for a in client.get("/api/alerts/ALT-B-20260910").json()["audit"]]
+    assert "validator" in actions

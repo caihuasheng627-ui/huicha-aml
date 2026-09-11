@@ -4,18 +4,31 @@ import time
 
 from sqlalchemy.orm import Session
 
+from .case_store import persist_investigation
+from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
 from .llm import enrich_challenger, enrich_report_reason, llm_model
+from .logging_util import audit, warning
 from .privacy import PrivacyMap
+from .prompts import prompt_version
+from .risk import CONCLUSION_TO_RECO, RECO_LABEL, aggregate, counterfactual, score_to_level
+from .schema import InvestigationPlan, PlanStep, RegulationCite, StructuredReport
 from .tool_audit import bind_tool_context, reset_tool_context, tool
 from .tools import (
+    ALLOWED_TOOLS,
     PEER_BASELINE,
     collect_bundle,
     fact_check,
+    get_accounts,
+    get_related_accounts,
+    get_timeline,
     peer_labels_from_graph,
     plan_tool_names,
+    search_regulation,
     yuan,
 )
+from .typology import tags_from_findings
+from .validator import filter_challenger_items
 
 CONCLUSION_LABEL = {
     "exclude": "排除",
@@ -39,8 +52,8 @@ def _score_to_conclusion(score: float) -> str:
 
 
 @tool("search_knowledge")
-def search_knowledge_tool(alert_type: str, industry: str) -> list[dict]:
-    return retrieve_for_alert(alert_type, industry)
+def search_knowledge_tool(alert_type: str, industry: str, as_of: str = "") -> list[dict]:
+    return retrieve_for_alert(alert_type, industry, as_of=as_of)
 
 
 def _rule_prior(
@@ -145,11 +158,42 @@ def _run_investigation_inner(
     alert = bundle["alert"]
     customer = bundle["customer"]
     planned = bundle.get("planned_tools") or plan_tool_names(alert["alert_type"])
-    kb_hits = search_knowledge_tool(alert["alert_type"], customer["industry"])
+    as_of = (alert.get("created_at") or "")[:10]
     txs = bundle["transactions"]
     baseline = bundle["baseline"]
     watch_hits = bundle["watch_hits"]
     account_id = alert["account_id"]
+    kb_hits = search_knowledge_tool(alert["alert_type"], customer["industry"], as_of)
+    if "get_accounts" in planned:
+        get_accounts(db, customer["id"])
+    timeline = get_timeline(db, account_id, txs=txs) if "get_timeline" in planned else []
+    if "get_related_accounts" in planned:
+        peers = get_related_accounts(db, account_id, txs=txs)
+        if len(peers) <= 4:
+            seen = {t["id"] for t in txs}
+            from .tools import get_transactions
+
+            for p in peers:
+                for extra in get_transactions(db, p["account_id"]):
+                    if extra["id"] not in seen:
+                        seen.add(extra["id"])
+                        txs.append(extra)
+            txs.sort(key=lambda t: t.get("occurred_at") or "")
+            facts = bundle.get("facts") or {}
+            facts["tx_ids"] = [t["id"] for t in txs]
+            facts["accounts"] = sorted(
+                {account_id, *[t["from_account"] for t in txs], *[t["to_account"] for t in txs]}
+            )
+            facts["amounts"] = sorted(set(facts.get("amounts") or []) | {t["amount"] for t in txs})
+            bundle["facts"] = facts
+            if "get_timeline" in planned:
+                timeline = get_timeline(db, account_id, txs=txs)
+            if "get_graph" in planned or "get_network" in planned:
+                from .tools import get_graph
+
+                bundle["graph"] = get_graph(db, account_id, txs=txs)
+    if "search_regulation" in planned:
+        search_regulation(alert["alert_type"], as_of=as_of)
     kb_ids = "、".join(h["id"] for h in kb_hits) or "（无命中）"
     bundle["facts"]["kb_ids"] = [h["id"] for h in kb_hits]
 
@@ -167,16 +211,26 @@ def _run_investigation_inner(
         "名单命中" if "check_watchlist" in planned else "（本类型跳过名单）",
         "Analyst 模式分析",
         "Challenger：规则先验 + 模型有界 delta" if use_challenger else "跳过 Challenger（消融）",
+        "Validator 校验 Claim→Evidence",
         "Reporter 要素草稿 + 事实回查（脱敏进模）",
+        "Human Approval（Agent 不得报送）",
     ]
+    structured_plan = InvestigationPlan(
+        case_id=alert["id"],
+        investigation_plan=[
+            PlanStep(step=i + 1, tool=t, purpose="只读取数", required=True)
+            for i, t in enumerate(planned)
+            if t in ALLOWED_TOOLS
+        ],
+    )
     steps = [
         {
             "role": "Planner",
             "title": "生成调查计划",
             "content": (
-                f"告警类型「{alert['alert_type']}」。工具子集由类型决定；"
-                "结论打底分由规则保证可复现；Challenger 可在 ±0.15 内调分且须引用合法证据编号；"
-                "文案走百炼 API（脱敏进模、无模板回退）。"
+                f"告警类型「{alert['alert_type']}」。工具白名单 {len(ALLOWED_TOOLS)} 个；"
+                f"本轮计划 {len(structured_plan.investigation_plan)} 步。prompt={prompt_version('planner')}。"
+                "结论由规则+校验 delta，人签后才是处置。"
             ),
             "items": plan,
         }
@@ -207,6 +261,9 @@ def _run_investigation_inner(
     night_out = [t for t in outflow if t["occurred_at"][11:13] >= "21" or t["occurred_at"][11:13] < "06"]
 
     findings = []
+    risk_factors: list[dict] = [
+        {"code": "base-risk", "label": "起始待查分", "delta": 0.12, "evidence_ids": [], "source": "rule", "tag": None}
+    ]
     score = 0.12
     in_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "in")
     out_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "out")
@@ -221,9 +278,29 @@ def _run_investigation_inner(
                 "evidence_ids": [t["id"] for t in txs[:4]],
             }
         )
+        risk_factors.append(
+            {
+                "code": "upstream-alert",
+                "label": "上游大额/频繁",
+                "delta": 0.44,
+                "evidence_ids": [t["id"] for t in txs[:4]],
+                "source": "rule",
+                "tag": "high_velocity",
+            }
+        )
 
     if "拆分" in alert["alert_type"] or "归集" in alert["alert_type"]:
         score += 0.16
+        risk_factors.append(
+            {
+                "code": "alert-typology",
+                "label": "告警类型拆分/归集",
+                "delta": 0.16,
+                "evidence_ids": [t["id"] for t in txs[:3]],
+                "source": "rule",
+                "tag": "structuring" if "拆分" in alert["alert_type"] else "suspicious_network",
+            }
+        )
 
     if (
         customer["kind"] == "enterprise"
@@ -257,6 +334,16 @@ def _run_investigation_inner(
                 "evidence_ids": [t["id"] for t in near[:8]] + [t["id"] for t in outflow],
             }
         )
+        risk_factors.append(
+            {
+                "code": "structuring",
+                "label": "拆分存入",
+                "delta": 0.38,
+                "evidence_ids": [t["id"] for t in near[:8]],
+                "source": "rule",
+                "tag": "structuring",
+            }
+        )
 
     if len(in_accounts) >= 4 and customer["kind"] == "enterprise":
         score += 0.22
@@ -266,6 +353,16 @@ def _run_investigation_inner(
                 "title": "多个个人账户向新设企业归集",
                 "detail": f"流入对手方 {len(in_accounts)} 个，开户日 {customer['opened_at']}，KYC 为{customer['kyc_level']}。",
                 "evidence_ids": [t["id"] for t in inflow],
+            }
+        )
+        risk_factors.append(
+            {
+                "code": "funnel",
+                "label": "多账户归集",
+                "delta": 0.22,
+                "evidence_ids": [t["id"] for t in inflow],
+                "source": "rule",
+                "tag": "suspicious_network",
             }
         )
 
@@ -279,6 +376,16 @@ def _run_investigation_inner(
                 "evidence_ids": [t["id"] for t in outflow],
             }
         )
+        risk_factors.append(
+            {
+                "code": "watchlist",
+                "label": "名单命中",
+                "delta": 0.18,
+                "evidence_ids": [t["id"] for t in outflow],
+                "source": "rule",
+                "tag": "suspicious_network",
+            }
+        )
 
     if night_out and outflow:
         score += 0.08
@@ -288,6 +395,16 @@ def _run_investigation_inner(
                 "title": "存在夜间集中转出",
                 "detail": f"流出发生在 {outflow[-1]['occurred_at']}，记录 {outflow[-1]['id']}，金额{yuan(outflow[-1]['amount'])}。",
                 "evidence_ids": [t["id"] for t in night_out],
+            }
+        )
+        risk_factors.append(
+            {
+                "code": "night-out",
+                "label": "夜间集中转出",
+                "delta": 0.08,
+                "evidence_ids": [t["id"] for t in night_out],
+                "source": "rule",
+                "tag": "rapid_transfer",
             }
         )
 
@@ -301,6 +418,16 @@ def _run_investigation_inner(
                 "title": "大额转至未登记对手",
                 "detail": f"存在流向未登记账户的交易（如 {unk_out[0]['id']}），用途待尽调核实。",
                 "evidence_ids": [t["id"] for t in unk_out],
+            }
+        )
+        risk_factors.append(
+            {
+                "code": "unregistered-counterparty",
+                "label": "未登记对手",
+                "delta": 0.10,
+                "evidence_ids": [t["id"] for t in unk_out],
+                "source": "rule",
+                "tag": "mule_account",
             }
         )
 
@@ -329,15 +456,28 @@ def _run_investigation_inner(
     )
 
     base_score = score
+    ev_graph = build_evidence_graph(alert["id"], bundle, kb_hits)
+    allowed_evidence = sorted(
+        source_ids_of(ev_graph)
+        | {t["id"] for t in txs}
+        | {customer["id"], alert["account_id"]}
+        | {e for f in findings for e in f.get("evidence_ids", [])}
+    )
+    claims = [
+        {
+            "claim": f["title"],
+            "evidence_ids": f.get("evidence_ids") or [],
+            "tag": f.get("code"),
+            "polarity": "counter" if f.get("code") in {"pattern-peer", "thin"} else "support",
+        }
+        for f in findings
+    ]
+
     challenger: list[dict] = []
     challenger_usage: dict = {}
     rule_prior = 0.0
     llm_delta = 0.0
-    allowed_evidence = sorted(
-        {t["id"] for t in txs}
-        | {customer["id"], alert["account_id"]}
-        | {e for f in findings for e in f.get("evidence_ids", [])}
-    )
+    rejected_claims: list[dict] = []
 
     if use_challenger:
         rule_prior, score_hints = _rule_prior(
@@ -349,30 +489,89 @@ def _run_investigation_inner(
             kb_hits=kb_hits,
             txs=txs,
         )
-        challenger, llm_delta, challenger_usage = enrich_challenger(
-            db=db,
-            privacy=privacy,
-            alert=alert,
-            customer=customer,
-            findings=findings,
-            baseline=baseline,
-            kb_hits=kb_hits,
-            score_hints=score_hints,
-            allowed_evidence=allowed_evidence,
+        if rule_prior:
+            risk_factors.append(
+                {
+                    "code": "challenger-prior",
+                    "label": "质疑规则先验",
+                    "delta": rule_prior,
+                    "evidence_ids": [customer["id"]],
+                    "source": "rule",
+                    "tag": None,
+                }
+            )
+        try:
+            raw_ch, raw_delta, challenger_usage = enrich_challenger(
+                db=db,
+                privacy=privacy,
+                alert=alert,
+                customer=customer,
+                findings=findings,
+                baseline=baseline,
+                kb_hits=kb_hits,
+                score_hints=score_hints,
+                allowed_evidence=allowed_evidence,
+            )
+        except RuntimeError as e:
+            warning(f"Challenger 失败，仅保留规则先验: {e}")
+            raw_ch, raw_delta = [], 0.0
+        evidence_case = {eid: alert["id"] for eid in allowed_evidence}
+        challenger, llm_delta, rejected_claims = filter_challenger_items(
+            raw_ch,
+            allowed=set(allowed_evidence),
+            case_id=alert["id"],
+            evidence_case=evidence_case,
         )
+        for i, c in enumerate(challenger, start=1):
+            ev_graph.append(
+                {
+                    "evidence_id": f"EV-C{i:03d}",
+                    "case_id": alert["id"],
+                    "evidence_type": "COUNTER_EVIDENCE",
+                    "source_type": "challenger",
+                    "source_id": (c.get("evidence_ids") or [""])[0],
+                    "description": c.get("claim") or c.get("title") or "",
+                    "raw_reference": ",".join(c.get("evidence_ids") or []),
+                    "timestamp": "",
+                    "reliability": 0.7,
+                    "created_by": "challenger",
+                    "polarity": "counter",
+                    "metadata": {"delta": c.get("delta")},
+                    "data_note": "synthetic",
+                }
+            )
+        if abs(llm_delta) > 0:
+            risk_factors.append(
+                {
+                    "code": "challenger-llm",
+                    "label": "校验后模型 delta",
+                    "delta": llm_delta,
+                    "evidence_ids": [i for c in challenger for i in (c.get("evidence_ids") or [])],
+                    "source": "challenger",
+                    "tag": None,
+                }
+            )
         score = base_score + rule_prior + llm_delta
         steps.append(
             {
                 "role": "Challenger",
-                "title": "规则先验 + 模型有界调分",
+                "title": "规则先验 + 有界调分（Validator 后）",
                 "content": (
-                    f"规则先验 {rule_prior:+.2f}；模型合计 delta {llm_delta:+.2f}（单条与合计均裁剪在 ±0.15，"
-                    f"证据编号须落在工具结果）。文案由百炼 {llm_model()} 生成（已脱敏）。"
+                    f"规则先验 {rule_prior:+.2f}；校验后 delta {llm_delta:+.2f}（±0.15，"
+                    f"无证据/越界已拒绝 {len(rejected_claims)} 条）。prompt={prompt_version('challenger')}。"
                 ),
                 "items": [
-                    f"{c.get('claim') or c['title']}（delta={c.get('delta', 0):+.2f}，证据 {','.join(c.get('evidence_ids') or []) or '无'}）：{c['detail']}"
+                    f"{c.get('claim') or c['title']}（delta={c.get('delta', 0):+.2f}，证据 {','.join(c.get('evidence_ids') or []) or '无'}）：{c.get('detail') or ''}"
                     for c in challenger
                 ],
+            }
+        )
+        steps.append(
+            {
+                "role": "Validator",
+                "title": "Evidence Validator",
+                "content": f"允许证据 {len(allowed_evidence)} 个；拒绝 {len(rejected_claims)} 条 Claim。失败项不得进分。",
+                "items": [r.get("validation", {}).get("reason") or "ok" for r in rejected_claims] or ["本轮 Claim 均通过编号校验"],
             }
         )
     else:
@@ -385,8 +584,18 @@ def _run_investigation_inner(
             }
         )
 
+    risk = aggregate(risk_factors, challenger_delta=0.0)
+    # 因子已含先验与校验 delta，不再重复加
     score = max(0.05, min(0.95, score))
     conclusion = _score_to_conclusion(score)
+    risk["final"] = round(score, 4)
+    risk["conclusion"] = conclusion
+    risk["recommendation"] = CONCLUSION_TO_RECO[conclusion]
+    risk["recommendation_label"] = RECO_LABEL[risk["recommendation"]]
+    risk["risk_level"] = score_to_level(score)
+
+    drop = next((f["code"] for f in risk_factors if f.get("delta", 0) > 0.2), "upstream-alert")
+    cf = counterfactual(risk_factors, [drop], challenger_delta=0.0)
 
     evidence = []
     for t in txs:
@@ -487,7 +696,7 @@ def _run_investigation_inner(
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     elements_ok = sum(1 for e in report["elements"] if (e.get("value") or "").strip())
-    return {
+    payload = {
         "alert": alert,
         "customer": customer,
         "plan": plan,
@@ -518,6 +727,63 @@ def _run_investigation_inner(
         "confidence": round(score, 2),
         "report": report,
         "evidence": evidence,
+        "evidence_graph": ev_graph,
+        "claims": claims,
+        "rejected_claims": rejected_claims,
+        "timeline": timeline,
+        "risk": risk,
+        "counterfactual": cf,
+        "investigation_plan": structured_plan.model_dump(),
+        "prompt_versions": {
+            "planner": prompt_version("planner"),
+            "challenger": prompt_version("challenger"),
+            "reporter": prompt_version("reporter"),
+            "validator": prompt_version("validator"),
+        },
+        "data_note": "synthetic",
+        "case_v2": {
+            "case_id": alert["id"],
+            "status": "INVESTIGATING",
+            "risk_level": risk["risk_level"],
+            "recommendation": risk["recommendation"],
+            "recommendation_label": risk["recommendation_label"],
+            "suspicious_types": tags_from_findings(findings),
+            "human_required": True,
+            "data_note": "synthetic",
+        },
+        "structured_report": StructuredReport(
+            case_overview=f"{alert['title']} / {alert['id']}",
+            customer_profile=customer.get("summary") or customer["name"],
+            transaction_summary=f"流入{len(inflow)} 流出{len(outflow)}",
+            suspicious_patterns=[f["title"] for f in findings],
+            evidence_ids=[e["id"] for e in evidence[:20]],
+            counter_evidence_ids=[c.get("evidence_ids", [None])[0] for c in challenger if c.get("evidence_ids")][:8],
+            network_analysis=f"节点 {len((bundle.get('graph') or {}).get('nodes') or [])}",
+            risk_assessment=risk["recommendation_label"],
+            challenger_review="；".join((c.get("claim") or "") for c in challenger) or "未启用",
+            regulation_basis=[
+                RegulationCite(
+                    regulation_id=h["id"],
+                    title=h.get("title") or "",
+                    article=h.get("article") or "",
+                    evidence=h.get("snippet") or "",
+                    source=h.get("source") or "",
+                    as_of=as_of,
+                )
+                for h in kb_hits
+                if h.get("kind") == "regulation"
+            ]
+            or [
+                RegulationCite(
+                    regulation_id="",
+                    title="未检索到足够法规依据",
+                    evidence="禁止编造条款",
+                    source="",
+                    as_of=as_of,
+                )
+            ],
+            recommendation=risk["recommendation"],
+        ).model_dump(),
         "graph": bundle["graph"],
         "baseline": baseline,
         "watch_hits": watch_hits,
@@ -535,6 +801,12 @@ def _run_investigation_inner(
             "note": "对比项均为当场可验证指标（工具次数/要素非空/证据可回溯），不再使用拍脑袋人工分钟数。",
         },
     }
+    try:
+        persist_investigation(db, payload)
+        audit(f"case persisted {alert['id']}")
+    except Exception as e:
+        warning(f"case persist skipped: {e}")
+    return payload
 
 
 def _render_report(

@@ -13,6 +13,7 @@ import {
   message,
 } from "antd";
 import { decide, exportUrl, fetchAlerts, fetchDetail, fetchFeedback, fetchHealth, fetchMetrics, runInvestigate } from "./api";
+import { CounterfactualBox, EvidenceLists, RegulationBox, RiskFactors, TxTimeline } from "./CasePanels.jsx";
 
 const HUMAN = {
   confirm: "已签发草稿",
@@ -49,6 +50,7 @@ const DEMOS = [
   { id: "ALT-B-20260910", key: "2", label: "案例 B 拆分" },
   { id: "ALT-C-20260910", key: "3", label: "案例 C 归集" },
   { id: "ALT-F-20260910", key: "4", label: "案例 F 观察" },
+  { id: "ALT-L-20260910", key: "5", label: "案例 L 多层" },
 ];
 
 function yuan(n) {
@@ -107,6 +109,7 @@ function auditText(x) {
   try {
     const j = JSON.parse(detail);
     if (j.decision) detail = `${HUMAN[j.decision] || j.decision}${j.note ? `：${j.note}` : ""}`;
+    else if (j.summary) detail = j.summary;
     else if (j.tool) detail = `${j.tool} ${j.records ?? ""} 条`;
   } catch {
     /* already human text */
@@ -431,7 +434,7 @@ export default function App() {
           <div className="brand-mark" />
           <div className="brand-text">
             <strong>慧查 AML</strong>
-            <span>反洗钱监测分析 · 调查工作台</span>
+            <span>AI 推理 · 规则边界 · 证据事实 · 人做决策</span>
           </div>
         </div>
         <div className="staff">
@@ -442,7 +445,7 @@ export default function App() {
             调查员 <b>陈析</b>　002183
           </span>
           <span>{clock}</span>
-          <span className="env">演示环境 · 数据不出行</span>
+          <span className="env">合成数据 · 竞赛原型 · 须人签</span>
         </div>
       </header>
 
@@ -462,7 +465,7 @@ export default function App() {
           <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
         </label>
         <span className="hint" style={{ margin: 0 }}>
-          快捷键 1 / 2 / 3 打开案件，按钮会直接跑调查
+          快捷键 1–5 打开 A/B/C/F/L；按钮会直接跑调查。AI 不得自动报送。
         </span>
       </div>
 
@@ -493,7 +496,7 @@ export default function App() {
             <Tag>{metrics ? `${metrics.alerts} 条` : "—"}</Tag>
           </div>
           <div className="hint">
-            上游检测已完成。本台只出草稿。
+            上游检测已完成。本台只出草稿，不是监管结论。
             <Button type="link" size="small" onClick={() => setOnlyDemo((v) => !v)}>
               {onlyDemo ? "全部告警" : "路演案"}
             </Button>
@@ -559,11 +562,12 @@ export default function App() {
               <h4>请从左侧领取一条告警</h4>
               <p className="hint">本台接在监测系统之后，只生成调查草稿，不上报、不记账。</p>
               <ol>
-                <li>案例 A：批发企业大额频繁 → 建议排除</li>
+                <li>案例 A：批发企业大额频繁 → 建议排除（有经营反证）</li>
                 <li>关闭「质疑复核」再跑 A：同一案可能变为建议上报</li>
-                <li>案例 B / C：拆分与多账户归集</li>
+                <li>案例 B / C：拆分与多账户归集 → 建议进入上报复核</li>
+                <li>案例 L：A→B→C→D 短时多层转移（一键 Demo）</li>
                 <li>打开「幻觉演示」：签发将被事实回查拦住</li>
-                <li>右侧会列出本次检索到的制度/类型学条文，报告里的 KB- 编号可点回去</li>
+                <li>右侧 Evidence Graph / 法规 / 流水均可点回原始数据</li>
               </ol>
             </div>
           )}
@@ -618,6 +622,16 @@ export default function App() {
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
+              {inv?.case_v2 && (
+                <div className="client-box">
+                  案件 {inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level} ·
+                  数据 {inv.data_note || "synthetic"} · Agent 不得自动报送
+                </div>
+              )}
+              {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
+              {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
+              {inv && <CounterfactualBox cf={inv.counterfactual} />}
+              {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
               {inv?.fact_issues?.length > 0 && (
                 <Alert
                   type="error"
@@ -716,6 +730,7 @@ export default function App() {
           {inv ? (
             <>
               <Graph graph={inv.graph} selected={selected} onSelect={selectEvidence} />
+              <EvidenceLists graph={inv.evidence_graph} claims={inv.claims} onSelect={selectEvidence} />
               <Divider plain orientation="left">
                 制度与类型学
               </Divider>
@@ -796,7 +811,7 @@ export default function App() {
       </div>
       </div>
       <footer className="footer">
-        <span>内部演示系统　不得用于真实客户数据　Agent 结论须人工签发</span>
+        <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>
         <span>
           队列 {metrics?.alerts ?? "—"}　精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
           {metrics?.signed ?? "—"}

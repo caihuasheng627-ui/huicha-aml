@@ -30,13 +30,13 @@ def test_validate_delta_bounds_and_evidence():
         [{"claim": "x", "detail": "y", "evidence_ids": ["TX-1"], "delta": -0.5}],
         allowed_evidence={"TX-1"},
     )
-    assert items[0]["delta"] == -0.15
-    assert total == -0.15
+    assert items == []
+    assert total == 0.0
     items2, total2 = validate_challenger_items(
         [{"claim": "x", "detail": "y", "evidence_ids": ["NOPE"], "delta": -0.1}],
         allowed_evidence={"TX-1"},
     )
-    assert items2[0]["delta"] == 0.0
+    assert items2 == []
     assert total2 == 0.0
 
 

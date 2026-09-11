@@ -219,6 +219,10 @@ def run_all(out_dir: Path | None = None) -> dict:
         "",
         f"## 4. 幻觉演示账号拦截：{'通过' if hall_ok else '失败'}",
         "",
+        "## 5. 能力指标（独立标注集）",
+        "- Accuracy / Precision / Recall / F1 / Macro-F1 / FPR / Evidence P&R：**Not evaluated yet**",
+        "- 请运行 `python experiments/benchmark.py` 查看框架状态，不要把本节写成产品准确率。",
+        "",
         f"说明：{abl['caveat']}",
     ]
     (out_dir / "RESULTS.md").write_text("\n".join(md), encoding="utf-8")

@@ -22,4 +22,7 @@
 
 ## 4. 幻觉演示账号拦截：通过
 
+## 5. 能力指标（独立标注集）
+- Accuracy / Precision / Recall / F1 / Macro-F1 / FPR / Evidence P&R：**Not evaluated yet**
+
 说明：gold_label 由生成模板写入，与规则分支同源；LLM 为固定 stub delta（默认 -0.12），不是真实百炼。数字证明流水线可复现，不代表调查准确率。

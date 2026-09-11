@@ -1,0 +1,15 @@
+{
+  "data_note": "synthetic",
+  "split": "test",
+  "status": "TODO",
+  "target_size": "300-1000 independent synthetic cases",
+  "needed_types": [
+    "normal",
+    "suspicious",
+    "boundary",
+    "counter_example",
+    "adversarial",
+    "missing_data"
+  ],
+  "cases": []
+}

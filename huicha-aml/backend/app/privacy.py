@@ -20,9 +20,7 @@ class PrivacyMap:
             return name
         if name not in self.name_to_mask:
             self._name_i += 1
-            mask = f"客户{chr(0x7532 + (self._name_i - 1) % 10)}" if self._name_i <= 10 else f"客户{self._name_i}"
-            # 甲乙丙丁… 用序号更稳
-            mask = f"客户{self._name_i:02d}"
+            mask = f"CLIENT_{self._name_i:03d}"
             self.name_to_mask[name] = mask
             self.mask_to_name[mask] = name
         return self.name_to_mask[name]
@@ -36,7 +34,7 @@ class PrivacyMap:
             return acct
         if acct not in self.acct_to_mask:
             self._acct_i += 1
-            mask = f"ACC-{self._acct_i:02d}"
+            mask = f"ACCOUNT_{self._acct_i:03d}"
             self.acct_to_mask[acct] = mask
             self.mask_to_acct[mask] = acct
         return self.acct_to_mask[acct]

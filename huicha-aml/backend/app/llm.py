@@ -218,13 +218,13 @@ def validate_challenger_items(
             delta = float(it.get("delta", 0))
         except (TypeError, ValueError):
             delta = 0.0
-        delta = max(-DELTA_BOUND, min(DELTA_BOUND, delta))
         if not claim:
             continue
+        # V2：越界 / 无证据 / 虚假证据 直接丢弃，禁止裁剪后混入
+        if abs(delta) > DELTA_BOUND + 1e-9:
+            continue
         if not evidence_ids and delta != 0:
-            # 无合法证据则不允许调分
-            delta = 0.0
-            detail = (detail + "（证据编号未通过校验，delta 置 0）").strip()
+            continue
         out.append(
             {
                 "title": claim,
@@ -277,13 +277,9 @@ def enrich_challenger(
     if cached:
         text, usage = cached
     else:
-        system = (
-            "你是反洗钱 Challenger。只使用给定 JSON 事实，禁止编造账号/金额/编号。"
-            "输出 JSON 对象：{\"items\":[{\"claim\":\"...\",\"detail\":\"...\",\"evidence_ids\":[\"TX-..\"],\"delta\":-0.1}]}。"
-            f"delta 必须在 [{-DELTA_BOUND},{DELTA_BOUND}]：负值表示支持排除/降低可疑分，正值提高可疑分。"
-            "evidence_ids 必须来自 allowed_evidence_ids；最多 3 条。"
-            "不要 Markdown，不要代码块。"
-        )
+        from .prompts import PROMPTS
+
+        system = PROMPTS["challenger_v2"]
         text, usage = chat(
             [
                 {"role": "system", "content": system},

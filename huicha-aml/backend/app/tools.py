@@ -7,6 +7,21 @@ from sqlalchemy.orm import Session
 from .models import Account, Alert, Customer, Transaction
 from .tool_audit import tool
 
+ALLOWED_TOOLS = [
+    "get_alert",
+    "get_customer",
+    "get_accounts",
+    "get_transactions",
+    "get_related_accounts",
+    "get_network",
+    "get_graph",
+    "get_timeline",
+    "get_baseline",
+    "check_watchlist",
+    "search_knowledge",
+    "search_regulation",
+]
+
 PEER_BASELINE = {
     "日用百货批发": {"typical_monthly_in": 2_400_000, "typical_ticket": 170_000, "note": "批发备货期单笔10–30万属常见经营区间"},
     "餐饮": {"typical_monthly_in": 800_000, "typical_ticket": 20_000, "note": "到店结算夜间入账常见"},
@@ -135,6 +150,49 @@ def get_customer(db: Session, customer_id: str) -> dict:
         "watchlist": bool(c.watchlist),
         "accounts": [a.id for a in accounts],
     }
+
+
+@tool("get_accounts")
+def get_accounts(db: Session, customer_id: str) -> list[dict]:
+    c = get_customer(db, customer_id)
+    return [{"account_id": aid, "customer_id": customer_id} for aid in c.get("accounts") or []]
+
+
+@tool("get_related_accounts")
+def get_related_accounts(db: Session, account_id: str, txs: list[dict] | None = None) -> list[dict]:
+    txs = txs if txs is not None else get_transactions(db, account_id)
+    peers = sorted(({t["from_account"] for t in txs} | {t["to_account"] for t in txs}) - {account_id})
+    return [{"account_id": p, "label": account_display_name(db, p), "edge": "TRANSFER"} for p in peers]
+
+
+@tool("get_timeline")
+def get_timeline(db: Session, account_id: str, txs: list[dict] | None = None) -> list[dict]:
+    txs = txs if txs is not None else get_transactions(db, account_id)
+    rows = sorted(txs, key=lambda t: t.get("occurred_at") or "")
+    return [
+        {
+            "time": t.get("occurred_at"),
+            "from_account": t.get("from_account"),
+            "to_account": t.get("to_account"),
+            "amount": t.get("amount"),
+            "channel": t.get("channel"),
+            "tx_id": t.get("id"),
+            "evidence_id": t.get("id"),
+        }
+        for t in rows
+    ]
+
+
+@tool("get_network")
+def get_network(db: Session, account_id: str, txs: list[dict] | None = None) -> dict:
+    return get_graph(db, account_id, txs=txs)
+
+
+@tool("search_regulation")
+def search_regulation(query: str, as_of: str = "") -> list[dict]:
+    from .knowledge import search_knowledge
+
+    return search_knowledge(query, kind="regulation", top_k=6, as_of=as_of)
 
 
 @tool("get_transactions")
@@ -288,14 +346,22 @@ def peer_labels_from_graph(graph: dict, account_id: str, txs: list[dict], side: 
 
 def plan_tool_names(alert_type: str) -> list[str]:
     """按告警类型选择工具子集；不再默认补齐全部工具。"""
-    tools = ["get_alert", "get_customer", "get_transactions", "search_knowledge"]
+    tools = [
+        "get_alert",
+        "get_customer",
+        "get_accounts",
+        "get_transactions",
+        "get_timeline",
+        "search_knowledge",
+        "search_regulation",
+    ]
     t = alert_type or ""
     if any(k in t for k in ("大额", "频繁", "夜间", "转账")):
-        tools += ["get_baseline", "get_graph"]
+        tools += ["get_baseline", "get_graph", "get_network"]
     if any(k in t for k in ("拆分", "归集", "名单", "团伙")):
-        tools += ["get_graph", "check_watchlist"]
+        tools += ["get_graph", "get_network", "get_related_accounts", "check_watchlist"]
     if "观察" in t or "亲属" in t:
-        tools += ["get_baseline", "get_graph"]
+        tools += ["get_baseline", "get_graph", "get_related_accounts"]
     seen: set[str] = set()
     out: list[str] = []
     for x in tools:

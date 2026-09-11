@@ -1,0 +1,14 @@
+{
+  "data_note": "synthetic",
+  "caveat": "gold_label 与规则模板同源，不是独立标注集。",
+  "split": "golden",
+  "cases": [
+    {"case_id": "ALT-A-20260910", "gold": "exclude", "tag": "wholesale_false_positive"},
+    {"case_id": "ALT-B-20260910", "gold": "suggest_report", "tag": "structuring"},
+    {"case_id": "ALT-C-20260910", "gold": "suggest_report", "tag": "funnel"},
+    {"case_id": "ALT-D-20260909", "gold": "exclude", "tag": "retire_explained"},
+    {"case_id": "ALT-E-20260908", "gold": "exclude", "tag": "fnb_night"},
+    {"case_id": "ALT-F-20260910", "gold": "observe", "tag": "boundary_unregistered"},
+    {"case_id": "ALT-L-20260910", "gold": "suggest_report", "tag": "layering_pass_through"}
+  ]
+}

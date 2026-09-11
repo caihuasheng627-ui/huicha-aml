@@ -8,6 +8,7 @@ def seed_if_empty(db: Session) -> None:
     if db.query(Alert).count() > 0:
         # 旧库可能缺扩展集 / gold_label：尽量补齐
         seed_extended_cases(db)
+        seed_layering_case(db)
         _backfill_gold(db)
         return
 
@@ -385,6 +386,7 @@ def seed_if_empty(db: Session) -> None:
     db.add_all(alerts)
     db.commit()
     seed_extended_cases(db)
+    seed_layering_case(db)
 
 
 def _backfill_gold(db: Session) -> None:
@@ -395,6 +397,7 @@ def _backfill_gold(db: Session) -> None:
         "ALT-D-20260909": "exclude",
         "ALT-E-20260908": "exclude",
         "ALT-F-20260910": "observe",
+        "ALT-L-20260910": "suggest_report",
     }
     changed = False
     for aid, gold in mapping.items():
@@ -404,3 +407,65 @@ def _backfill_gold(db: Session) -> None:
             changed = True
     if changed:
         db.commit()
+
+
+def seed_layering_case(db: Session) -> None:
+    """合成 Demo：A→B→C→D 短时多层转移。不声称来自真实银行。"""
+    if db.get(Alert, "ALT-L-20260910"):
+        return
+    if not db.get(Customer, "C-L"):
+        db.add(
+            Customer(
+                id="C-L",
+                name="过桥账户演示（合成）",
+                kind="individual",
+                industry="个人-无固定职业",
+                kyc_level="关注",
+                opened_at="2026-07-01",
+                city="演示市",
+                summary="合成快进快出过桥账户：09:01 A→B，09:07 B→C，09:16 C→D。仅用于工作台演示。",
+                watchlist=0,
+            )
+        )
+    for aid, cid, opened in (
+        ("6222-L-A", "C-L", "2026-06-01"),
+        ("6222-L-B", "C-L", "2026-07-01"),
+        ("6222-L-C", "C-L", "2026-06-15"),
+        ("6222-L-D", "C-L", "2026-08-01"),
+    ):
+        if not db.get(Account, aid):
+            db.add(Account(id=aid, customer_id=cid, opened_at=opened))
+    hops = [
+        ("TX-L-01", "6222-L-A", "6222-L-B", 98000, "2026-09-10 09:01:00", "网银", "过桥转入"),
+        ("TX-L-02", "6222-L-B", "6222-L-C", 97500, "2026-09-10 09:07:00", "网银", "过桥转出"),
+        ("TX-L-03", "6222-L-C", "6222-L-D", 96800, "2026-09-10 09:16:00", "网银", "再转出"),
+    ]
+    for tid, src, dst, amt, ts, ch, remark in hops:
+        if not db.get(Transaction, tid):
+            db.add(
+                Transaction(
+                    id=tid,
+                    from_account=src,
+                    to_account=dst,
+                    amount=amt,
+                    occurred_at=ts,
+                    channel=ch,
+                    remark=remark,
+                )
+            )
+    db.add(
+        Alert(
+            id="ALT-L-20260910",
+            customer_id="C-L",
+            account_id="6222-L-B",
+            alert_type="拆分后大额频繁多层转移",
+            title="短时 A→B→C→D 多层资金转移（合成 Demo）",
+            amount=98000,
+            created_at="2026-09-10 09:20:00",
+            status="pending",
+            demo_tag="L",
+            upstream="合成规则：短时多层快进快出",
+            gold_label="suggest_report",
+        )
+    )
+    db.commit()

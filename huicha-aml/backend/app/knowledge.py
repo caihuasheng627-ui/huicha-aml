@@ -135,6 +135,32 @@ _KIND_LABEL = {
     "process": "作业规程",
 }
 
+# 摘录不是现行有效法规全文。effective/expiry 用于「案发日是否适用」演示。
+_DOC_META = {
+    "effective_date": "2017-01-01",
+    "expiry_date": None,
+    "version": "paraphrase-v1",
+    "source_note": "公开要求转述，非法规全文，synthetic/demo",
+}
+
+
+def _article_of(doc: dict) -> str:
+    src = doc.get("source") or ""
+    m = re.search(r"第[一二三四五六七八九十百零0-9]+条", src)
+    return m.group(0) if m else ""
+
+
+def _applicable(doc: dict, as_of: str) -> bool:
+    if not as_of:
+        return True
+    start = doc.get("effective_date") or _DOC_META["effective_date"]
+    end = doc.get("expiry_date")
+    if start and as_of < start:
+        return False
+    if end and as_of > end:
+        return False
+    return True
+
 
 def _tokens(text: str) -> set[str]:
     text = (text or "").lower()
@@ -168,16 +194,23 @@ def list_knowledge() -> list[dict]:
             "source": d["source"],
             "tags": d["tags"],
             "body": d["body"],
+            "article": _article_of(d),
+            "effective_date": _DOC_META["effective_date"],
+            "expiry_date": _DOC_META["expiry_date"],
+            "version": _DOC_META["version"],
+            "data_note": "synthetic-paraphrase",
         }
         for d in DOCUMENTS
     ]
 
 
-def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4) -> list[dict]:
+def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_of: str = "") -> list[dict]:
     q_tokens = _tokens(query)
     ranked: list[tuple[float, dict]] = []
     for doc in _indexed():
         if kind and doc["kind"] != kind:
+            continue
+        if not _applicable({**doc, **_DOC_META}, as_of):
             continue
         overlap = q_tokens & doc["_tokens"]
         tag_hit = sum(1 for t in doc["tags"] if t.lower() in query or t in overlap)
@@ -199,12 +232,16 @@ def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4) -> 
                 "source": doc["source"],
                 "snippet": doc["body"],
                 "score": score,
+                "article": _article_of(doc),
+                "effective_date": _DOC_META["effective_date"],
+                "as_of": as_of,
+                "data_note": "synthetic-paraphrase",
             }
         )
     return hits
 
 
-def retrieve_for_alert(alert_type: str, industry: str) -> list[dict]:
+def retrieve_for_alert(alert_type: str, industry: str, as_of: str = "") -> list[dict]:
     """按告警类型和行业各检索一截，再补监管要素，去重后给 Agent 引用。"""
     seen: set[str] = set()
     merged: list[dict] = []
@@ -216,7 +253,7 @@ def retrieve_for_alert(alert_type: str, industry: str) -> list[dict]:
         ("质疑复核 确认偏误", "process"),
     ]
     for q, kind in queries:
-        for hit in search_knowledge(q, kind=kind, top_k=2):
+        for hit in search_knowledge(q, kind=kind, top_k=2, as_of=as_of):
             if hit["id"] in seen or hit["score"] < 3:
                 continue
             seen.add(hit["id"])

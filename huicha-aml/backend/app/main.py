@@ -14,6 +14,7 @@ from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .knowledge import list_knowledge, search_knowledge
 from .llm import llm_configured, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
+from .case_store import persist_human_decision, seed_prompt_versions
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -44,12 +45,14 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         seed_if_empty(db)
+        seed_prompt_versions(db)
+        db.commit()
     finally:
         db.close()
     yield
 
 
-app = FastAPI(title="慧查 AML", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="慧查 AML", version="2.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -71,6 +74,8 @@ def health():
         "llm": "bailian" if llm_configured() else "off",
         "model": llm_model() if llm_configured() else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
+        "version": "2.0.0",
+        "data_note": "synthetic",
     }
 
 
@@ -116,6 +121,12 @@ def list_alerts(db: Session = Depends(get_db)):
     return out
 
 
+@app.get("/api/cases")
+def list_cases(db: Session = Depends(get_db)):
+    """案件列表 = 告警队列（1:1）。"""
+    return list_alerts(db)
+
+
 @app.get("/api/alerts/{alert_id}")
 def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
     alert = db.get(Alert, alert_id)
@@ -158,6 +169,11 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/cases/{case_id}")
+def get_case(case_id: str, db: Session = Depends(get_db)):
+    return get_alert_detail(case_id, db)
+
+
 @app.post("/api/alerts/{alert_id}/investigate")
 def investigate(
     alert_id: str,
@@ -196,9 +212,25 @@ def investigate(
         alert_id,
         "agent",
         "investigate",
-        f"生成调查草稿，建议结论「{result['conclusion_label']}」，"
-        f"质疑复核{'开启' if use_challenger else '关闭'}，"
-        f"幻觉演示{'开启' if inject_hallucination else '关闭'}。{tools}",
+        json.dumps(
+            {
+                "summary": (
+                    f"生成调查草稿，建议结论「{result['conclusion_label']}」，"
+                    f"质疑复核{'开启' if use_challenger else '关闭'}，"
+                    f"幻觉演示{'开启' if inject_hallucination else '关闭'}。{tools}"
+                ),
+                "case_id": alert_id,
+                "agent": "pipeline",
+                "model": (result.get("llm") or {}).get("model") or "",
+                "prompt_versions": result.get("prompt_versions") or {},
+                "risk_score": (result.get("scoring") or {}).get("final"),
+                "delta": (result.get("scoring") or {}).get("llm_delta"),
+                "evidence_ids": [e.get("id") for e in (result.get("evidence") or [])[:20]],
+                "human_decision": "",
+                "data_note": "synthetic",
+            },
+            ensure_ascii=False,
+        ),
     )
     db.commit()
     return result
@@ -239,8 +271,17 @@ def decide(alert_id: str, body: DecideBody, db: Session = Depends(get_db)):
         "decide",
         f"{DECIDE_LABEL[body.decision]}{note}",
     )
+    reco = (payload.get("case_v2") or {}).get("recommendation") or ""
+    persist_human_decision(db, alert_id, body.decision, body.note, reco)
     db.commit()
-    return {"ok": True, "status": alert.status, "human_decision": body.decision}
+    return {
+        "ok": True,
+        "status": alert.status,
+        "human_decision": body.decision,
+        "ai_recommendation": reco,
+        "final_action": "human_only",
+        "note": "AI 建议已记录，最终处置以人工为准，系统不会自动报送。",
+    }
 
 
 @app.get("/api/metrics")

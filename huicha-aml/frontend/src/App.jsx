@@ -546,8 +546,6 @@ export default function App() {
         )}
       </div>
 
-      <PipelineRail playback={playback} complete={Boolean(inv) && !showTheater} useChallenger={useChallenger} />
-
       <div className="workspace">
       {offline && (
         <Alert
@@ -585,6 +583,13 @@ export default function App() {
           description={`${healthInfo.limitations[0]}；知识库为关键词重叠检索（${healthInfo.kb_retrieval || "keyword-overlap"}），不是语义向量库。`}
         />
       )}
+
+      <PipelineRail
+        playback={playback}
+        hasDraft={Boolean(inv) && !showTheater}
+        signed={Boolean(detail?.human_decision)}
+        useChallenger={useChallenger}
+      />
 
       <div className="layout">
         <aside className="col">

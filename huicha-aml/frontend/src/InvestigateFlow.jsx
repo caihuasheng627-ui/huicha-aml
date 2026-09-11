@@ -111,7 +111,7 @@ export function usePipelinePlayback({ running, failed }) {
       }
       const stage = PIPELINE[i];
       const apiStill = runningRef.current;
-      const dwell = reduce ? 70 : apiStill ? stage.dwell : Math.min(stage.dwell, 260);
+      const dwell = reduce ? 70 : stage.dwell;
       const elapsed = Date.now() - entered;
       const hold = stage.linger && apiStill;
       if (elapsed < dwell || hold) {
@@ -167,16 +167,29 @@ function StageNode({ stage, state, compact }) {
 }
 
 function nodeState(i, index, phase, complete) {
-  if (complete && phase !== "playing" && phase !== "holding") return "done";
+  if (complete) return "done";
   if (phase === "error" && i === index) return "error";
   if (i < index) return "done";
   if (i === index && (phase === "playing" || phase === "holding" || phase === "error")) return "now";
+  if (i === index && phase === "pending") return "pending";
   return "wait";
 }
 
-export function PipelineRail({ playback, complete, useChallenger }) {
-  const { index, phase, progress } = playback;
-  const fill = complete && phase !== "playing" && phase !== "holding" ? 1 : Math.max(0, progress);
+export function PipelineRail({ playback, hasDraft, signed, useChallenger }) {
+  const live = playback.phase === "playing" || playback.phase === "holding" || playback.phase === "error";
+  let { index, phase } = playback;
+  let complete = false;
+  if (!live) {
+    if (signed) {
+      complete = true;
+      index = PIPELINE.length - 1;
+      phase = "done";
+    } else if (hasDraft) {
+      index = PIPELINE.length - 1;
+      phase = "pending";
+    }
+  }
+  const fill = complete ? 1 : index < 0 ? 0 : Math.min(0.92, Math.max(0, index / (PIPELINE.length - 1)));
   return (
     <div className={`pipeline-rail is-${phase}${complete ? " is-complete" : ""}`} aria-label="调查流水线">
       <div className="pipeline-track">
@@ -214,6 +227,8 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
       </div>
 
       <div className="theater-path" aria-hidden="true">
+        <i className="theater-path-line" />
+        <i className="theater-path-fill" style={{ width: `${Math.max(0, (index / Math.max(PIPELINE.length - 1, 1)) * 100)}%` }} />
         {PIPELINE.map((s, i) => (
           <StageNode
             key={s.id}

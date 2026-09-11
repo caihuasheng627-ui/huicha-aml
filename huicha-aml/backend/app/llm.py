@@ -187,13 +187,8 @@ def _extract_json_array(text: str) -> list:
     raise RuntimeError(f"Challenger 返回非 JSON：{text[:400]}") from last_err
 
 
-def validate_challenger_items(
-    items: list,
-    *,
-    allowed_evidence: set[str],
-    privacy: PrivacyMap | None = None,
-) -> tuple[list[dict], float]:
-    """脱敏还原后交给 validator，不再另写一套 delta/证据规则。"""
+def normalize_challenger_items(items: list, *, privacy: PrivacyMap | None = None) -> list[dict]:
+    """脱敏还原 Challenger JSON，不做编号校验。"""
     rows: list[dict] = []
     for it in items[:3]:
         if not isinstance(it, dict):
@@ -226,6 +221,17 @@ def validate_challenger_items(
                 "delta": round(delta, 4),
             }
         )
+    return rows
+
+
+def validate_challenger_items(
+    items: list,
+    *,
+    allowed_evidence: set[str],
+    privacy: PrivacyMap | None = None,
+) -> tuple[list[dict], float]:
+    """脱敏还原后交给 validator，不再另写一套 delta/证据规则。"""
+    rows = normalize_challenger_items(items, privacy=privacy)
     kept, total, _rejected = filter_challenger_items(rows, allowed=set(allowed_evidence))
     return kept, total
 
@@ -241,7 +247,7 @@ def enrich_challenger(
     kb_hits: list[dict],
     score_hints: list[dict],
     allowed_evidence: list[str],
-) -> tuple[list[dict], float, dict]:
+) -> tuple[list[dict], dict]:
     context = {
         "alert_type": alert["alert_type"],
         "customer": {
@@ -293,11 +299,10 @@ def enrich_challenger(
         _cache_put(db, key, "challenger_v2", text, usage)
 
     items = _extract_json_array(text)
-    allowed = set(allowed_evidence)
-    validated, llm_delta = validate_challenger_items(items, allowed_evidence=allowed, privacy=privacy)
-    if not validated:
+    rows = normalize_challenger_items(items, privacy=privacy)
+    if not rows:
         raise RuntimeError(f"Challenger 未返回有效条目：{text[:300]}")
-    return validated, llm_delta, usage
+    return rows, usage
 
 
 def enrich_report_reason(

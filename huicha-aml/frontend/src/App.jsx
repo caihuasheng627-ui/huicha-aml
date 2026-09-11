@@ -14,7 +14,7 @@ import {
 } from "antd";
 import {
   decide,
-  exportUrl,
+  downloadExport,
   fetchAlerts,
   fetchDetail,
   fetchFeedback,
@@ -796,7 +796,9 @@ export default function App() {
                     <Button danger onClick={() => onDecide("reject")}>
                       驳回重查
                     </Button>
-                    <Button href={exportUrl(current)} target="_blank">
+                    <Button
+                      onClick={() => downloadExport(current).catch((e) => message.error(e.message))}
+                    >
                       导出底稿
                     </Button>
                   </div>

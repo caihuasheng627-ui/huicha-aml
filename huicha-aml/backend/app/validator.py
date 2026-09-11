@@ -32,15 +32,6 @@ def validate_claim(
             "reason": "调分 Claim 缺少 evidence_ids",
             "rejected_delta": delta,
         }
-    missing = [i for i in ids if i not in allowed]
-    if missing:
-        return {
-            "valid": False,
-            "evidence_ids": ids,
-            "support_score": 0.0,
-            "reason": f"证据不存在或不属于本轮工具结果：{','.join(missing[:6])}",
-            "rejected_delta": delta,
-        }
     if case_id and evidence_case:
         cross = [i for i in ids if evidence_case.get(i) and evidence_case[i] != case_id]
         if cross:
@@ -51,6 +42,15 @@ def validate_claim(
                 "reason": f"跨案件证据：{','.join(cross[:6])}",
                 "rejected_delta": delta,
             }
+    missing = [i for i in ids if i not in allowed]
+    if missing:
+        return {
+            "valid": False,
+            "evidence_ids": ids,
+            "support_score": 0.0,
+            "reason": f"证据不存在或不属于本轮工具结果：{','.join(missing[:6])}",
+            "rejected_delta": delta,
+        }
     if not (claim or "").strip():
         return {
             "valid": False,

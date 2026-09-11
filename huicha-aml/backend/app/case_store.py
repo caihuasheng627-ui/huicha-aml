@@ -4,8 +4,31 @@ import json
 
 from sqlalchemy.orm import Session
 
-from .models import AmlCase, Evidence, HumanDecision, InvestigationStep, Relationship, RiskAssessment, utcnow
+from .models import Alert, AmlCase, Evidence, HumanDecision, InvestigationStep, Relationship, RiskAssessment, Transaction, utcnow
 from .prompts import PROMPTS, prompt_version
+
+
+def evidence_case_index(db: Session) -> dict[str, str]:
+    """source_id / tx_id / evidence_id → case_id。KB 编号跨案共享，不入库映射。"""
+    mapping: dict[str, str] = {}
+    acct_to_case: dict[str, str] = {}
+    for a in db.query(Alert).all():
+        mapping[a.id] = a.id
+        if a.customer_id:
+            mapping[a.customer_id] = a.id
+        if a.account_id:
+            mapping[a.account_id] = a.id
+            acct_to_case[a.account_id] = a.id
+    for t in db.query(Transaction).all():
+        owner = acct_to_case.get(t.to_account) or acct_to_case.get(t.from_account)
+        if owner:
+            mapping[t.id] = owner
+    for e in db.query(Evidence).all():
+        mapping[e.evidence_id] = e.case_id
+        for raw in (e.source_id, *(part.strip() for part in (e.raw_reference or "").split(","))):
+            if raw and not str(raw).startswith("KB-"):
+                mapping[raw] = e.case_id
+    return mapping
 
 
 def persist_investigation(db: Session, result: dict) -> None:

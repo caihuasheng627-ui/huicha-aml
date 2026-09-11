@@ -5,7 +5,7 @@ import time
 from sqlalchemy.orm import Session
 
 from .analyst_rules import CONCLUSION_LABEL, analyze, rule_prior, score_to_conclusion
-from .case_store import persist_investigation
+from .case_store import evidence_case_index, persist_investigation
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
 from .llm import enrich_challenger, enrich_report_reason, llm_model
@@ -151,7 +151,7 @@ def _challenger_stage(
             }
         )
     try:
-        raw_ch, _raw_delta, usage = enrich_challenger(
+        raw_ch, usage = enrich_challenger(
             db=db,
             privacy=privacy,
             alert=alert,
@@ -165,7 +165,10 @@ def _challenger_stage(
     except RuntimeError as e:
         warning(f"Challenger 失败，仅保留规则先验: {e}")
         raw_ch, usage = [], {}
-    evidence_case = {eid: alert["id"] for eid in allowed_evidence}
+    evidence_case = evidence_case_index(db)
+    for eid in allowed_evidence:
+        if not str(eid).startswith("KB-"):
+            evidence_case[eid] = alert["id"]
     challenger, llm_delta, rejected = filter_challenger_items(
         raw_ch,
         allowed=set(allowed_evidence),
@@ -340,7 +343,7 @@ def _run_investigation_inner(
         for i, c in enumerate(challenger, start=1):
             ev_graph.append(
                 {
-                    "evidence_id": f"EV-C{i:03d}",
+                    "evidence_id": f"EV-{alert['id']}-C{i:03d}",
                     "case_id": alert["id"],
                     "evidence_type": "COUNTER_EVIDENCE",
                     "source_type": "challenger",

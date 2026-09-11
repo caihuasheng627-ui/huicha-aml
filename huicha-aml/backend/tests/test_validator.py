@@ -28,6 +28,19 @@ def test_fake_evidence_rejected():
     assert res["valid"] is False
 
 
+def test_cross_case_not_in_allowed_is_cross_not_missing():
+    res = validate_claim(
+        claim="跨案",
+        evidence_ids=["TX-A-IN-01"],
+        delta=-0.05,
+        allowed={"TX-B-01"},
+        case_id="ALT-B",
+        evidence_case={"TX-A-IN-01": "ALT-A"},
+    )
+    assert res["valid"] is False
+    assert "跨案件" in res["reason"]
+
+
 def test_cross_case_evidence_rejected():
     res = validate_claim(
         claim="跨案",

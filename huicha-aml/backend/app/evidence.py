@@ -16,7 +16,7 @@ def build_evidence_graph(case_id: str, bundle: dict, kb_hits: list[dict]) -> lis
     def _add(**kwargs) -> str:
         nonlocal n
         n += 1
-        eid = f"EV-{n:03d}"
+        eid = f"EV-{case_id}-{n:03d}"
         items.append(
             {
                 "evidence_id": eid,

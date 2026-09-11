@@ -48,6 +48,9 @@ for _peer in PEER_BASELINE.values():
     REFERENCE_AMOUNTS.add(float(_peer["typical_monthly_in"]))
     REFERENCE_AMOUNTS.add(float(_peer["typical_ticket"]))
 
+THRESHOLD_WANS = (4.9, 5, 8, 10, 12, 20, 30, 80, 100, 170, 200, 240, 400, 800)
+REFERENCE_YUAN = set(REFERENCE_AMOUNTS) | {w * 10000 for w in THRESHOLD_WANS}
+
 APPROX_PREFIX_WORDS = ("约", "近", "左右", "上下", "量级", "区间", "阈值", "申报", "常见", "备货", "同业", "属")
 
 
@@ -450,6 +453,31 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
     }
 
 
+def _approx_context(text: str, start: int, end: int) -> bool:
+    prefix = text[max(0, start - 20) : start]
+    suffix = text[end : min(len(text), end + 6)]
+    if any(w in prefix for w in APPROX_PREFIX_WORDS):
+        return True
+    return "量级" in suffix or "左右" in suffix or "上下" in suffix
+
+
+def _parse_amount_token(token: str) -> float | None:
+    t = token.replace(",", "").replace(" ", "")
+    if t.endswith("万元"):
+        try:
+            return float(t[: -2]) * 10000
+        except ValueError:
+            return None
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def _amount_in_reference(value: float) -> bool:
+    return any(abs(value - r) < 1e-6 for r in REFERENCE_YUAN)
+
+
 def _wan_token_ok(token: str, known: set[str], text: str, start: int, end: int) -> bool:
     num = token.replace("万元", "").replace(",", "").strip()
     if (
@@ -460,26 +488,25 @@ def _wan_token_ok(token: str, known: set[str], text: str, start: int, end: int) 
         or f"{num}万元" in known
     ):
         return True
-    prefix = text[max(0, start - 20) : start]
-    suffix = text[end : min(len(text), end + 6)]
-    if any(w in prefix for w in APPROX_PREFIX_WORDS):
-        return True
-    if "量级" in suffix or "左右" in suffix or "上下" in suffix:
-        return True
-    return False
+    value = _parse_amount_token(token)
+    if value is None:
+        return False
+    return _approx_context(text, start, end) and _amount_in_reference(value)
+
+
+def _looks_plain_amount(token: str) -> bool:
+    t = token.replace(",", "").replace(" ", "")
+    if t.count(".") > 1:
+        return False
+    body = t.replace(".", "", 1)
+    return body.isdigit() and len(body) >= 5
 
 
 def fact_check(text: str, facts: dict) -> list[dict]:
-    """金额/账号/编号须在工具事实中；阈值与概数措辞放宽。"""
+    """金额/账号/编号须在工具事实中。阈值/概数白名单只在带「约/阈值/量级」等措辞时放行。"""
     known: set[str] = set()
-    for amt in list(facts.get("amounts", [])) + list(REFERENCE_AMOUNTS):
+    for amt in facts.get("amounts", []):
         known.update(amount_known_forms(amt))
-    for wan in (4.9, 5, 8, 10, 12, 20, 30, 80, 100, 170, 200, 240, 400, 800):
-        known.update(amount_known_forms(wan * 10000))
-        known.add(f"{wan} 万元")
-        known.add(f"{wan}万元")
-        known.add(str(wan))
-        known.add(f"{wan:g}")
 
     known.update(facts.get("tx_ids", []))
     known.update(facts.get("accounts", []))
@@ -498,6 +525,13 @@ def fact_check(text: str, facts: dict) -> list[dict]:
         ok = token in known or normalized in known
         if not ok and "万元" in token:
             ok = _wan_token_ok(token, known, text, m.start(), m.end())
+        elif not ok and _looks_plain_amount(token):
+            value = _parse_amount_token(token)
+            ok = (
+                value is not None
+                and _approx_context(text, m.start(), m.end())
+                and _amount_in_reference(value)
+            )
         if not ok:
             if token.isdigit() and len(token) == 4 and token.startswith("20"):
                 continue

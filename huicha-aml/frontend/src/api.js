@@ -116,10 +116,22 @@ export async function decide(id, decision, note) {
   return data;
 }
 
-export function exportUrl(id) {
-  const t = getDemoToken();
-  const q = t ? `?token=${encodeURIComponent(t)}` : "";
-  return `${API}/api/alerts/${id}/export${q}`;
+export async function downloadExport(id) {
+  const r = await request(`/api/alerts/${id}/export`);
+  if (!r.ok) throw new Error(await readError(r, "无法导出底稿"));
+  const blob = await r.blob();
+  const dispo = r.headers.get("content-disposition") || "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(dispo);
+  const plain = /filename="([^"]+)"/i.exec(dispo);
+  const name = decodeURIComponent(star?.[1] || plain?.[1] || `huicha-${id}.md`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function fetchKnowledge(q = "") {

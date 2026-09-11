@@ -36,6 +36,8 @@ def test_fact_check_allows_llm_threshold_and_approx_phrasing():
     assert fact_check("月度流入约 200 万元量级。", facts) == []
     issues = fact_check("另转出 88.88 万元至陌生账户。", facts)
     assert any("88.88" in i["token"] for i in issues)
+    issues20 = fact_check("另转出 20 万元至陌生账户。", facts)
+    assert any("20" in i["token"] for i in issues20)
 
 
 def test_amount_known_forms_include_wan():

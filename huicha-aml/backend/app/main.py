@@ -92,7 +92,7 @@ async def demo_token_guard(request: Request, call_next):
         return await call_next(request)
     expected = demo_token()
     if expected:
-        got = request.headers.get("x-huicha-token") or request.query_params.get("token") or ""
+        got = request.headers.get("x-huicha-token") or ""
         if got != expected:
             return JSONResponse(
                 {"detail": "需要演示口令（Header X-Huicha-Token）。竞赛原型，不是银行 SSO。"},

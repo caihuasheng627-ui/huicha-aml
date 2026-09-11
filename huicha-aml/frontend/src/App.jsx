@@ -335,7 +335,7 @@ export default function App() {
   const [injectHallucination, setInjectHallucination] = useState(false);
   const [selected, setSelected] = useState("");
   const [openSteps, setOpenSteps] = useState({});
-  const [onlyDemo, setOnlyDemo] = useState(true);
+  const [queueKind, setQueueKind] = useState("demo");
   const [q, setQ] = useState("");
   const [clock, setClock] = useState(nowText());
   const [offline, setOffline] = useState(false);
@@ -418,6 +418,7 @@ export default function App() {
   async function onInvestigate(id = current) {
     if (!id || loading) return;
     setCurrent(id);
+    if (DEMOS.some((d) => d.id === id)) setQueueKind("demo");
     setInvError(false);
     setLoading(true);
     open(id).catch(() => {});
@@ -478,8 +479,10 @@ export default function App() {
       summary: e.summary,
     }));
 
+  const demoCount = alerts.filter((a) => a.demo_tag).length;
+  const normalCount = alerts.filter((a) => !a.demo_tag).length;
   const queue = alerts
-    .filter((a) => !onlyDemo || a.demo_tag)
+    .filter((a) => (queueKind === "demo" ? Boolean(a.demo_tag) : !a.demo_tag))
     .filter((a) => !q || `${a.title}${a.customer_name}${a.alert_type}${a.id}`.includes(q));
 
   return (
@@ -589,24 +592,37 @@ export default function App() {
         />
       )}
 
-      <PipelineRail
-        playback={playback}
-        hasDraft={Boolean(inv) && !showTheater}
-        signed={Boolean(detail?.human_decision)}
-        useChallenger={useChallenger}
-      />
-
       <div className="layout">
         <aside className="col">
           <div className="col-title">
             <h3>待办告警</h3>
-            <Tag>{metrics ? `${metrics.alerts} 条` : "—"}</Tag>
+            <Tag>{queueKind === "demo" ? demoCount : normalCount} 条</Tag>
+          </div>
+          <div className="queue-filter" role="tablist" aria-label="告警筛选">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={queueKind === "demo"}
+              className={queueKind === "demo" ? "on" : ""}
+              onClick={() => setQueueKind("demo")}
+            >
+              示例 <em>{demoCount}</em>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={queueKind === "normal"}
+              className={queueKind === "normal" ? "on" : ""}
+              onClick={() => setQueueKind("normal")}
+            >
+              正常数据 <em>{normalCount}</em>
+            </button>
           </div>
           <div className="hint">
-            上游检测已完成。本台只出草稿，不是监管结论。
-            <Button type="link" size="small" onClick={() => setOnlyDemo((v) => !v)}>
-              {onlyDemo ? "全部告警" : "路演案"}
-            </Button>
+            {queueKind === "demo"
+              ? "路演示例案，带 A/B/C/F/L 标签。"
+              : "其余合成告警，不是路演脚本。"}{" "}
+            本台只出草稿，不是监管结论。
           </div>
           {feedback && feedback.decisions && (
             <div className="hint" style={{ marginBottom: 8 }}>
@@ -936,6 +952,12 @@ export default function App() {
           )}
         </aside>
       </div>
+      <PipelineRail
+        playback={playback}
+        hasDraft={Boolean(inv) && !showTheater}
+        signed={Boolean(detail?.human_decision)}
+        useChallenger={useChallenger}
+      />
       </div>
       <footer className="footer">
         <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>

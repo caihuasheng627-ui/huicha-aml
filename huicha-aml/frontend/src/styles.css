@@ -140,7 +140,7 @@ body {
   min-height: 0;
   flex: 1;
   gap: 10px;
-  padding: 10px;
+  padding: 10px 10px 8px;
 }
 
 .col {
@@ -532,10 +532,46 @@ body {
 .v2-tl span { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; }
 
 /* Signature: investigation pipeline */
+.queue-filter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.queue-filter button {
+  height: 32px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.queue-filter button.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.queue-filter em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.queue-filter button:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 1px;
+}
+
 .pipeline-rail {
   position: relative;
   background: var(--sheet);
-  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
   padding: 10px 22px 12px;
   flex: none;
 }

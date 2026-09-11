@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export const PIPELINE = [
+const PIPELINE = [
   {
     id: "planner",
     role: "Planner",

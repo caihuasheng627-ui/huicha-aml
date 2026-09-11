@@ -5,7 +5,6 @@ import {
   Divider,
   Input,
   Space,
-  Spin,
   Switch,
   Table,
   Tag,
@@ -25,6 +24,7 @@ import {
   setDemoToken,
 } from "./api";
 import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { InvestigateTheater, PipelineRail, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
 const HUMAN = {
   confirm: "已记录签发",
@@ -178,8 +178,8 @@ function Graph({ graph, selected, onSelect }) {
 
   return (
     <div className="graph">
-      <svg viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet">
-        {edges.map((e) => {
+      <svg className="graph-live" viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet">
+        {edges.map((e, i) => {
           const a = layout[e.source];
           const b = layout[e.target];
           if (!a || !b) return null;
@@ -195,6 +195,7 @@ function Graph({ graph, selected, onSelect }) {
                 y2={b.y}
                 stroke={hot ? "#c8161d" : "#94a3b8"}
                 strokeWidth={hot ? 2.4 : 1.1}
+                style={{ animationDelay: `${i * 40}ms` }}
               />
               {e.amount != null && (
                 <text x={mx} y={my - 4} textAnchor="middle" fill={hot ? "#9f1239" : "#64748b"} fontSize="8">
@@ -343,8 +344,11 @@ export default function App() {
   const [needsToken, setNeedsToken] = useState(false);
   const [tokenDraft, setTokenDraft] = useState(() => getDemoToken());
   const [feedback, setFeedback] = useState(null);
+  const [invError, setInvError] = useState(false);
   const openSeq = useRef(0);
   const inv = detail?.investigation;
+  const playback = usePipelinePlayback({ running: loading, failed: invError });
+  const showTheater = playback.phase === "playing" || playback.phase === "holding" || playback.phase === "error";
 
   async function loadList() {
     let health = null;
@@ -408,13 +412,16 @@ export default function App() {
   async function onInvestigate(id = current) {
     if (!id || loading) return;
     setCurrent(id);
+    setInvError(false);
     setLoading(true);
+    open(id).catch(() => {});
     try {
       await runInvestigate(id, { useChallenger, injectHallucination });
       await open(id);
       await loadList();
       message.success("调查草稿已生成，待人工签发");
     } catch (e) {
+      setInvError(true);
       message.error(e.message || "调查失败");
     } finally {
       setLoading(false);
@@ -474,7 +481,9 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" />
+          <div className="brand-mark" aria-hidden="true">
+            <b>查</b>
+          </div>
           <div className="brand-text">
             <strong>慧查 AML</strong>
             <span>AI 推理 · 规则边界 · 证据事实 · 人做决策</span>
@@ -536,6 +545,8 @@ export default function App() {
           </>
         )}
       </div>
+
+      <PipelineRail playback={playback} complete={Boolean(inv) && !showTheater} useChallenger={useChallenger} />
 
       <div className="workspace">
       {offline && (
@@ -645,7 +656,7 @@ export default function App() {
           </div>
           {!current && (
             <div className="empty">
-              <h4>请从左侧领取一条告警</h4>
+              <h4>领取告警，走完调查流水线</h4>
               <p className="hint">本台接在监测系统之后，只生成调查草稿，不上报、不记账。</p>
               <ol>
                 <li>案例 A：批发企业大额频繁 → 建议排除（有经营反证）</li>
@@ -657,8 +668,17 @@ export default function App() {
               </ol>
             </div>
           )}
-          {current && (
-            <Spin spinning={loading} tip="正在调取只读工具并生成草稿">
+          {current && showTheater && (
+            <InvestigateTheater
+              playback={playback}
+              useChallenger={useChallenger}
+              injectHallucination={injectHallucination}
+              onRetry={() => onInvestigate()}
+              onBack={() => playback.reset()}
+            />
+          )}
+          {current && !showTheater && (
+            <div className={`dossier${playback.phase === "done" ? " is-revealed" : ""}`}>
               <div className="kpi">
                 <div className={`kpi-card ${inv ? conclusionTone(inv.conclusion_label) : ""}`}>
                   <div className="k">建议结论</div>
@@ -809,11 +829,11 @@ export default function App() {
                   <div className="hint">签发只记录人工处置，系统不会向监测中心自动报送。</div>
                 </>
               )}
-            </Spin>
+            </div>
           )}
         </main>
 
-        <aside className="col">
+        <aside className={`col${showTheater ? " is-waiting" : ""}`}>
           <div className="col-title">
             <h3>证据与关联</h3>
             {selected ? (
@@ -826,7 +846,7 @@ export default function App() {
           </div>
           {inv ? (
             <>
-              <Graph graph={inv.graph} selected={selected} onSelect={selectEvidence} />
+              <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} />
               <EvidenceLists graph={inv.evidence_graph} claims={inv.claims} onSelect={selectEvidence} />
               <Divider plain orientation="left">
                 制度与类型学

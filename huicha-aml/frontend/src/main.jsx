@@ -10,24 +10,25 @@ createRoot(document.getElementById("root")).render(
     locale={zhCN}
     theme={{
       token: {
-        colorPrimary: "#1b4f8a",
-        colorLink: "#1b4f8a",
+        colorPrimary: "#1d4f86",
+        colorLink: "#1d4f86",
         colorError: "#c8161d",
-        colorSuccess: "#0f7b4a",
-        colorWarning: "#b45309",
-        borderRadius: 6,
+        colorSuccess: "#1a7a4c",
+        colorWarning: "#c47a12",
+        borderRadius: 4,
         fontFamily:
-          '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", sans-serif',
+          '"IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
         fontSize: 13,
-        colorText: "#1e293b",
-        colorTextSecondary: "#64748b",
-        colorBorder: "#e2e8f0",
-        colorBgLayout: "#eef1f6",
+        colorText: "#1c2838",
+        colorTextSecondary: "#5b6b80",
+        colorBorder: "#d5dde8",
+        colorBgLayout: "#e8edf3",
+        colorBgContainer: "#fbfcfe",
       },
       components: {
-        Button: { controlHeight: 32 },
-        Table: { headerBg: "#f4f7fb", headerColor: "#334155" },
-        Tag: { borderRadiusSM: 4 },
+        Button: { controlHeight: 32, fontWeight: 600 },
+        Table: { headerBg: "#eef3f8", headerColor: "#1c2838" },
+        Tag: { borderRadiusSM: 2 },
       },
     }}
   >

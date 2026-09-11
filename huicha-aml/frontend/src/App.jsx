@@ -409,6 +409,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (playback.phase === "done") {
+      message.success("调查草稿已生成，待人工签发");
+    }
+  }, [playback.phase]);
+
   async function onInvestigate(id = current) {
     if (!id || loading) return;
     setCurrent(id);
@@ -419,7 +425,6 @@ export default function App() {
       await runInvestigate(id, { useChallenger, injectHallucination });
       await open(id);
       await loadList();
-      message.success("调查草稿已生成，待人工签发");
     } catch (e) {
       setInvError(true);
       message.error(e.message || "调查失败");

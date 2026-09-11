@@ -5,11 +5,12 @@
 
 ## 能力摘要
 
-- Planner 按告警类型声明工具子集；Collector 经 `@tool` **真实留痕**
+- Planner 按告警类型**实际少调**基线/图谱/名单；Collector 经 `@tool` 留痕
 - Analyst 规则打底分；Challenger = **规则先验 + LLM 有界 delta（±0.15，证据校验）**
 - Reporter 百炼润色；**脱敏进模**；事实回查；可缓存
 - 精标约 **30+** 条（含路演 A/B/C/F「继续观察」）；`/api/feedback` 闭环看板
-- 实验：`py -m app.experiments` → `huicha-aml/experiments/RESULTS.md`
+- 机制验证：`py -m app.experiments` → `experiments/RESULTS.md`（stub + 模板精标，不是准确率）
+- 旧库缺列时启动会自动 `ALTER`，不必为 `gold_label` 先删库；改种子数据仍建议删 `huicha.db`
 
 ## 启动
 

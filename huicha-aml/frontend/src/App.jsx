@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -230,6 +230,7 @@ export default function App() {
   const [offline, setOffline] = useState(false);
   const [llmOff, setLlmOff] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const openSeq = useRef(0);
   const inv = detail?.investigation;
 
   async function loadList() {
@@ -252,15 +253,17 @@ export default function App() {
   }
 
   async function open(id) {
+    const seq = ++openSeq.current;
     setCurrent(id);
     setSelected("");
     const d = await fetchDetail(id);
+    if (seq !== openSeq.current) return;
     setDetail(d);
     setNote(d.human_note || "");
   }
 
   useEffect(() => {
-    loadList().catch((e) => message.error(e.message.includes("fetch") ? "无法连接调查服务，请先启动后端 8000 端口" : e.message));
+    loadList().catch((e) => message.error(e.message.includes("调查服务") || e.message.includes("fetch") ? "无法连接调查服务，请先启动后端 8000 端口" : e.message));
     const t = setInterval(() => setClock(nowText()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -285,7 +288,7 @@ export default function App() {
       await loadList();
       message.success("调查草稿已生成，待人工签发");
     } catch (e) {
-      message.error(e.message.includes("fetch") ? "无法连接调查服务" : e.message);
+      message.error(e.message || "调查失败");
     } finally {
       setLoading(false);
     }

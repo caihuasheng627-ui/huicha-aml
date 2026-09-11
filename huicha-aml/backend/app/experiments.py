@@ -103,6 +103,8 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
                 "on": r_on["conclusion"],
                 "off": r_off["conclusion"],
                 "demo_tag": a.demo_tag,
+                "rule_prior": (r_on.get("scoring") or {}).get("rule_prior"),
+                "llm_delta": (r_on.get("scoring") or {}).get("llm_delta"),
             }
         )
         if gold == "exclude":
@@ -115,8 +117,10 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
             match_on += 1
 
     n = len(rows) or 1
+    priors = [r["rule_prior"] for r in rows if r.get("rule_prior") is not None]
+    deltas = [r["llm_delta"] for r in rows if r.get("llm_delta") is not None]
     return {
-        "name": "Challenger 消融 + 精标一致率",
+        "name": "机制验证：Challenger 开/关（模板精标 + stub delta）",
         "n_labeled": len(rows),
         "consistency_rate_challenger_on": round(match_on / n, 4),
         "gold_exclude_n": gold_exclude,
@@ -125,8 +129,15 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
         "false_report_lift": round(
             (false_report_off / max(gold_exclude, 1)) - (false_report_on / max(gold_exclude, 1)), 4
         ),
+        "mean_rule_prior": round(sum(priors) / max(len(priors), 1), 4),
+        "mean_llm_delta": round(sum(deltas) / max(len(deltas), 1), 4),
         "observe_present": any(r["on"] == "observe" or r["gold"] == "observe" for r in rows),
         "sample": [r for r in rows if r["demo_tag"] in {"A", "B", "C", "F"}][:8],
+        "caveat": (
+            "gold_label 由生成模板写入，与规则分支同源；"
+            "LLM 为固定 stub delta（默认 -0.12），不是真实百炼。"
+            "数字证明流水线可复现，不代表调查准确率。"
+        ),
     }
 
 
@@ -184,28 +195,31 @@ def run_all(out_dir: Path | None = None) -> dict:
     }
     (out_dir / "RESULTS.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     md = [
-        "# 慧查 AML 实验数字（可复现）",
+        "# 慧查 AML 机制验证（stub，可复现）",
         "",
-        f"生成命令：`py -m app.experiments`",
+        "生成命令：`py -m app.experiments`",
         "",
-        "## 1. 事实回查拦截",
+        "**口径**：下列数字验证「规则 + 有界 delta + 回查」流水线能跑通、消融方向符合预期。",
+        "精标由生成模板写入（与规则同源），模型为固定 stub delta，**不是**独立标注集上的调查准确率。",
+        "",
+        "## 1. 事实回查（正则，不经大模型）",
         f"- 毒化样本 n={fact['n_poison']}，拦截率 **{fact['intercept_rate']:.1%}**",
-        f"- 干净措辞误报率 **{fact['clean_false_positive_rate']:.1%}**（n={fact['n_clean']}）",
+        f"- 干净阈值/概数误报率 **{fact['clean_false_positive_rate']:.1%}**（n={fact['n_clean']}）",
         "",
-        "## 2. Challenger 消融（精标 exclude 子集）",
-        f"- 精标案 n={abl['n_labeled']}",
-        f"- Challenger 开：误建议上报率 **{abl['false_suggest_report_rate_on']:.1%}**",
-        f"- Challenger 关：误建议上报率 **{abl['false_suggest_report_rate_off']:.1%}**",
-        f"- 抬升（关−开）**{abl['false_report_lift']:+.1%}**",
+        "## 2. Challenger 开/关（exclude 子集）",
+        f"- 模板精标 n={abl['n_labeled']}，其中 gold=exclude {abl['gold_exclude_n']} 条",
+        f"- 开质疑：误建议上报 **{abl['false_suggest_report_rate_on']:.1%}**",
+        f"- 关质疑：误建议上报 **{abl['false_suggest_report_rate_off']:.1%}**（抬升 {abl['false_report_lift']:+.1%}）",
+        f"- 开质疑时平均规则先验 {abl['mean_rule_prior']:+.2f}、stub delta {abl['mean_llm_delta']:+.2f}",
+        "- 抬升主要来自规则先验（批发 −0.30 等）；stub 只提供固定 −0.12，不能写成「大模型压误报」。",
         "",
-        "## 3. 三档一致率（Challenger 开 vs gold_label）",
-        f"- **{abl['consistency_rate_challenger_on']:.1%}**（n={abl['n_labeled']}）",
-        f"- 是否出现「继续观察」档：{'是' if abl['observe_present'] else '否'}",
+        "## 3. 与模板 gold 的档位重合（勿当准确率）",
+        f"- 重合率 {abl['consistency_rate_challenger_on']:.1%}（n={abl['n_labeled']}）——由构造保证，路演勿念成能力指标",
+        f"- 「继续观察」档是否出现：{'是' if abl['observe_present'] else '否'}",
         "",
         f"## 4. 幻觉演示账号拦截：{'通过' if hall_ok else '失败'}",
         "",
-        "说明：实验在 stub 百炼下跑通流水线；结论打分含规则先验与校验后的模型 delta。",
-        "数据为本地合成精标，非银行真实账务。",
+        f"说明：{abl['caveat']}",
     ]
     (out_dir / "RESULTS.md").write_text("\n".join(md), encoding="utf-8")
     db.close()

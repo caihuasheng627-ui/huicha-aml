@@ -140,12 +140,11 @@ def _run_investigation_inner(
     started: float,
     tool_trace: list,
 ) -> dict:
-    # 取数包；Planner 工具清单按告警类型声明（调用均经 @tool 留痕）
+    # 取数包：Planner 清单决定是否调用基线/图谱/名单（经 @tool 留痕）
     bundle = collect_bundle(db, alert_id)
     alert = bundle["alert"]
     customer = bundle["customer"]
-    planned = plan_tool_names(alert["alert_type"])
-    bundle["planned_tools"] = planned
+    planned = bundle.get("planned_tools") or plan_tool_names(alert["alert_type"])
     kb_hits = search_knowledge_tool(alert["alert_type"], customer["industry"])
     txs = bundle["transactions"]
     baseline = bundle["baseline"]

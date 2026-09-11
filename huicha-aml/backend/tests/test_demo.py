@@ -59,6 +59,7 @@ def client(monkeypatch):
 
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-not-used")
     monkeypatch.setenv("DASHSCOPE_MODEL", "deepseek-v4-flash-0731")
+    monkeypatch.setenv("HUICHA_DATABASE_URL", "sqlite://")
     monkeypatch.setattr("app.llm.chat", fake_chat)
     import app.llm as llm_mod
 
@@ -70,6 +71,10 @@ def client(monkeypatch):
         poolclass=StaticPool,
     )
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    monkeypatch.setattr("app.database.engine", engine)
+    monkeypatch.setattr("app.database.SessionLocal", TestingSession)
+    monkeypatch.setattr("app.main.engine", engine)
+    monkeypatch.setattr("app.main.SessionLocal", TestingSession)
     Base.metadata.create_all(bind=engine)
     db = TestingSession()
     seed_if_empty(db)
@@ -215,3 +220,41 @@ def test_labeled_corpus_size(client):
 def test_health_reports_llm(client):
     r = client.get("/api/health")
     assert r.json()["llm"] == "bailian"
+
+
+def test_planner_skips_watchlist_on_wholesale(client):
+    r = client.post(
+        "/api/alerts/ALT-A-20260910/investigate",
+        params={"use_challenger": True, "inject_hallucination": False},
+    )
+    assert r.status_code == 200, r.text
+    tools = [t["tool"] for t in r.json()["tool_trace"]]
+    assert "get_baseline" in tools
+    assert "get_graph" in tools
+    assert "check_watchlist" not in tools
+
+
+def test_planner_skips_baseline_on_structuring(client):
+    r = client.post(
+        "/api/alerts/ALT-B-20260910/investigate",
+        params={"use_challenger": True, "inject_hallucination": False},
+    )
+    assert r.status_code == 200, r.text
+    tools = [t["tool"] for t in r.json()["tool_trace"]]
+    assert "get_baseline" not in tools
+    assert "get_graph" in tools
+    assert "check_watchlist" in tools
+
+
+def test_migrate_sqlite_adds_gold_label(tmp_path):
+    from sqlalchemy import create_engine, inspect, text
+
+    from app.database import migrate_sqlite
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with eng.begin() as conn:
+        conn.execute(text("CREATE TABLE alerts (id VARCHAR PRIMARY KEY, title VARCHAR)"))
+    assert "gold_label" in migrate_sqlite(eng)[0]
+    cols = {c["name"] for c in inspect(eng).get_columns("alerts")}
+    assert "gold_label" in cols
+    assert migrate_sqlite(eng) == []

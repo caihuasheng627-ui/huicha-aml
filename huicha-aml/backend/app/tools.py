@@ -287,7 +287,7 @@ def peer_labels_from_graph(graph: dict, account_id: str, txs: list[dict], side: 
 
 
 def plan_tool_names(alert_type: str) -> list[str]:
-    """Planner：按告警类型选择工具子集（可审计、可解释）。"""
+    """按告警类型选择工具子集；不再默认补齐全部工具。"""
     tools = ["get_alert", "get_customer", "get_transactions", "search_knowledge"]
     t = alert_type or ""
     if any(k in t for k in ("大额", "频繁", "夜间", "转账")):
@@ -296,12 +296,8 @@ def plan_tool_names(alert_type: str) -> list[str]:
         tools += ["get_graph", "check_watchlist"]
     if "观察" in t or "亲属" in t:
         tools += ["get_baseline", "get_graph"]
-    # 默认补齐基线与图谱，保证分析可用；去重保序
-    for extra in ("get_baseline", "get_graph", "check_watchlist"):
-        if extra not in tools:
-            tools.append(extra)
-    seen = set()
-    out = []
+    seen: set[str] = set()
+    out: list[str] = []
     for x in tools:
         if x not in seen:
             seen.add(x)
@@ -309,16 +305,50 @@ def plan_tool_names(alert_type: str) -> list[str]:
     return out
 
 
+def _empty_baseline(customer: dict, txs: list[dict], account_id: str) -> dict:
+    """未列入计划时不调用基线工具；流水合计仍可从已取交易算出。"""
+    inflow = [t for t in txs if t["to_account"] == account_id]
+    outflow = [t for t in txs if t["from_account"] == account_id]
+    in_sum = round(sum(t["amount"] for t in inflow), 2)
+    out_sum = round(sum(t["amount"] for t in outflow), 2)
+    return {
+        "industry": customer.get("industry", ""),
+        "sample_in_count": len(inflow),
+        "sample_out_count": len(outflow),
+        "sample_in_sum": in_sum,
+        "sample_out_sum": out_sum,
+        "avg_in_ticket": round(in_sum / max(len(inflow), 1), 2),
+        "peer_typical_monthly_in": 0,
+        "peer_typical_ticket": 0,
+        "peer_note": "本轮未调用基线工具",
+        "in_sum_vs_peer": None,
+        "skipped": True,
+    }
+
+
+def _empty_graph(account_id: str, label: str) -> dict:
+    return {"nodes": [{"id": account_id, "label": label or account_id, "kind": "center"}], "edges": []}
+
+
 def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None = None) -> dict:
-    """按 Planner 工具清单真实调用（经 @tool 留痕）。核心取数始终执行。"""
-    planned = tool_names or plan_tool_names("")
+    """核心取数始终执行；基线/图谱/名单仅当出现在 Planner 清单中才调用。"""
     alert = get_alert(db, alert_id)
+    planned = tool_names or plan_tool_names(alert.get("alert_type") or "")
     customer = get_customer(db, alert["customer_id"])
     txs = get_transactions(db, alert["account_id"])
-    baseline = get_baseline(db, alert["customer_id"], alert["account_id"], txs=txs, customer=customer)
-    graph = get_graph(db, alert["account_id"], txs=txs)
-    counter_ids = sorted({n["id"] for n in graph["nodes"] if n["id"] != alert["account_id"]})
-    watch_hits = check_watchlist(db, counter_ids)
+    if "get_baseline" in planned:
+        baseline = get_baseline(db, alert["customer_id"], alert["account_id"], txs=txs, customer=customer)
+    else:
+        baseline = _empty_baseline(customer, txs, alert["account_id"])
+    if "get_graph" in planned:
+        graph = get_graph(db, alert["account_id"], txs=txs)
+    else:
+        graph = _empty_graph(alert["account_id"], customer.get("name") or alert["account_id"])
+    if "check_watchlist" in planned:
+        counter_ids = sorted({n["id"] for n in graph["nodes"] if n["id"] != alert["account_id"]})
+        watch_hits = check_watchlist(db, counter_ids)
+    else:
+        watch_hits = []
     amounts = {
         t["amount"] for t in txs
     } | {
@@ -326,9 +356,12 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
         baseline["sample_in_sum"],
         baseline["sample_out_sum"],
         baseline["avg_in_ticket"],
-        baseline["peer_typical_monthly_in"],
-        baseline["peer_typical_ticket"],
     }
+    if not baseline.get("skipped"):
+        amounts |= {
+            baseline["peer_typical_monthly_in"],
+            baseline["peer_typical_ticket"],
+        }
     name_set = {customer["name"], customer["id"]}
     name_set.update(n.get("label", "") for n in graph["nodes"] if n.get("label"))
     name_set.update(h["name"] for h in watch_hits)

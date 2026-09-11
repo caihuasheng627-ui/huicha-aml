@@ -8,13 +8,15 @@
     "note": "毒化草稿含虚构账号/金额/编号；干净句含阈值与概数措辞。"
   },
   "ablation_consistency": {
-    "name": "Challenger 消融 + 精标一致率",
+    "name": "机制验证：Challenger 开/关（模板精标 + stub delta）",
     "n_labeled": 31,
     "consistency_rate_challenger_on": 1.0,
     "gold_exclude_n": 13,
     "false_suggest_report_rate_on": 0.0,
     "false_suggest_report_rate_off": 0.5385,
     "false_report_lift": 0.5385,
+    "mean_rule_prior": -0.1148,
+    "mean_llm_delta": -0.12,
     "observe_present": true,
     "sample": [
       {
@@ -22,30 +24,39 @@
         "gold": "exclude",
         "on": "exclude",
         "off": "suggest_report",
-        "demo_tag": "A"
+        "demo_tag": "A",
+        "rule_prior": -0.3,
+        "llm_delta": -0.12
       },
       {
         "id": "ALT-B-20260910",
         "gold": "suggest_report",
         "on": "suggest_report",
         "off": "suggest_report",
-        "demo_tag": "B"
+        "demo_tag": "B",
+        "rule_prior": 0.0,
+        "llm_delta": -0.12
       },
       {
         "id": "ALT-C-20260910",
         "gold": "suggest_report",
         "on": "suggest_report",
         "off": "suggest_report",
-        "demo_tag": "C"
+        "demo_tag": "C",
+        "rule_prior": 0.0,
+        "llm_delta": -0.12
       },
       {
         "id": "ALT-F-20260910",
         "gold": "observe",
         "on": "observe",
         "off": "suggest_report",
-        "demo_tag": "F"
+        "demo_tag": "F",
+        "rule_prior": -0.08,
+        "llm_delta": -0.12
       }
-    ]
+    ],
+    "caveat": "gold_label 由生成模板写入，与规则分支同源；LLM 为固定 stub delta（默认 -0.12），不是真实百炼。数字证明流水线可复现，不代表调查准确率。"
   },
   "hallucination_demo_intercepted": true
 }

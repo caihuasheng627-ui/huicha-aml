@@ -1,4 +1,5 @@
 const API = "";
+const INVESTIGATE_TIMEOUT_MS = 90000;
 
 async function readError(r, fallback) {
   try {
@@ -10,32 +11,57 @@ async function readError(r, fallback) {
   return fallback;
 }
 
+function mapFetchError(e, fallback) {
+  if (e?.name === "AbortError") return new Error("请求超时，请重试");
+  if (e instanceof Error && e.message && !e.message.includes("fetch")) return e;
+  return new Error(fallback);
+}
+
+async function request(path, { method = "GET", headers, body, timeoutMs, signal } = {}) {
+  const ctrl = new AbortController();
+  const onAbort = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", onAbort);
+  }
+  const timer = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const r = await fetch(`${API}${path}`, { method, headers, body, signal: ctrl.signal });
+    return r;
+  } catch (e) {
+    throw mapFetchError(e, "无法连接调查服务");
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 export async function fetchAlerts() {
-  const r = await fetch(`${API}/api/alerts`);
+  const r = await request("/api/alerts");
   if (!r.ok) throw new Error(await readError(r, "无法加载告警"));
   return r.json();
 }
 
-export async function fetchDetail(id) {
-  const r = await fetch(`${API}/api/alerts/${id}`);
+export async function fetchDetail(id, { signal } = {}) {
+  const r = await request(`/api/alerts/${id}`, { signal });
   if (!r.ok) throw new Error(await readError(r, "无法加载案件"));
   return r.json();
 }
 
 export async function fetchHealth() {
-  const r = await fetch(`${API}/api/health`);
+  const r = await request("/api/health");
   if (!r.ok) throw new Error(await readError(r, "无法加载健康检查"));
   return r.json();
 }
 
 export async function fetchMetrics() {
-  const r = await fetch(`${API}/api/metrics`);
+  const r = await request("/api/metrics");
   if (!r.ok) throw new Error(await readError(r, "无法加载指标"));
   return r.json();
 }
 
 export async function fetchFeedback() {
-  const r = await fetch(`${API}/api/feedback`);
+  const r = await request("/api/feedback");
   if (!r.ok) throw new Error(await readError(r, "无法加载反馈看板"));
   return r.json();
 }
@@ -45,13 +71,16 @@ export async function runInvestigate(id, { useChallenger = true, injectHallucina
     use_challenger: String(useChallenger),
     inject_hallucination: String(injectHallucination),
   });
-  const r = await fetch(`${API}/api/alerts/${id}/investigate?${q}`, { method: "POST" });
+  const r = await request(`/api/alerts/${id}/investigate?${q}`, {
+    method: "POST",
+    timeoutMs: INVESTIGATE_TIMEOUT_MS,
+  });
   if (!r.ok) throw new Error(await readError(r, "调查失败"));
   return r.json();
 }
 
 export async function decide(id, decision, note) {
-  const r = await fetch(`${API}/api/alerts/${id}/decide`, {
+  const r = await request(`/api/alerts/${id}/decide`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision, note }),
@@ -66,7 +95,7 @@ export function exportUrl(id) {
 }
 
 export async function fetchKnowledge(q = "") {
-  const r = await fetch(`${API}/api/kb?q=${encodeURIComponent(q)}`);
+  const r = await request(`/api/kb?q=${encodeURIComponent(q)}`);
   if (!r.ok) throw new Error(await readError(r, "无法加载知识库"));
   return r.json();
 }

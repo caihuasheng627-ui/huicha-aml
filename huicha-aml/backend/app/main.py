@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .agents import run_investigation
-from .database import Base, SessionLocal, engine, get_db
+from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .knowledge import list_knowledge, search_knowledge
 from .llm import llm_configured, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
@@ -39,6 +39,7 @@ def get_investigation(db: Session, alert_id: str) -> Investigation | None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    migrate_sqlite(engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

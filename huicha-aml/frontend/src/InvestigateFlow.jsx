@@ -73,10 +73,6 @@ export const PIPELINE = [
   },
 ];
 
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 export function usePipelinePlayback({ running, failed }) {
   const [session, setSession] = useState(0);
   const [index, setIndex] = useState(-1);
@@ -99,7 +95,6 @@ export function usePipelinePlayback({ running, failed }) {
     setIndex(0);
     setSubTick(0);
     setPhase("playing");
-    const reduce = prefersReducedMotion();
 
     const timer = setInterval(() => {
       if (cancelled) return;
@@ -111,11 +106,10 @@ export function usePipelinePlayback({ running, failed }) {
       }
       const stage = PIPELINE[i];
       const apiStill = runningRef.current;
-      const dwell = reduce ? 70 : stage.dwell;
       const elapsed = Date.now() - entered;
       const hold = stage.linger && apiStill;
-      if (elapsed < dwell || hold) {
-        if (hold && elapsed >= dwell) setPhase("holding");
+      if (elapsed < stage.dwell || hold) {
+        if (hold && elapsed >= stage.dwell) setPhase("holding");
         return;
       }
       if (i >= PIPELINE.length - 1) {

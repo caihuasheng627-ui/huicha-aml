@@ -24,7 +24,7 @@ import {
   setDemoToken,
 } from "./api";
 import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
-import { InvestigateTheater, PipelineRail, usePipelinePlayback } from "./InvestigateFlow.jsx";
+import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
 const HUMAN = {
   confirm: "已记录签发",
@@ -952,12 +952,6 @@ export default function App() {
           )}
         </aside>
       </div>
-      <PipelineRail
-        playback={playback}
-        hasDraft={Boolean(inv) && !showTheater}
-        signed={Boolean(detail?.human_decision)}
-        useChallenger={useChallenger}
-      />
       </div>
       <footer className="footer">
         <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>

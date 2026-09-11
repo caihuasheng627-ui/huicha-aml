@@ -56,6 +56,8 @@ class Claim(BaseModel):
     tag: str | None = None
     polarity: Literal["support", "counter"] = "support"
     delta: float = 0.0
+    predicate: str | None = None
+    args: dict = Field(default_factory=dict)
 
 
 class RiskFactor(BaseModel):
@@ -71,6 +73,9 @@ class ValidationResult(BaseModel):
     valid: bool
     evidence_ids: list[str] = Field(default_factory=list)
     support_score: float = 0.0
+    score_kind: str = "id_membership"
+    predicate: str | None = None
+    observed: dict = Field(default_factory=dict)
     reason: str = ""
     rejected_delta: float | None = None
 

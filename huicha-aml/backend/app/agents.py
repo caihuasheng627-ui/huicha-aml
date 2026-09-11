@@ -9,6 +9,7 @@ from .case_store import evidence_case_index, persist_investigation
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
 from .llm import enrich_challenger, enrich_report_reason, llm_model
+from .predicates import case_facts
 from .logging_util import audit, warning
 from .privacy import PrivacyMap
 from .prompts import prompt_version
@@ -161,6 +162,7 @@ def _challenger_stage(
             kb_hits=kb_hits,
             score_hints=hints,
             allowed_evidence=allowed_evidence,
+            transactions=txs,
         )
     except RuntimeError as e:
         warning(f"Challenger 失败，仅保留规则先验: {e}")
@@ -169,11 +171,13 @@ def _challenger_stage(
     for eid in allowed_evidence:
         if not str(eid).startswith("KB-"):
             evidence_case[eid] = alert["id"]
+    facts = case_facts(transactions=txs, customer=customer, account_id=alert.get("account_id") or "")
     challenger, llm_delta, rejected = filter_challenger_items(
         raw_ch,
         allowed=set(allowed_evidence),
         case_id=alert["id"],
         evidence_case=evidence_case,
+        facts=facts,
     )
     if abs(llm_delta) > 0:
         risk_factors.append(
@@ -354,7 +358,11 @@ def _run_investigation_inner(
                     "reliability": 0.7,
                     "created_by": "challenger",
                     "polarity": "counter",
-                    "metadata": {"delta": c.get("delta")},
+                    "metadata": {
+                        "delta": c.get("delta"),
+                        "predicate": c.get("predicate") or "",
+                        "score_kind": (c.get("validation") or {}).get("score_kind") or "",
+                    },
                     "data_note": "synthetic",
                 }
             )
@@ -368,7 +376,11 @@ def _run_investigation_inner(
                     f"无证据/越界已拒绝 {len(rejected_claims)} 条）。prompt={prompt_version('challenger')}。"
                 ),
                 "items": [
-                    f"{c.get('claim') or c['title']}（delta={c.get('delta', 0):+.2f}，证据 {','.join(c.get('evidence_ids') or []) or '无'}）：{c.get('detail') or ''}"
+                    (
+                        f"{c.get('claim') or c['title']}（delta={c.get('delta', 0):+.2f}，"
+                        f"谓词 {c.get('predicate') or '无'}，证据 {','.join(c.get('evidence_ids') or []) or '无'}）："
+                        f"{c.get('detail') or ''}"
+                    )
                     for c in challenger
                 ],
             }
@@ -379,10 +391,10 @@ def _run_investigation_inner(
                 "title": "Evidence Validator",
                 "content": (
                     f"允许证据 {len(allowed_evidence)} 个；拒绝 {len(rejected_claims)} 条 Claim。"
-                    "support_score 仅表示编号是否属于本案，不是语义置信度。"
+                    "调分须 predicate_verified；support_score 不是语义置信度。"
                 ),
                 "items": [r.get("validation", {}).get("reason") or "ok" for r in rejected_claims]
-                or ["本轮 Claim 均通过编号校验"],
+                or ["本轮调分 Claim 均通过谓词执行"],
             }
         )
     else:

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .agents import run_investigation
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .knowledge import corpus_size, list_knowledge, search_knowledge
-from .llm import llm_configured, llm_model
+from .llm import llm_mode, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
 from .security import auth_mode, cors_origins, demo_token
@@ -110,8 +110,8 @@ def health():
     return {
         "ok": True,
         "name": "慧查 AML",
-        "llm": "bailian" if llm_configured() else "off",
-        "model": llm_model() if llm_configured() else "",
+        "llm": llm_mode(),
+        "model": llm_model() if llm_mode() != "off" else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
         "version": "2.1.0",
         "data_note": "synthetic",
@@ -124,6 +124,7 @@ def health():
             "SQLite 文件库",
             "知识库为公开要求转述，关键词检索，条数见 kb_docs",
             "告警为合成数据，gold_label 与规则模板同源",
+            "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
     }
 
@@ -419,6 +420,11 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
     v2 = payload.get("case_v2") or {}
     scoring = payload.get("scoring") or {}
     rejected = payload.get("rejected_claims") or []
+    verified = [
+        c
+        for c in (payload.get("challenger") or [])
+        if (c.get("validation") or {}).get("score_kind") == "predicate_verified"
+    ]
     lines = [
         "# 慧查 AML 可疑交易调查草稿（非报送报文）",
         "",
@@ -440,6 +446,16 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         "",
         "## 证据编号",
         *[f"- {e['id']} {e.get('summary','')}" for e in payload.get("evidence", [])[:30]],
+        "",
+        "## Validator 已核验谓词",
+        *(
+            [
+                f"- {c.get('predicate') or ''} {c.get('claim') or ''}（{(c.get('validation') or {}).get('reason') or ''}）"
+                for c in verified[:12]
+            ]
+            if verified
+            else ["- （无）"]
+        ),
         "",
         "## Validator 拒绝项",
         *(

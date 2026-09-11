@@ -101,6 +101,32 @@ export function EvidenceLists({ graph, claims, onSelect }) {
   );
 }
 
+export function VerifiedClaims({ rows, onSelect }) {
+  const kept = (rows || []).filter((r) => r.validation?.score_kind === "predicate_verified");
+  if (!kept.length) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">已核验谓词（数据复核为真，才进分）</div>
+      {kept.map((r, i) => (
+        <div
+          key={`${r.predicate || "p"}-${r.claim || r.title || i}`}
+          className="ev"
+          role="button"
+          tabIndex={0}
+          onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
+        >
+          <code>
+            {r.predicate} · Δ{Number(r.delta || 0) > 0 ? "+" : ""}
+            {Number(r.delta || 0).toFixed(2)}
+          </code>
+          <div>{r.claim || r.title}</div>
+          <div className="hint">{(r.validation?.reason || "") + " · " + (r.evidence_ids || []).join("、")}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function RejectedClaims({ rows, onSelect }) {
   if (!rows?.length) return null;
   return (
@@ -116,6 +142,7 @@ export function RejectedClaims({ rows, onSelect }) {
         >
           <code>{r.validation?.reason || "已拒绝"}</code>
           <div>{r.claim || r.title}</div>
+          {r.predicate ? <div className="hint">谓词 {r.predicate}</div> : null}
         </div>
       ))}
     </div>

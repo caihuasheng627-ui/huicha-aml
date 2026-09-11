@@ -32,6 +32,9 @@ class PrivacyMap:
         if acct.startswith(("CASH-", "POS-", "RELATIVE-")):
             # 渠道聚合名可保留语义，不发真实对手户名
             return acct
+        if acct.startswith("UNK-"):
+            # 合成类型学前缀，不是真实账号
+            return acct
         if acct not in self.acct_to_mask:
             self._acct_i += 1
             mask = f"ACCOUNT_{self._acct_i:03d}"

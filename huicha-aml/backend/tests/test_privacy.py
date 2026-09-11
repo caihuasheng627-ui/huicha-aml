@@ -12,6 +12,8 @@ def test_privacy_masks_to_client_account():
     assert "CLIENT_001" in text
     assert "ACCOUNT_001" in text
     assert p.unmask_text(text) == "华东百货批发有限公司账户 6222-A-8801"
+    assert p.register_account("UNK-REL-09") == "UNK-REL-09"
+    assert p.register_account("RELATIVE-01") == "RELATIVE-01"
 
 
 def test_logs_redact_account_like_tokens():

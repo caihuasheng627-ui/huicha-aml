@@ -89,15 +89,17 @@ export function usePipelinePlayback({ running, failed }) {
 
   useEffect(() => {
     if (session === 0) return undefined;
-    let cancelled = false;
     let i = 0;
-    let entered = Date.now();
+    let elapsed = 0;
+    let last = Date.now();
     setIndex(0);
     setSubTick(0);
     setPhase("playing");
 
     const timer = setInterval(() => {
-      if (cancelled) return;
+      const now = Date.now();
+      const dt = Math.min(100, Math.max(0, now - last));
+      last = now;
       setSubTick((n) => n + 1);
       if (failedRef.current) {
         setPhase("error");
@@ -105,29 +107,31 @@ export function usePipelinePlayback({ running, failed }) {
         return;
       }
       const stage = PIPELINE[i];
-      const apiStill = runningRef.current;
-      const elapsed = Date.now() - entered;
-      const hold = stage.linger && apiStill;
-      if (elapsed < stage.dwell || hold) {
-        if (hold && elapsed >= stage.dwell) setPhase("holding");
+      const hold = stage.linger && runningRef.current;
+      if (hold) {
+        setPhase("holding");
+        setIndex(i);
         return;
       }
+      elapsed += dt;
+      if (elapsed < stage.dwell) {
+        setPhase("playing");
+        setIndex(i);
+        return;
+      }
+      elapsed = 0;
       if (i >= PIPELINE.length - 1) {
+        setIndex(i);
         setPhase("done");
         clearInterval(timer);
         return;
       }
       i += 1;
-      entered = Date.now();
       setIndex(i);
-      setSubTick(0);
       setPhase("playing");
     }, 80);
 
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return () => clearInterval(timer);
   }, [session]);
 
   function reset() {

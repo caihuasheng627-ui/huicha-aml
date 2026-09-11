@@ -118,6 +118,14 @@ DOCUMENTS: list[dict] = [
         "body": "养老金为主的账户，偶发亲属大额需结合用途。柜面转给已登记亲属并注明购房的，可在核验关系后排除或继续观察，不宜直接当团伙归集。",
     },
     {
+        "id": "KB-TYP-05",
+        "kind": "typology",
+        "title": "短时多层过桥转账",
+        "source": "调查类型学（演示库）",
+        "tags": ["多层", "layering", "过桥", "快进快出", "pass_through"],
+        "body": "资金在短时间内经 A→B→C→D 多层账户递减转出，需核验贸易/工资解释。单看一笔对公转账不足以定层。本条为演示摘录。",
+    },
+    {
         "id": "KB-PROC-01",
         "kind": "process",
         "title": "质疑复核抑制确认偏误",
@@ -182,6 +190,10 @@ def _indexed() -> list[dict]:
         blob = " ".join([doc["id"], doc["title"], doc["body"], " ".join(doc["tags"])])
         out.append({**doc, "_tokens": _tokens(blob)})
     return out
+
+
+def corpus_size() -> int:
+    return len(DOCUMENTS)
 
 
 def list_knowledge() -> list[dict]:

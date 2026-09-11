@@ -1,4 +1,4 @@
-# 慧查 AML V2.0
+# 慧查 AML V2.1
 
 **AI 负责推理，规则负责边界，证据负责事实，人负责最终决策。**
 
@@ -60,12 +60,15 @@ Case → Planner → Evidence Collector → Risk Analyst
 
 - PrivacyMap：姓名 → `CLIENT_001`，账号 → `ACCOUNT_001`，仅 LLM 上下文脱敏，签发前受控还原。
 - 工具白名单只读；禁止改交易/客户/规则、删数据、自动报送。
+- CORS 默认只放行本地 Vite 源，可用 `HUICHA_CORS_ORIGINS` 覆盖；**不是** `allow_origins=["*"]`。
+- `HUICHA_DEMO_TOKEN` 为空则接口开放；填写后需 `X-Huicha-Token`。这是竞赛原型口令，**不是银行登录/SSO**。
 - 日志分级 INFO / WARNING / ERROR / AUDIT，账号类 token 脱敏。
 
 ## 9. Benchmark
 
 - 机制验证：`cd backend && python -m app.experiments`（模板精标 + stub，**不是准确率**）。
 - 能力指标框架：`python experiments/benchmark.py` → **Not evaluated yet**。
+- 当前库约 80 条模板精标（`ALT-EXT-01`…）+ 路演案 A/B/C/D/F/L；`gold_label` 与规则模板同源。
 - 独立测试集约 300–1000 条：TODO。
 
 ## 10. Demo
@@ -103,18 +106,22 @@ npm run dev
 
 ```
 huicha-aml/
-  backend/app/     API、Agent、证据、风险、脱敏、种子
+  backend/app/     API、编排、规则 Analyst、报告草稿、证据、风险、脱敏、种子
   backend/tests/   pytest
   frontend/src/    Case Workspace
   experiments/     benchmark / ablation / hallucination 等框架
 ```
 
+调查流水线拆分：`agents.py` 只编排；取数在 `tools.py`；规则打底在 `analyst_rules.py`；Challenger 校验只走 `validator.py`；报告模板在 `report_draft.py`；落库在 `case_store.py`。
+
+工作台「规则分」来自规则因子合计 + 通过校验的 delta，字段 `confidence_kind=rule_score_not_calibrated`。Validator 的 `support_score` 只表示证据编号是否属于本案（`score_kind=id_membership`），**不是语义置信度**。
+
 ## 14. Limitations
 
-1. 数据主要为**合成数据**。
-2. 属于研究/竞赛原型，**不代表真实银行生产系统**。
-3. 法规知识库是公开要求**转述**，须持续维护，禁止当全文。
-4. LLM 输出必须人工审核。
+1. 数据全部为**合成数据**；模板精标与规则同源，不能写成准确率。
+2. 竞赛/研究原型：SQLite 文件库，无银行 SSO，无生产级权限模型。
+3. 知识库约十余条公开要求**转述**，检索是关键词重叠，不是向量检索。
+4. LLM 输出必须人工审核；Agent 不得自动报送。
 5. 实验结果只对当前机制验证/Benchmark 设置有效。
 6. 能力指标（Accuracy 等）**Not evaluated yet**，未做真人对照效率实验。
 

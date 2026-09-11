@@ -12,7 +12,18 @@ import {
   Timeline,
   message,
 } from "antd";
-import { decide, exportUrl, fetchAlerts, fetchDetail, fetchFeedback, fetchHealth, fetchMetrics, runInvestigate } from "./api";
+import {
+  decide,
+  exportUrl,
+  fetchAlerts,
+  fetchDetail,
+  fetchFeedback,
+  fetchHealth,
+  fetchMetrics,
+  getDemoToken,
+  runInvestigate,
+  setDemoToken,
+} from "./api";
 import { CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline } from "./CasePanels.jsx";
 
 const HUMAN = {
@@ -328,25 +339,42 @@ export default function App() {
   const [clock, setClock] = useState(nowText());
   const [offline, setOffline] = useState(false);
   const [llmOff, setLlmOff] = useState(false);
+  const [healthInfo, setHealthInfo] = useState(null);
+  const [needsToken, setNeedsToken] = useState(false);
+  const [tokenDraft, setTokenDraft] = useState(() => getDemoToken());
   const [feedback, setFeedback] = useState(null);
   const openSeq = useRef(0);
   const inv = detail?.investigation;
 
   async function loadList() {
+    let health = null;
     try {
-      const [list, m, health, fb] = await Promise.all([
+      health = await fetchHealth();
+      setHealthInfo(health);
+      setLlmOff(health?.llm === "off");
+    } catch (e) {
+      setOffline(true);
+      throw e;
+    }
+    try {
+      const [list, m, fb] = await Promise.all([
         fetchAlerts(),
         fetchMetrics(),
-        fetchHealth(),
         fetchFeedback().catch(() => null),
       ]);
       setAlerts(list);
       setMetrics(m);
       setFeedback(fb);
+      setNeedsToken(false);
       setOffline(false);
-      setLlmOff(health?.llm === "off");
     } catch (e) {
-      setOffline(true);
+      const msg = String(e?.message || "");
+      if (health?.auth === "demo_token" || msg.includes("演示口令")) {
+        setNeedsToken(true);
+        setOffline(false);
+      } else {
+        setOffline(true);
+      }
       throw e;
     }
   }
@@ -460,7 +488,11 @@ export default function App() {
             调查员 <b>陈析</b>　002183
           </span>
           <span>{clock}</span>
-          <span className="env">合成数据 · 竞赛原型 · 须人签</span>
+          <span className="env">
+            合成数据 · 竞赛原型 · 须人签
+            {healthInfo?.auth === "demo_token" ? " · 演示口令" : " · 接口开放"}
+            {healthInfo?.kb_docs != null ? ` · 知识库 ${healthInfo.kb_docs} 条` : ""}
+          </span>
         </div>
       </header>
 
@@ -482,6 +514,27 @@ export default function App() {
         <span className="hint" style={{ margin: 0 }}>
           快捷键 1–5 打开 A/B/C/F/L；按钮会直接跑调查。AI 不得自动报送。
         </span>
+        {healthInfo?.auth === "demo_token" && (
+          <>
+            <span className="toolbar-sep" />
+            <Input.Password
+              size="small"
+              placeholder="演示口令 X-Huicha-Token"
+              value={tokenDraft}
+              onChange={(e) => setTokenDraft(e.target.value)}
+              style={{ width: 220 }}
+            />
+            <Button
+              size="small"
+              onClick={() => {
+                setDemoToken(tokenDraft);
+                loadList().catch((err) => message.error(err.message));
+              }}
+            >
+              保存口令
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="workspace">
@@ -503,6 +556,24 @@ export default function App() {
           description="Challenger/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
         />
       )}
+      {needsToken && (
+        <Alert
+          type="warning"
+          banner
+          showIcon
+          message="需要演示口令"
+          description="后端启用了 HUICHA_DEMO_TOKEN。这不是银行 SSO，只是竞赛原型的接口口令。请在上方填入口令后保存。"
+        />
+      )}
+      {healthInfo?.limitations?.[0] && (
+        <Alert
+          type="info"
+          banner
+          showIcon
+          message="诚实边界"
+          description={`${healthInfo.limitations[0]}；知识库为关键词重叠检索（${healthInfo.kb_retrieval || "keyword-overlap"}），不是语义向量库。`}
+        />
+      )}
 
       <div className="layout">
         <aside className="col">
@@ -520,7 +591,7 @@ export default function App() {
             <div className="hint" style={{ marginBottom: 8 }}>
               反馈闭环：采纳 {feedback.decisions.confirm} · 修改 {feedback.decisions.modify} · 驳回{" "}
               {feedback.decisions.reject}
-              {metrics?.labeled ? ` · 精标 ${metrics.labeled}` : ""}
+              {metrics?.labeled ? ` · 模板精标 ${metrics.labeled}` : ""}
             </div>
           )}
           <Input
@@ -594,13 +665,16 @@ export default function App() {
                   <div className="v">{inv ? inv.conclusion_label : "未生成"}</div>
                 </div>
                 <div className="kpi-card">
-                  <div className="k">置信度</div>
-                  <div className="v">{inv ? `${Math.round(inv.confidence * 100)}%` : "—"}</div>
+                  <div className="k">规则分</div>
+                  <div className="v">{inv ? Number(inv.confidence).toFixed(2) : "—"}</div>
                   {inv && (
                     <div className="conf-bar" aria-hidden="true">
-                      <i style={{ width: `${Math.round(inv.confidence * 100)}%` }} />
+                      <i style={{ width: `${Math.max(2, Math.min(98, Number(inv.confidence) * 100))}%` }} />
                     </div>
                   )}
+                  <div className="hint" style={{ margin: "6px 0 0" }}>
+                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则打底，非校准置信度" : "非概率置信度"}
+                  </div>
                 </div>
                 <div className="kpi-card">
                   <div className="k">耗时 / 工具次数</div>
@@ -833,7 +907,7 @@ export default function App() {
       <footer className="footer">
         <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>
         <span>
-          队列 {metrics?.alerts ?? "—"}　精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
+          队列 {metrics?.alerts ?? "—"}　模板精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
           {metrics?.signed ?? "—"}
           {feedback?.rates
             ? `　采纳率 ${Math.round((feedback.rates.confirm || 0) * 100)}%`

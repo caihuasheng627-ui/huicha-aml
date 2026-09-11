@@ -11,10 +11,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .privacy import PrivacyMap
+from .validator import DELTA_BOUND, filter_challenger_items
 
 _ENV_LOADED = False
 DEFAULT_MODEL = "deepseek-v4-flash-0731"
-DELTA_BOUND = 0.15
 
 
 def _load_env() -> None:
@@ -193,9 +193,8 @@ def validate_challenger_items(
     allowed_evidence: set[str],
     privacy: PrivacyMap | None = None,
 ) -> tuple[list[dict], float]:
-    """校验 evidence_ids，裁剪 delta∈±0.15，合计再裁剪到 ±0.15。"""
-    out: list[dict] = []
-    total_delta = 0.0
+    """脱敏还原后交给 validator，不再另写一套 delta/证据规则。"""
+    rows: list[dict] = []
     for it in items[:3]:
         if not isinstance(it, dict):
             continue
@@ -212,20 +211,13 @@ def validate_challenger_items(
             eid = str(eid).strip()
             if privacy:
                 eid = privacy.unmask_text(eid)
-            if eid in allowed_evidence:
+            if eid:
                 evidence_ids.append(eid)
         try:
             delta = float(it.get("delta", 0))
         except (TypeError, ValueError):
             delta = 0.0
-        if not claim:
-            continue
-        # V2：越界 / 无证据 / 虚假证据 直接丢弃，禁止裁剪后混入
-        if abs(delta) > DELTA_BOUND + 1e-9:
-            continue
-        if not evidence_ids and delta != 0:
-            continue
-        out.append(
+        rows.append(
             {
                 "title": claim,
                 "claim": claim,
@@ -234,9 +226,8 @@ def validate_challenger_items(
                 "delta": round(delta, 4),
             }
         )
-        total_delta += delta
-    total_delta = max(-DELTA_BOUND, min(DELTA_BOUND, total_delta))
-    return out, round(total_delta, 4)
+    kept, total, _rejected = filter_challenger_items(rows, allowed=set(allowed_evidence))
+    return kept, total
 
 
 def enrich_challenger(

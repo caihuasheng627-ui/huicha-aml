@@ -1,5 +1,23 @@
 const API = "";
 const INVESTIGATE_TIMEOUT_MS = 90000;
+const TOKEN_KEY = "huicha_demo_token";
+
+export function getDemoToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setDemoToken(token) {
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 async function readError(r, fallback) {
   try {
@@ -26,7 +44,15 @@ async function request(path, { method = "GET", headers, body, timeoutMs, signal 
   }
   const timer = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
   try {
-    const r = await fetch(`${API}${path}`, { method, headers, body, signal: ctrl.signal });
+    const r = await fetch(`${API}${path}`, {
+      method,
+      headers: {
+        ...(getDemoToken() ? { "X-Huicha-Token": getDemoToken() } : {}),
+        ...headers,
+      },
+      body,
+      signal: ctrl.signal,
+    });
     return r;
   } catch (e) {
     throw mapFetchError(e, "无法连接调查服务");
@@ -91,7 +117,9 @@ export async function decide(id, decision, note) {
 }
 
 export function exportUrl(id) {
-  return `${API}/api/alerts/${id}/export`;
+  const t = getDemoToken();
+  const q = t ? `?token=${encodeURIComponent(t)}` : "";
+  return `${API}/api/alerts/${id}/export${q}`;
 }
 
 export async function fetchKnowledge(q = "") {

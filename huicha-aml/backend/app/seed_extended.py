@@ -1,4 +1,4 @@
-"""扩展合成精标集：在路演 5 案之外再生成约 25 条，合计约 30 条带 gold_label。"""
+"""扩展合成精标集。gold_label 由模板写入，与规则同源，不是独立人工标注。"""
 
 from __future__ import annotations
 
@@ -6,13 +6,24 @@ from sqlalchemy.orm import Session
 
 from .models import Account, Alert, Customer, Transaction
 
+PATTERNS = [
+    ("exclude", "大额频繁", "批发备货样例"),
+    ("suggest_report", "拆分存入后集中转出", "拆分样例"),
+    ("suggest_report", "多账户资金归集", "归集样例"),
+    ("observe", "大额转账（未登记亲属）", "观察样例"),
+    ("exclude", "夜间聚集入账", "餐饮夜结样例"),
+]
+
 
 def seed_extended_cases(db: Session) -> None:
-    """幂等：若已有 ALT-EXT-01 则跳过。"""
-    if db.get(Alert, "ALT-EXT-01"):
-        return
+    _seed_case_f(db)
+    _seed_pattern_range(db, 1, 80)
+    db.commit()
 
-    # 案例 F：继续观察（退休 → 未登记对手）
+
+def _seed_case_f(db: Session) -> None:
+    if db.get(Alert, "ALT-F-20260910"):
+        return
     if not db.get(Customer, "C-F"):
         db.add(
             Customer(
@@ -27,7 +38,9 @@ def seed_extended_cases(db: Session) -> None:
                 watchlist=0,
             )
         )
+    if not db.get(Account, "6222-F-6601"):
         db.add(Account(id="6222-F-6601", customer_id="C-F", opened_at="2010-05-20"))
+    if not db.get(Transaction, "TX-F-01"):
         db.add(
             Transaction(
                 id="TX-F-01",
@@ -39,40 +52,31 @@ def seed_extended_cases(db: Session) -> None:
                 remark="转账",
             )
         )
-        db.add(
-            Alert(
-                id="ALT-F-20260910",
-                customer_id="C-F",
-                account_id="6222-F-6601",
-                alert_type="大额转账（未登记亲属）",
-                title="退休客户向未登记对手大额转账",
-                amount=180000,
-                created_at="2026-09-10 09:00:00",
-                status="pending",
-                demo_tag="F",
-                upstream="规则引擎：个人大额 + 对手未登记",
-                gold_label="observe",
-            )
+    db.add(
+        Alert(
+            id="ALT-F-20260910",
+            customer_id="C-F",
+            account_id="6222-F-6601",
+            alert_type="大额转账（未登记亲属）",
+            title="退休客户向未登记对手大额转账",
+            amount=180000,
+            created_at="2026-09-10 09:00:00",
+            status="pending",
+            demo_tag="F",
+            upstream="规则引擎：个人大额 + 对手未登记",
+            gold_label="observe",
         )
+    )
 
-    # 批量模式案：批发误报 / 拆分 / 归集 / 观察 / 排除
-    patterns = [
-        # (idx, kind_label, gold, alert_type, title_prefix)
-        ("exclude", "大额频繁", "批发备货样例"),
-        ("suggest_report", "拆分存入后集中转出", "拆分样例"),
-        ("suggest_report", "多账户资金归集", "归集样例"),
-        ("observe", "大额转账（未登记亲属）", "观察样例"),
-        ("exclude", "夜间聚集入账", "餐饮夜结样例"),
-    ]
 
-    for i in range(1, 26):
-        gold, alert_type, title_prefix = patterns[(i - 1) % len(patterns)]
+def _seed_pattern_range(db: Session, start: int, end: int) -> None:
+    for i in range(start, end + 1):
+        gold, alert_type, title_prefix = PATTERNS[(i - 1) % len(PATTERNS)]
         cid = f"C-X{i:02d}"
         aid = f"6222-X{i:02d}"
         alt_id = f"ALT-EXT-{i:02d}"
         if db.get(Alert, alt_id):
             continue
-
         if gold == "exclude" and "夜间" in alert_type:
             industry, kind, name = "餐饮", "enterprise", f"演示餐饮{i:02d}"
             kyc = "普通"
@@ -89,20 +93,22 @@ def seed_extended_cases(db: Session) -> None:
             industry, kind, name = "贸易代理", "enterprise", f"演示贸易{i:02d}"
             kyc = "关注"
 
-        db.add(
-            Customer(
-                id=cid,
-                name=name,
-                kind=kind,
-                industry=industry,
-                kyc_level=kyc,
-                opened_at="2024-01-15" if gold != "exclude" else "2017-06-01",
-                city="演示市",
-                summary=f"合成精标 {title_prefix}，期望结论 {gold}。",
-                watchlist=0,
+        if not db.get(Customer, cid):
+            db.add(
+                Customer(
+                    id=cid,
+                    name=name,
+                    kind=kind,
+                    industry=industry,
+                    kyc_level=kyc,
+                    opened_at="2024-01-15" if gold != "exclude" else "2017-06-01",
+                    city="演示市",
+                    summary=f"合成精标 {title_prefix}，期望结论 {gold}。",
+                    watchlist=0,
+                )
             )
-        )
-        db.add(Account(id=aid, customer_id=cid, opened_at="2024-01-15"))
+        if not db.get(Account, aid):
+            db.add(Account(id=aid, customer_id=cid, opened_at="2024-01-15"))
 
         txs: list[Transaction] = []
         if "拆分" in alert_type:
@@ -113,7 +119,7 @@ def seed_extended_cases(db: Session) -> None:
                         from_account=f"CASH-{i:02d}{j:02d}",
                         to_account=aid,
                         amount=49500,
-                        occurred_at=f"2026-08-{(j % 28) + 1:02d} 09:{10+j}:00",
+                        occurred_at=f"2026-08-{(j % 28) + 1:02d} 09:{10 + j}:00",
                         channel="ATM/现金",
                         remark="存入",
                     )
@@ -179,7 +185,6 @@ def seed_extended_cases(db: Session) -> None:
                 )
             )
         else:
-            # 批发：稳定上下游
             peer_in = "6222-ST1" if db.get(Account, "6222-ST1") else f"UNK-ST-{i:02d}"
             peer_out = "6222-SUP" if db.get(Account, "6222-SUP") else f"UNK-SUP-{i:02d}"
             for j in range(1, 5):
@@ -190,7 +195,7 @@ def seed_extended_cases(db: Session) -> None:
                         from_account=peer_in,
                         to_account=aid,
                         amount=amt,
-                        occurred_at=f"2026-08-{10+j:02d} 10:00:00",
+                        occurred_at=f"2026-08-{10 + j:02d} 10:00:00",
                         channel="对公转账",
                         remark="货款-备货",
                     )
@@ -201,13 +206,15 @@ def seed_extended_cases(db: Session) -> None:
                         from_account=aid,
                         to_account=peer_out,
                         amount=round(amt * 0.8, 2),
-                        occurred_at=f"2026-08-{10+j:02d} 15:00:00",
+                        occurred_at=f"2026-08-{10 + j:02d} 15:00:00",
                         channel="对公转账",
                         remark="向上游采购",
                     )
                 )
 
-        db.add_all(txs)
+        for t in txs:
+            if not db.get(Transaction, t.id):
+                db.add(t)
         db.add(
             Alert(
                 id=alt_id,
@@ -223,5 +230,3 @@ def seed_extended_cases(db: Session) -> None:
                 gold_label=gold,
             )
         )
-
-    db.commit()

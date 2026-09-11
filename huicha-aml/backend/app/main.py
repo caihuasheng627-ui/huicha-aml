@@ -3,18 +3,19 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .agents import run_investigation
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
-from .knowledge import list_knowledge, search_knowledge
+from .knowledge import corpus_size, list_knowledge, search_knowledge
 from .llm import llm_configured, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
+from .security import auth_mode, cors_origins, demo_token
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -74,14 +75,30 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="慧查 AML", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="慧查 AML", version="2.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def demo_token_guard(request: Request, call_next):
+    path = request.url.path
+    if path in {"/api/health", "/docs", "/openapi.json", "/redoc"} or not path.startswith("/api/"):
+        return await call_next(request)
+    expected = demo_token()
+    if expected:
+        got = request.headers.get("x-huicha-token") or request.query_params.get("token") or ""
+        if got != expected:
+            return JSONResponse(
+                {"detail": "需要演示口令（Header X-Huicha-Token）。竞赛原型，不是银行 SSO。"},
+                status_code=401,
+            )
+    return await call_next(request)
 
 
 def write_audit(db: Session, alert_id: str, actor: str, action: str, detail: str) -> None:
@@ -96,8 +113,18 @@ def health():
         "llm": "bailian" if llm_configured() else "off",
         "model": llm_model() if llm_configured() else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "data_note": "synthetic",
+        "auth": auth_mode(),
+        "cors": cors_origins(),
+        "kb_docs": corpus_size(),
+        "kb_retrieval": "keyword-overlap",
+        "limitations": [
+            "无银行 SSO；HUICHA_DEMO_TOKEN 为空则接口开放",
+            "SQLite 文件库",
+            "知识库为公开要求转述，关键词检索，条数见 kb_docs",
+            "告警为合成数据，gold_label 与规则模板同源",
+        ],
     }
 
 
@@ -105,7 +132,13 @@ def health():
 def kb_index(q: str = ""):
     docs = list_knowledge()
     hits = search_knowledge(q, top_k=8) if q.strip() else docs
-    return {"query": q, "total": len(docs), "hits": hits}
+    return {
+        "query": q,
+        "total": len(docs),
+        "hits": hits,
+        "retrieval": "keyword-overlap",
+        "data_note": "synthetic-paraphrase",
+    }
 
 
 @app.get("/api/alerts")
@@ -322,6 +355,8 @@ def metrics(db: Session = Depends(get_db)):
     return {
         "alerts": len(alerts),
         "labeled": labeled,
+        "labeled_note": "gold_label 由模板写入，与规则同源，不是独立人工标注",
+        "store": "sqlite",
         "drafts": len(invs),
         "signed": signed,
         "by_status": by_status,
@@ -392,7 +427,7 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         f"- AI 建议档：{v2.get('recommendation') or ''}",
         f"- 风险等级：{v2.get('risk_level') or ''}",
         f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
-        f"- 置信度：{payload.get('confidence')}",
+        f"- 规则分：{payload.get('confidence')}（{payload.get('confidence_kind') or 'rule_score_not_calibrated'}，非校准置信度）",
         f"- 人工签发：{signed_line}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",

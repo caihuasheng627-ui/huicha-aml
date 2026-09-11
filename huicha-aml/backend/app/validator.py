@@ -62,8 +62,9 @@ def validate_claim(
     return {
         "valid": True,
         "evidence_ids": ids,
-        "support_score": 0.91 if ids else 0.5,
-        "reason": "证据编号属于本案件工具结果",
+        "support_score": 1.0 if ids else 0.0,
+        "score_kind": "id_membership",
+        "reason": "证据编号属于本案件工具结果（不是语义支持度或校准置信度）",
         "rejected_delta": None,
     }
 

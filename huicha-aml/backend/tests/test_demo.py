@@ -62,6 +62,7 @@ def test_demo_conclusions(client, alert_id, use_challenger, expected):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["conclusion"] == expected
+    assert data["confidence_kind"] == "rule_score_not_calibrated"
     assert data["llm"]["model"] == "deepseek-v4-flash-0731"
     assert data["llm"]["masked"] is True
     assert data["scoring"]["llm_delta"] <= 0.15
@@ -129,12 +130,21 @@ def test_feedback_endpoint(client):
 
 def test_labeled_corpus_size(client):
     r = client.get("/api/metrics")
-    assert r.json()["labeled"] >= 30
+    body = r.json()
+    assert body["labeled"] >= 80
+    assert "模板" in body["labeled_note"]
+    assert body["store"] == "sqlite"
 
 
 def test_health_reports_llm(client):
     r = client.get("/api/health")
-    assert r.json()["llm"] == "bailian"
+    body = r.json()
+    assert body["llm"] == "bailian"
+    assert body["auth"] in {"off", "demo_token"}
+    assert "*" not in body["cors"]
+    assert body["kb_docs"] >= 15
+    assert body["kb_retrieval"] == "keyword-overlap"
+    assert body["limitations"]
 
 
 def test_planner_skips_watchlist_on_wholesale(client):

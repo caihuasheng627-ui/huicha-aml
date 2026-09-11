@@ -44,7 +44,15 @@ def test_cross_case_evidence_rejected():
 def test_valid_claim_passes():
     res = validate_claim(claim="有证", evidence_ids=["TX-1"], delta=-0.1, allowed={"TX-1"}, case_id="A")
     assert res["valid"] is True
-    assert res["support_score"] > 0
+    assert res["support_score"] == 1.0
+    assert res["score_kind"] == "id_membership"
+
+
+def test_valid_claim_without_ids_has_zero_membership_score():
+    res = validate_claim(claim="中性说明", evidence_ids=[], delta=0, allowed={"TX-1"})
+    assert res["valid"] is True
+    assert res["support_score"] == 0.0
+    assert res["score_kind"] == "id_membership"
 
 
 def test_filter_drops_rejected_from_score():

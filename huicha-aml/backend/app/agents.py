@@ -4,6 +4,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from .analyst_rules import CONCLUSION_LABEL, analyze, rule_prior, score_to_conclusion
 from .case_store import persist_investigation
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
@@ -11,18 +12,19 @@ from .llm import enrich_challenger, enrich_report_reason, llm_model
 from .logging_util import audit, warning
 from .privacy import PrivacyMap
 from .prompts import prompt_version
+from .report_draft import apply_reason, render_report
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL, aggregate, counterfactual, score_to_level
 from .schema import InvestigationPlan, PlanStep, RegulationCite, StructuredReport
 from .tool_audit import bind_tool_context, reset_tool_context, tool
 from .tools import (
     ALLOWED_TOOLS,
-    PEER_BASELINE,
     collect_bundle,
     fact_check,
     get_accounts,
+    get_graph,
     get_related_accounts,
     get_timeline,
-    peer_labels_from_graph,
+    get_transactions,
     plan_tool_names,
     search_regulation,
     yuan,
@@ -30,95 +32,12 @@ from .tools import (
 from .typology import tags_from_findings
 from .validator import filter_challenger_items
 
-CONCLUSION_LABEL = {
-    "exclude": "排除",
-    "observe": "继续观察",
-    "suggest_report": "建议上报",
-}
-
 FAKE_ACCOUNT = "6222-FAKE-9999"
-
-
-def _near_threshold(amount: float, band: float = 50000, ratio: float = 0.9) -> bool:
-    return band * ratio <= amount < band
-
-
-def _score_to_conclusion(score: float) -> str:
-    if score < 0.35:
-        return "exclude"
-    if score < 0.55:
-        return "observe"
-    return "suggest_report"
 
 
 @tool("search_knowledge")
 def search_knowledge_tool(alert_type: str, industry: str, as_of: str = "") -> list[dict]:
     return retrieve_for_alert(alert_type, industry, as_of=as_of)
-
-
-def _rule_prior(
-    *,
-    use_challenger: bool,
-    customer: dict,
-    in_labels: list[str],
-    out_labels: list[str],
-    baseline: dict,
-    kb_hits: list[dict],
-    txs: list[dict],
-) -> tuple[float, list[dict]]:
-    """规则先验（有界）：仅在开启 Challenger 时生效，与 LLM delta 叠加。"""
-    if not use_challenger:
-        return 0.0, []
-    prior = 0.0
-    hints: list[dict] = []
-    if (
-        customer["kind"] == "enterprise"
-        and customer["industry"] in PEER_BASELINE
-        and customer["industry"] != "贸易代理"
-        and customer["kyc_level"] not in {"高风险", "关注"}
-        and in_labels
-        and out_labels
-    ):
-        prior -= 0.30
-        peers = "、".join((in_labels + out_labels)[:4])
-        detail = (
-            f"{baseline['peer_note']} 开户于 {customer['opened_at']}，"
-            f"KYC 为{customer['kyc_level']}，主要对手方为{peers}。"
-        )
-        ind_hit = next((h for h in kb_hits if h["kind"] == "industry"), None)
-        if ind_hit:
-            detail += f" 可引用 {ind_hit['id']}"
-        hints.append({"title": "经营合理性（规则先验）", "detail": detail})
-    if customer["kind"] == "individual" and customer["industry"] == "个人-退休":
-        remarks = " ".join(t.get("remark") or "" for t in txs)
-        registered = any(t.get("to_account", "").startswith("RELATIVE-") for t in txs) or "子女" in remarks
-        if registered:
-            prior -= 0.20
-            hints.append(
-                {
-                    "title": "用途可解释（规则先验）",
-                    "detail": f"档案：「{(customer.get('summary') or '')[:80]}」。备注含亲属/购房用途。",
-                }
-            )
-        else:
-            prior -= 0.08
-            hints.append(
-                {
-                    "title": "退休客户但对手未完全核验（规则先验）",
-                    "detail": "养老金客户大额转出，对手登记不完整，仅作弱开脱。",
-                }
-            )
-    if customer["industry"] == "餐饮":
-        prior -= 0.18
-        hints.append({"title": "业态抗辩（规则先验）", "detail": baseline["peer_note"]})
-    if not hints:
-        hints.append(
-            {
-                "title": "未找到强规则先验",
-                "detail": "开户时间短、行业与资金规模不匹配，或对手方分散后突然收口。",
-            }
-        )
-    return round(prior, 4), hints
 
 
 def run_investigation(
@@ -144,24 +63,13 @@ def run_investigation(
         reset_tool_context(tokens)
 
 
-def _run_investigation_inner(
-    db: Session,
-    alert_id: str,
-    *,
-    use_challenger: bool,
-    inject_hallucination: bool,
-    started: float,
-    tool_trace: list,
-) -> dict:
-    # 取数包：Planner 清单决定是否调用基线/图谱/名单（经 @tool 留痕）
+def _collect_stage(db: Session, alert_id: str) -> dict:
     bundle = collect_bundle(db, alert_id)
     alert = bundle["alert"]
     customer = bundle["customer"]
     planned = bundle.get("planned_tools") or plan_tool_names(alert["alert_type"])
     as_of = (alert.get("created_at") or "")[:10]
     txs = bundle["transactions"]
-    baseline = bundle["baseline"]
-    watch_hits = bundle["watch_hits"]
     account_id = alert["account_id"]
     kb_hits = search_knowledge_tool(alert["alert_type"], customer["industry"], as_of)
     if "get_accounts" in planned:
@@ -171,8 +79,6 @@ def _run_investigation_inner(
         peers = get_related_accounts(db, account_id, txs=txs)
         if len(peers) <= 4:
             seen = {t["id"] for t in txs}
-            from .tools import get_transactions
-
             for p in peers:
                 for extra in get_transactions(db, p["account_id"]):
                     if extra["id"] not in seen:
@@ -189,13 +95,126 @@ def _run_investigation_inner(
             if "get_timeline" in planned:
                 timeline = get_timeline(db, account_id, txs=txs)
             if "get_graph" in planned or "get_network" in planned:
-                from .tools import get_graph
-
                 bundle["graph"] = get_graph(db, account_id, txs=txs)
     if "search_regulation" in planned:
         search_regulation(alert["alert_type"], as_of=as_of)
-    kb_ids = "、".join(h["id"] for h in kb_hits) or "（无命中）"
     bundle["facts"]["kb_ids"] = [h["id"] for h in kb_hits]
+    return {
+        "bundle": bundle,
+        "alert": alert,
+        "customer": customer,
+        "planned": planned,
+        "as_of": as_of,
+        "txs": txs,
+        "kb_hits": kb_hits,
+        "timeline": timeline,
+        "account_id": account_id,
+    }
+
+
+def _challenger_stage(
+    *,
+    db: Session,
+    privacy: PrivacyMap,
+    alert: dict,
+    customer: dict,
+    findings: list[dict],
+    baseline: dict,
+    kb_hits: list[dict],
+    txs: list[dict],
+    in_labels: list[str],
+    out_labels: list[str],
+    allowed_evidence: list[str],
+    risk_factors: list[dict],
+    use_challenger: bool,
+) -> dict:
+    if not use_challenger:
+        return {"challenger": [], "usage": {}, "rule_prior": 0.0, "llm_delta": 0.0, "rejected": [], "hints": []}
+    prior, hints = rule_prior(
+        use_challenger=True,
+        customer=customer,
+        in_labels=in_labels,
+        out_labels=out_labels,
+        baseline=baseline,
+        kb_hits=kb_hits,
+        txs=txs,
+    )
+    if prior:
+        risk_factors.append(
+            {
+                "code": "challenger-prior",
+                "label": "质疑规则先验",
+                "delta": prior,
+                "evidence_ids": [customer["id"]],
+                "source": "rule",
+                "tag": None,
+            }
+        )
+    try:
+        raw_ch, _raw_delta, usage = enrich_challenger(
+            db=db,
+            privacy=privacy,
+            alert=alert,
+            customer=customer,
+            findings=findings,
+            baseline=baseline,
+            kb_hits=kb_hits,
+            score_hints=hints,
+            allowed_evidence=allowed_evidence,
+        )
+    except RuntimeError as e:
+        warning(f"Challenger 失败，仅保留规则先验: {e}")
+        raw_ch, usage = [], {}
+    evidence_case = {eid: alert["id"] for eid in allowed_evidence}
+    challenger, llm_delta, rejected = filter_challenger_items(
+        raw_ch,
+        allowed=set(allowed_evidence),
+        case_id=alert["id"],
+        evidence_case=evidence_case,
+    )
+    if abs(llm_delta) > 0:
+        risk_factors.append(
+            {
+                "code": "challenger-llm",
+                "label": "校验后模型 delta",
+                "delta": llm_delta,
+                "evidence_ids": [i for c in challenger for i in (c.get("evidence_ids") or [])],
+                "source": "challenger",
+                "tag": None,
+            }
+        )
+    return {
+        "challenger": challenger,
+        "usage": usage,
+        "rule_prior": prior,
+        "llm_delta": llm_delta,
+        "rejected": rejected,
+        "hints": hints,
+    }
+
+
+def _run_investigation_inner(
+    db: Session,
+    alert_id: str,
+    *,
+    use_challenger: bool,
+    inject_hallucination: bool,
+    started: float,
+    tool_trace: list,
+) -> dict:
+    collected = _collect_stage(db, alert_id)
+    bundle = collected["bundle"]
+    alert = collected["alert"]
+    customer = collected["customer"]
+    planned = collected["planned"]
+    as_of = collected["as_of"]
+    txs = collected["txs"]
+    kb_hits = collected["kb_hits"]
+    timeline = collected["timeline"]
+    account_id = collected["account_id"]
+    baseline = bundle["baseline"]
+    watch_hits = bundle["watch_hits"]
+    kb_ids = "、".join(h["id"] for h in kb_hits) or "（无命中）"
 
     privacy = PrivacyMap()
     privacy.build_from_bundle(bundle)
@@ -233,10 +252,7 @@ def _run_investigation_inner(
                 "结论由规则+校验 delta，人签后才是处置。"
             ),
             "items": plan,
-        }
-    ]
-
-    steps.append(
+        },
         {
             "role": "Collector",
             "title": "只读取数并留痕",
@@ -251,224 +267,22 @@ def _run_investigation_inner(
                 f"知识库命中：{kb_ids}",
                 f"计划工具：{'、'.join(planned)}",
             ],
-        }
-    )
-
-    inflow = [t for t in txs if t["to_account"] == account_id]
-    outflow = [t for t in txs if t["from_account"] == account_id]
-    in_accounts = {t["from_account"] for t in inflow}
-    near = [t for t in inflow if _near_threshold(t["amount"])]
-    night_out = [t for t in outflow if t["occurred_at"][11:13] >= "21" or t["occurred_at"][11:13] < "06"]
-
-    findings = []
-    risk_factors: list[dict] = [
-        {"code": "base-risk", "label": "起始待查分", "delta": 0.12, "evidence_ids": [], "source": "rule", "tag": None}
+        },
     ]
-    score = 0.12
-    in_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "in")
-    out_labels = peer_labels_from_graph(bundle["graph"], account_id, txs, "out")
 
-    if "大额" in alert["alert_type"] or "频繁" in alert["alert_type"]:
-        score += 0.44
-        findings.append(
-            {
-                "code": "upstream-alert",
-                "title": "上游监测命中大额/频繁",
-                "detail": f"检测系统因「{alert['alert_type']}」生成告警，金额{yuan(alert['amount'])}。是否误报需用行业基线与对手方验证。",
-                "evidence_ids": [t["id"] for t in txs[:4]],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "upstream-alert",
-                "label": "上游大额/频繁",
-                "delta": 0.44,
-                "evidence_ids": [t["id"] for t in txs[:4]],
-                "source": "rule",
-                "tag": "high_velocity",
-            }
-        )
-
-    if "拆分" in alert["alert_type"] or "归集" in alert["alert_type"]:
-        score += 0.16
-        risk_factors.append(
-            {
-                "code": "alert-typology",
-                "label": "告警类型拆分/归集",
-                "delta": 0.16,
-                "evidence_ids": [t["id"] for t in txs[:3]],
-                "source": "rule",
-                "tag": "structuring" if "拆分" in alert["alert_type"] else "suspicious_network",
-            }
-        )
-
-    if (
-        customer["kind"] == "enterprise"
-        and customer["industry"] in PEER_BASELINE
-        and len(in_labels) >= 1
-        and len(out_labels) >= 1
-        and customer["industry"] != "贸易代理"
-    ):
-        down = "、".join(in_labels[:3])
-        up = "、".join(out_labels[:3])
-        findings.append(
-            {
-                "code": "pattern-peer",
-                "title": "交易与同业经营特征对照",
-                "detail": (
-                    f"流入对手方主要为{down}，流出对手方主要为{up}；"
-                    f"样本流入{yuan(baseline['sample_in_sum'])}，约为同业月度区间的 {baseline['in_sum_vs_peer']} 倍。"
-                    f"基线说明：{baseline['peer_note']}"
-                ),
-                "evidence_ids": [t["id"] for t in txs[:6]],
-            }
-        )
-
-    if len(near) >= 8:
-        score += 0.38
-        findings.append(
-            {
-                "code": "structuring",
-                "title": "疑似拆分存入以规避大额申报阈值",
-                "detail": f"近窗有 {len(near)} 笔流入落在 4.9 万–5 万区间（如{yuan(near[0]['amount'])}，记录 {near[0]['id']}），随后出现集中转出。",
-                "evidence_ids": [t["id"] for t in near[:8]] + [t["id"] for t in outflow],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "structuring",
-                "label": "拆分存入",
-                "delta": 0.38,
-                "evidence_ids": [t["id"] for t in near[:8]],
-                "source": "rule",
-                "tag": "structuring",
-            }
-        )
-
-    if len(in_accounts) >= 4 and customer["kind"] == "enterprise":
-        score += 0.22
-        findings.append(
-            {
-                "code": "funnel",
-                "title": "多个个人账户向新设企业归集",
-                "detail": f"流入对手方 {len(in_accounts)} 个，开户日 {customer['opened_at']}，KYC 为{customer['kyc_level']}。",
-                "evidence_ids": [t["id"] for t in inflow],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "funnel",
-                "label": "多账户归集",
-                "delta": 0.22,
-                "evidence_ids": [t["id"] for t in inflow],
-                "source": "rule",
-                "tag": "suspicious_network",
-            }
-        )
-
-    if watch_hits:
-        score += 0.18
-        findings.append(
-            {
-                "code": "watchlist",
-                "title": "对手方命中演示关注名单",
-                "detail": "、".join(h["name"] for h in watch_hits) + " 出现在流出路径中。",
-                "evidence_ids": [t["id"] for t in outflow],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "watchlist",
-                "label": "名单命中",
-                "delta": 0.18,
-                "evidence_ids": [t["id"] for t in outflow],
-                "source": "rule",
-                "tag": "suspicious_network",
-            }
-        )
-
-    if night_out and outflow:
-        score += 0.08
-        findings.append(
-            {
-                "code": "night-out",
-                "title": "存在夜间集中转出",
-                "detail": f"流出发生在 {outflow[-1]['occurred_at']}，记录 {outflow[-1]['id']}，金额{yuan(outflow[-1]['amount'])}。",
-                "evidence_ids": [t["id"] for t in night_out],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "night-out",
-                "label": "夜间集中转出",
-                "delta": 0.08,
-                "evidence_ids": [t["id"] for t in night_out],
-                "source": "rule",
-                "tag": "rapid_transfer",
-            }
-        )
-
-    # 未登记对手：抬高可疑但不封顶，便于落入「继续观察」
-    unk_out = [t for t in outflow if str(t.get("to_account", "")).startswith("UNK-")]
-    if unk_out and customer["industry"] == "个人-退休":
-        score += 0.10
-        findings.append(
-            {
-                "code": "unregistered-counterparty",
-                "title": "大额转至未登记对手",
-                "detail": f"存在流向未登记账户的交易（如 {unk_out[0]['id']}），用途待尽调核实。",
-                "evidence_ids": [t["id"] for t in unk_out],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "unregistered-counterparty",
-                "label": "未登记对手",
-                "delta": 0.10,
-                "evidence_ids": [t["id"] for t in unk_out],
-                "source": "rule",
-                "tag": "mule_account",
-            }
-        )
-
-    hops = sorted(txs, key=lambda t: t.get("occurred_at") or "")
-    hop_nodes = {t.get("from_account") for t in hops} | {t.get("to_account") for t in hops}
-    if "多层" in (alert.get("alert_type") or "") and len(hops) >= 3 and len(hop_nodes) >= 3:
-        hop_ids = [t["id"] for t in hops[:4]]
-        score += 0.10
-        findings.append(
-            {
-                "code": "layering",
-                "title": "短时多层资金转移",
-                "detail": (
-                    f"近窗 {len(hops)} 笔途经 {len(hop_nodes)} 个账户，"
-                    f"{hops[0]['from_account']} → … → {hops[-1]['to_account']}，"
-                    f"首笔 {hops[0]['id']} {hops[0]['occurred_at']}，末笔 {hops[-1]['id']} {hops[-1]['occurred_at']}。"
-                ),
-                "evidence_ids": hop_ids,
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "layering",
-                "label": "多层转移",
-                "delta": 0.10,
-                "evidence_ids": hop_ids,
-                "source": "rule",
-                "tag": "layering",
-            }
-        )
-
-    if not findings:
-        findings.append(
-            {
-                "code": "thin",
-                "title": "未形成典型可疑模式",
-                "detail": "交易笔数或对手方不足以支持上报，建议结合柜面用途说明观察或排除。",
-                "evidence_ids": [t["id"] for t in txs[:3]],
-            }
-        )
-
+    analyst = analyze(
+        alert=alert,
+        customer=customer,
+        txs=txs,
+        account_id=account_id,
+        baseline=baseline,
+        watch_hits=watch_hits,
+        graph=bundle["graph"],
+    )
+    findings = analyst["findings"]
+    risk_factors = analyst["risk_factors"]
+    score = analyst["score"]
+    inflow, outflow = analyst["inflow"], analyst["outflow"]
     steps.append(
         {
             "role": "Analyst",
@@ -501,55 +315,28 @@ def _run_investigation_inner(
         for f in findings
     ]
 
-    challenger: list[dict] = []
-    challenger_usage: dict = {}
-    rule_prior = 0.0
-    llm_delta = 0.0
-    rejected_claims: list[dict] = []
+    ch = _challenger_stage(
+        db=db,
+        privacy=privacy,
+        alert=alert,
+        customer=customer,
+        findings=findings,
+        baseline=baseline,
+        kb_hits=kb_hits,
+        txs=txs,
+        in_labels=analyst["in_labels"],
+        out_labels=analyst["out_labels"],
+        allowed_evidence=allowed_evidence,
+        risk_factors=risk_factors,
+        use_challenger=use_challenger,
+    )
+    challenger = ch["challenger"]
+    llm_delta = ch["llm_delta"]
+    rule_prior_v = ch["rule_prior"]
+    rejected_claims = ch["rejected"]
+    challenger_usage = ch["usage"]
 
     if use_challenger:
-        rule_prior, score_hints = _rule_prior(
-            use_challenger=True,
-            customer=customer,
-            in_labels=in_labels,
-            out_labels=out_labels,
-            baseline=baseline,
-            kb_hits=kb_hits,
-            txs=txs,
-        )
-        if rule_prior:
-            risk_factors.append(
-                {
-                    "code": "challenger-prior",
-                    "label": "质疑规则先验",
-                    "delta": rule_prior,
-                    "evidence_ids": [customer["id"]],
-                    "source": "rule",
-                    "tag": None,
-                }
-            )
-        try:
-            raw_ch, raw_delta, challenger_usage = enrich_challenger(
-                db=db,
-                privacy=privacy,
-                alert=alert,
-                customer=customer,
-                findings=findings,
-                baseline=baseline,
-                kb_hits=kb_hits,
-                score_hints=score_hints,
-                allowed_evidence=allowed_evidence,
-            )
-        except RuntimeError as e:
-            warning(f"Challenger 失败，仅保留规则先验: {e}")
-            raw_ch, raw_delta = [], 0.0
-        evidence_case = {eid: alert["id"] for eid in allowed_evidence}
-        challenger, llm_delta, rejected_claims = filter_challenger_items(
-            raw_ch,
-            allowed=set(allowed_evidence),
-            case_id=alert["id"],
-            evidence_case=evidence_case,
-        )
         for i, c in enumerate(challenger, start=1):
             ev_graph.append(
                 {
@@ -568,24 +355,13 @@ def _run_investigation_inner(
                     "data_note": "synthetic",
                 }
             )
-        if abs(llm_delta) > 0:
-            risk_factors.append(
-                {
-                    "code": "challenger-llm",
-                    "label": "校验后模型 delta",
-                    "delta": llm_delta,
-                    "evidence_ids": [i for c in challenger for i in (c.get("evidence_ids") or [])],
-                    "source": "challenger",
-                    "tag": None,
-                }
-            )
-        score = base_score + rule_prior + llm_delta
+        score = base_score + rule_prior_v + llm_delta
         steps.append(
             {
                 "role": "Challenger",
                 "title": "规则先验 + 有界调分（Validator 后）",
                 "content": (
-                    f"规则先验 {rule_prior:+.2f}；校验后 delta {llm_delta:+.2f}（±0.15，"
+                    f"规则先验 {rule_prior_v:+.2f}；校验后 delta {llm_delta:+.2f}（±0.15，"
                     f"无证据/越界已拒绝 {len(rejected_claims)} 条）。prompt={prompt_version('challenger')}。"
                 ),
                 "items": [
@@ -598,8 +374,12 @@ def _run_investigation_inner(
             {
                 "role": "Validator",
                 "title": "Evidence Validator",
-                "content": f"允许证据 {len(allowed_evidence)} 个；拒绝 {len(rejected_claims)} 条 Claim。失败项不得进分。",
-                "items": [r.get("validation", {}).get("reason") or "ok" for r in rejected_claims] or ["本轮 Claim 均通过编号校验"],
+                "content": (
+                    f"允许证据 {len(allowed_evidence)} 个；拒绝 {len(rejected_claims)} 条 Claim。"
+                    "support_score 仅表示编号是否属于本案，不是语义置信度。"
+                ),
+                "items": [r.get("validation", {}).get("reason") or "ok" for r in rejected_claims]
+                or ["本轮 Claim 均通过编号校验"],
             }
         )
     else:
@@ -608,14 +388,13 @@ def _run_investigation_inner(
                 "role": "Challenger",
                 "title": "本轮已关闭（消融）",
                 "content": "未执行规则先验与模型调分，用于对比误上报是否上升。",
-                "items": ["未执行反证，置信度未下调。"],
+                "items": ["未执行反证，规则分未下调。"],
             }
         )
 
     risk = aggregate(risk_factors, challenger_delta=0.0)
-    # 因子已含先验与校验 delta，不再重复加
     score = max(0.05, min(0.95, score))
-    conclusion = _score_to_conclusion(score)
+    conclusion = score_to_conclusion(score)
     risk["final"] = round(score, 4)
     risk["conclusion"] = conclusion
     risk["recommendation"] = CONCLUSION_TO_RECO[conclusion]
@@ -648,26 +427,10 @@ def _run_investigation_inner(
         }
     )
 
-    report = _render_report(
+    report = render_report(
         alert, customer, baseline, findings, challenger, conclusion, txs, inflow, outflow, use_challenger, kb_hits
     )
-    sample_ids = report["sample_ids"]
     fact_retry = False
-    reporter_usage: dict = {}
-
-    def _apply_reason(polished: str) -> None:
-        report["reason"] = polished
-        report["elements"] = [
-            e if e["key"] != "可疑/排除理由" else {"key": e["key"], "value": polished} for e in report["elements"]
-        ]
-        rebuilt = []
-        for line in report["full_text"].split("\n"):
-            if line.startswith("【结论与理由】"):
-                rebuilt.append(f"【结论与理由】{CONCLUSION_LABEL[conclusion]}。{polished}")
-            else:
-                rebuilt.append(line)
-        report["full_text"] = "\n".join(rebuilt)
-
     polished, reporter_usage = enrich_report_reason(
         db=db,
         privacy=privacy,
@@ -677,10 +440,10 @@ def _run_investigation_inner(
         findings=findings,
         challenger=challenger,
         kb_hits=kb_hits,
-        sample_ids=sample_ids,
+        sample_ids=report["sample_ids"],
         draft_reason=report["reason"],
     )
-    _apply_reason(polished)
+    apply_reason(report, polished, conclusion)
     reason_issues = fact_check(report["reason"], bundle["facts"])
     if reason_issues:
         fact_retry = True
@@ -693,11 +456,11 @@ def _run_investigation_inner(
             findings=findings,
             challenger=challenger,
             kb_hits=kb_hits,
-            sample_ids=sample_ids,
+            sample_ids=report["sample_ids"],
             draft_reason=report["reason"],
             prior_issues=reason_issues,
         )
-        _apply_reason(polished)
+        apply_reason(report, polished, conclusion)
 
     if inject_hallucination:
         poison = f"另发现未在工具结果中出现的对手账户 {FAKE_ACCOUNT}。"
@@ -712,8 +475,8 @@ def _run_investigation_inner(
             "title": "监管要素草稿 + 事实回查",
             "content": f"理由由百炼 {llm_model()} 生成（脱敏进模）；事实不匹配不可签发。",
             "items": [
-                f"建议结论：{CONCLUSION_LABEL[conclusion]}（置信度 {int(score * 100)}%）",
-                f"打分：底分 {base_score:.2f} + 规则先验 {rule_prior:+.2f} + 模型delta {llm_delta:+.2f}",
+                f"建议结论：{CONCLUSION_LABEL[conclusion]}（规则分 {score:.2f}，非校准准确率）",
+                f"打分：底分 {base_score:.2f} + 规则先验 {rule_prior_v:+.2f} + 模型delta {llm_delta:+.2f}",
                 f"事实回查问题数：{len(issues)}" + ("（已自动重写一次）" if fact_retry else ""),
                 f"知识库引用：{kb_ids}",
                 f"工具调用次数：{len(tool_trace)}",
@@ -736,7 +499,7 @@ def _run_investigation_inner(
         "inject_hallucination": inject_hallucination,
         "scoring": {
             "base": round(base_score, 4),
-            "rule_prior": rule_prior,
+            "rule_prior": rule_prior_v,
             "llm_delta": llm_delta,
             "final": round(score, 4),
         },
@@ -753,6 +516,7 @@ def _run_investigation_inner(
         "conclusion": conclusion,
         "conclusion_label": CONCLUSION_LABEL[conclusion],
         "confidence": round(score, 2),
+        "confidence_kind": "rule_score_not_calibrated",
         "report": report,
         "evidence": evidence,
         "evidence_graph": ev_graph,
@@ -835,78 +599,3 @@ def _run_investigation_inner(
     except Exception as e:
         warning(f"case persist skipped: {e}")
     return payload
-
-
-def _render_report(
-    alert,
-    customer,
-    baseline,
-    findings,
-    challenger,
-    conclusion,
-    txs,
-    inflow,
-    outflow,
-    use_challenger,
-    kb_hits,
-) -> dict:
-    in_sum = round(sum(t["amount"] for t in inflow), 2)
-    out_sum = round(sum(t["amount"] for t in outflow), 2)
-    sample_ids = "、".join(t["id"] for t in (inflow + outflow)[:6]) or "（无交易）"
-    behavior = (
-        f"客户{customer['name']}（客户号 {customer['id']}，账户 {alert['account_id']}）"
-        f"于告警日 {alert['created_at']} 触发「{alert['alert_type']}」。"
-        f"近窗流入 {len(inflow)} 笔合计{yuan(in_sum)}，流出 {len(outflow)} 笔合计{yuan(out_sum)}。"
-        f"行业登记为{customer['industry']}，开户日期 {customer['opened_at']}。"
-        f"上游来源：{alert['upstream']}。"
-    )
-    suspicion = "；".join(f"{f['title']}（证据 {', '.join(f['evidence_ids'][:4])}）" for f in findings)
-    if challenger:
-        challenge = "；".join(
-            f"{c.get('claim') or c['title']}(Δ{c.get('delta', 0):+.2f}): {c['detail']}" for c in challenger
-        )
-    else:
-        challenge = "本轮未启用 Challenger。"
-    cite_reg = "、".join(h["id"] for h in kb_hits if h["kind"] == "regulation") or "KB-REG-03"
-    cite_all = "、".join(h["id"] for h in kb_hits[:5]) or "（无）"
-    if conclusion == "exclude":
-        reason = (
-            f"{'综合 Challenger 意见，' if use_challenger else ''}"
-            f"交易与{customer['industry']}经营特征及基线说明「{baseline['peer_note']}」相符，"
-            f"建议排除。依据 {cite_reg}，排除理由已记录。关键交易编号：{sample_ids}。"
-        )
-    elif conclusion == "observe":
-        reason = (
-            f"存在疑点但尚不充分，建议继续观察并补充尽调。"
-            f"依据 {cite_reg}，要素仍须写全。关键交易编号：{sample_ids}。"
-        )
-    else:
-        reason = (
-            f"疑点分析认为资金或行为特征与客户身份不匹配，建议按内部规程复核后提交可疑交易报告。"
-            f"依据 {cite_reg}，本草稿覆盖资金行为、疑点与理由，须人工签发后才能报送。"
-            f"关键交易编号：{sample_ids}。"
-        )
-    full = "\n".join(
-        [
-            f"【资金交易及客户行为】{behavior}",
-            f"【疑点分析】{suspicion}",
-            f"【反证】{challenge}",
-            f"【结论与理由】{CONCLUSION_LABEL[conclusion]}。{reason}",
-            f"【知识库引用】{cite_all}",
-        ]
-    )
-    return {
-        "behavior": behavior,
-        "suspicion": suspicion,
-        "challenge": challenge,
-        "reason": reason,
-        "full_text": full,
-        "sample_ids": sample_ids,
-        "elements": [
-            {"key": "报告触发点", "value": alert["alert_type"]},
-            {"key": "资金交易及客户行为", "value": behavior},
-            {"key": "疑点分析", "value": suspicion},
-            {"key": "可疑/排除理由", "value": reason},
-            {"key": "知识库引用", "value": cite_all},
-        ],
-    }

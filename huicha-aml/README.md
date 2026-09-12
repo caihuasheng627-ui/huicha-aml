@@ -64,6 +64,13 @@ Case → Planner → Evidence Collector → Indicator Analyst
 
 每条 `rationale` 必须引用本轮工具返回的证据编号。未知编号、无引用理由、建议上报但无支持证据 → 整份建议校验失败并阻断签发。`confidence` 只是模型自评把握度，不是校准概率。
 
+真实百炼调用中已处理的模型行为（prompt `judge_v2`）：
+
+- 输出被 `max_tokens` 截断或非 JSON：先带针对性提示重试一次，再降级到规则对照；截断输出不写缓存。
+- `missing_evidence` 被填成证据编号/编号区间：自动剔除并记录到 `sanitized_missing_evidence`，只保留材料描述。
+- 反事实轮次：其余指标中同步剔除已移除证据；该轮输出未通过引用校验时 `faithful=null`，不判定为「建议未变化」。
+- 报告回查把 `ALT-`/`EV-` 编号当作整体 token，并把本案告警号、全部合法证据号纳入已知引用，避免把编号里的日期片段误报。
+
 ## 8. Privacy & Security
 
 - PrivacyMap：姓名 → `CLIENT_001`，账号 → `ACCOUNT_001`，仅 LLM 上下文脱敏，签发前受控还原。

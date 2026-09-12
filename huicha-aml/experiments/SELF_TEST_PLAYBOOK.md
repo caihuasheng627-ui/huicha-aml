@@ -58,8 +58,11 @@ py experiments\benchmark.py --real --prompt judge_v2
 # 有效性：盲区 hold-out / 去极性（不改产品默认）
 py experiments\benchmark\build_independent_set.py --variant blind
 py experiments\benchmark\build_independent_set.py --variant nopolarity
+py experiments\benchmark\build_independent_set.py --variant blind_struct
 py experiments\benchmark.py --real --set blind --prompt judge_v3
 py experiments\benchmark.py --real --set nopolarity --prompt judge_v2
+py experiments\benchmark.py --real --set blind_struct --prompt judge_v3
+py experiments\benchmark.py --real --set blind_struct --prompt judge_v2
 ```
 
 ## 5. 读哪些数

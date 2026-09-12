@@ -6,7 +6,10 @@
   - v3：每个 case 先生成真实结构的流水，再调产品 `analyst_rules.analyze()` 得到规则层 findings；
     叙事项带 `support/counter/context` 极性；**不向 Judge 传 `missing_evidence`**；
     证据编号用 `TX-`（流水）/ `IX-`（叙事项）/ `KB-`（知识），与产品 `enrich_judge` 契约一致
-- `build_independent_set.py`：生成器
+- `blind_set.json`：例举词盲区 hold-out
+- `struct_set.json`：结构盲区 hold-out（禁词同盲区，且流水不触发 structuring/funnel/night-out/layering）
+- `real_holdout.json`：真实 hold-out 导入槽（占位样例 `data_note=placeholder`，不写入 RESULTS 主表）
+- `build_independent_set.py`：生成器（`--variant v3|nopolarity|blind|blind_struct`）
 - `runs/`：真实调用原始 jsonl，文件名带 prompt 版本（`<ts>_<judge_vN>.jsonl`）
 
 ```bash

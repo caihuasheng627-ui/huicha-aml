@@ -40,6 +40,9 @@ SET_FILES = {
     "independent": "independent_set.json",
     "nopolarity": "independent_set_nopolarity.json",
     "blind": "blind_set.json",
+    "blind_struct": "struct_set.json",
+    "struct": "struct_set.json",
+    "real": "real_holdout.json",
 }
 
 CONFIDENCE_BINS = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01))
@@ -619,7 +622,7 @@ def update_results_md(result: dict, ablation: dict | None = None) -> None:
     if json_path.exists():
         data = json.loads(json_path.read_text(encoding="utf-8"))
         extra = []
-        for key in ("independent_ablation", "nopolarity_ablation", "blind_ablation"):
+        for key in ("independent_ablation", "nopolarity_ablation", "blind_ablation", "blind_struct_ablation"):
             if key in data and data[key] and key == "independent_ablation" and ablation:
                 continue
             if data.get(key):
@@ -706,11 +709,12 @@ def update_results_json(result: dict) -> dict | None:
         slot = {
             "narrative_vignette_v3_rules_layer_nopolarity": "nopolarity_ablation",
             "narrative_vignette_blind_holdout": "blind_ablation",
+            "narrative_vignette_blind_struct": "blind_struct_ablation",
         }.get(src)
         if slot and ablation:
             data[slot] = ablation
     data["validity_comparison"] = {
-        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 hold-out；同一模型与后处理。",
+        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；同一模型与后处理。",
         "cells": {
             source: {p: _flatten_for_ablation(run) for p, run in runs.items()}
             for source, runs in sorted(by_source.items())
@@ -736,7 +740,7 @@ def main() -> dict:
         "--set",
         dest="set_name",
         default="v3",
-        help="数据集：v3 / nopolarity / blind，或 json 文件名。默认 independent_set.json",
+        help="数据集：v3 / nopolarity / blind / blind_struct / real，或 json 文件名。默认 independent_set.json",
     )
     args = parser.parse_args()
     if args.rerender:

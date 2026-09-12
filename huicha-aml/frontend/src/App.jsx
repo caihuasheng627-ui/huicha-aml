@@ -572,7 +572,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
-            <b>查</b>
+            <b>证</b>
           </div>
           <div className="brand-text">
             <strong>循证慧查</strong>

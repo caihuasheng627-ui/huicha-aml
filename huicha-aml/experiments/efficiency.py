@@ -1,4 +1,4 @@
-"""调查效率：Human vs Human+Huicha。
+"""调查效率：Human vs Human+循证慧查。
 
 记录 Investigation Time / Evidence Missing / Wrong Judgment / Report Completeness。
 没有真人对照实验时禁止填写提升百分比。

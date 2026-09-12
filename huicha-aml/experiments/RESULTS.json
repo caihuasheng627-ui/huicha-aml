@@ -73,17 +73,389 @@
   "hallucination_demo_intercepted": true,
   "independent_real_model": {
     "label": "独立集 / 真实模型 / 产品 Judge 流水线",
-    "status": "pending_real_rerun",
-    "protocol": "judge_v2 → normalize_judge → verify_judge → apply_guardrails",
-    "n": 240,
+    "protocol": "enrich_judge → normalize_judge → verify_judge → apply_guardrails",
+    "prompt": "judge_v2",
+    "split": "independent",
+    "model": "deepseek-v4-flash-0731",
+    "n": 5,
     "n_unique_dataset": 240,
+    "n_scored": 5,
+    "parse_failures": 0,
+    "call_errors": 0,
+    "verify_pass_rate": 1.0,
     "source": "narrative_vignette_v2_combinatorial",
-    "baselines": {
-      "always_suggest_report_macro_f1": 0.2082,
-      "keyword_match_macro_f1": 0.867
+    "macro_f1": 0.1111,
+    "evidence_precision": 0.5,
+    "evidence_recall": 0.8571,
+    "evidence_support": {
+      "evidence_precision": 0.5,
+      "evidence_recall": 0.8571,
+      "evidence_f1": 0.6316,
+      "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
     },
-    "honesty": "不是生产准确率；须人工签发。等待 --real 重跑。",
-    "legacy_note": "v1 已降级，见 independent_real_model_v1_deprecated"
+    "evidence_contradict": {
+      "evidence_precision": 0.0,
+      "evidence_recall": 0.0,
+      "evidence_f1": 0.0,
+      "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+    },
+    "confusion_matrix": {
+      "labels": [
+        "exclude",
+        "observe",
+        "suggest_report"
+      ],
+      "matrix": {
+        "exclude": {
+          "exclude": 0,
+          "observe": 4,
+          "suggest_report": 0
+        },
+        "observe": {
+          "exclude": 0,
+          "observe": 1,
+          "suggest_report": 0
+        },
+        "suggest_report": {
+          "exclude": 0,
+          "observe": 0,
+          "suggest_report": 0
+        }
+      },
+      "other": 0
+    },
+    "baselines": {
+      "always_suggest_report": {
+        "n": 5,
+        "accuracy": 0.0,
+        "macro_f1": 0.0,
+        "false_positive_rate": 1.0,
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 4
+          },
+          "observe": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 1
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        },
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 4
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 1
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        },
+        "label_dist": {
+          "exclude": 4,
+          "observe": 1
+        },
+        "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+      },
+      "keyword_match": {
+        "n": 5,
+        "accuracy": 0.6,
+        "macro_f1": 0.5556,
+        "false_positive_rate": 0.4,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1": 0.6667,
+            "support": 4
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 1
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        },
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 2,
+              "observe": 0,
+              "suggest_report": 2
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        },
+        "label_dist": {
+          "exclude": 4,
+          "observe": 1
+        },
+        "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+      },
+      "note": "无信息/弱规则基线，用于锚定真实模型分数高低；不是产品准确率。"
+    },
+    "by_tag": {
+      "escrow_release": {
+        "n": 1,
+        "macro_f1": 0.0,
+        "accuracy": 0.0,
+        "gold": "exclude",
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        }
+      },
+      "gov_subsidy": {
+        "n": 1,
+        "macro_f1": 0.0,
+        "accuracy": 0.0,
+        "gold": "exclude",
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        }
+      },
+      "inheritance_partial": {
+        "n": 1,
+        "macro_f1": 0.3333,
+        "accuracy": 1.0,
+        "gold": "observe",
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        }
+      },
+      "insurance_claim": {
+        "n": 1,
+        "macro_f1": 0.0,
+        "accuracy": 0.0,
+        "gold": "exclude",
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        }
+      },
+      "payroll_batch": {
+        "n": 1,
+        "macro_f1": 0.0,
+        "accuracy": 0.0,
+        "gold": "exclude",
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 0,
+              "observe": 1,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 0,
+              "suggest_report": 0
+            }
+          },
+          "other": 0
+        }
+      }
+    },
+    "run_log": "C:/Users/蔡华升/Desktop/新建文件夹/icbc/huicha-aml/experiments/benchmark/runs/20260912T132153Z.jsonl",
+    "honesty": "不是生产准确率；须人工签发。本协议已去除标签泄漏并走产品 Judge 契约；仍为合成 vignette。",
+    "caveat": "与 seed_extended 规则模板不同源的组合采样合成集；输入已去除家族名/关键干扰前缀/不透明证据 ID；annotation_reason 仅元数据，不进入模型上下文；不是人工专家标注；禁止写成生产准确率。",
+    "legacy_note": "v1 结果（Macro-F1≈0.69）因 n_unique≈10、标签泄漏、自写 prompt 已降级，不得与本协议数字混比。",
+    "classification": {
+      "n": 5,
+      "accuracy": 0.2,
+      "macro_f1": 0.1111,
+      "false_positive_rate": 0.0,
+      "per_class": {
+        "exclude": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 4
+        },
+        "observe": {
+          "precision": 0.2,
+          "recall": 1.0,
+          "f1": 0.3333,
+          "support": 1
+        },
+        "suggest_report": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "exclude",
+          "observe",
+          "suggest_report"
+        ],
+        "matrix": {
+          "exclude": {
+            "exclude": 0,
+            "observe": 4,
+            "suggest_report": 0
+          },
+          "observe": {
+            "exclude": 0,
+            "observe": 1,
+            "suggest_report": 0
+          },
+          "suggest_report": {
+            "exclude": 0,
+            "observe": 0,
+            "suggest_report": 0
+          }
+        },
+        "other": 0
+      },
+      "label_dist": {
+        "exclude": 4,
+        "observe": 1
+      },
+      "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+    }
   },
   "independent_real_model_v1_deprecated": {
     "label": "独立集 / 真实模型",

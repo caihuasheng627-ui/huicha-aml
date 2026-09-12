@@ -24,20 +24,39 @@
 
 说明：gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。
 
-## 独立集 / 真实模型（v2 协议 · 待重跑）
+## 独立集 / 真实模型（v2 协议）
 
-- 协议：`judge_v2` → `normalize_judge` → `verify_judge` → `apply_guardrails`
-- 标注集：`independent_set.json`（n=240，**n_unique=240**，source=`narrative_vignette_v2_combinatorial`）
-- 离线基线（无需密钥）：always_suggest_report Macro-F1 **0.2082**；keyword_match Macro-F1 **0.867**
-- 真实模型数字：**待你在本机执行** `python experiments/benchmark.py --real` 后写入
-- 原始输出将落盘 `experiments/benchmark/runs/<timestamp>.jsonl`
-- 口径：不是生产准确率；须人工签发。已去除标签泄漏；仍为合成 vignette。
+- 协议：`enrich_judge → normalize_judge → verify_judge → apply_guardrails` · prompt=`judge_v2`
+- 标注集：`independent_set.json`（n=5，n_unique=240，source=narrative_vignette_v2_combinatorial）
+- 模型：`deepseek-v4-flash-0731`（真实调用）
+- 计分条数：5（parse_failures=0，call_errors=0）
+- verify 通过率：1.0
+- Macro-F1：**0.1111**
+- Evidence 支持侧 P/R：**0.5 / 0.8571**
+- Evidence 反证侧 P/R：**0.0 / 0.0**
+- 基线 Macro-F1：always_report=0.0 · keyword=0.5556
+- 原始输出：`C:/Users/蔡华升/Desktop/新建文件夹/icbc/huicha-aml/experiments/benchmark/runs/20260912T132153Z.jsonl`
+- 口径：不是生产准确率；须人工签发。本协议已去除标签泄漏并走产品 Judge 契约；仍为合成 vignette。
+- 旧版说明：v1 结果（Macro-F1≈0.69）因 n_unique≈10、标签泄漏、自写 prompt 已降级，不得与本协议数字混比。
 
-### v1 结果已降级（勿再引用为模型能力）
+### 混淆矩阵（行=gold，列=pred；仅 parse 成功样本）
 
-- 原 Macro-F1≈0.69 等数字仅作「API 能打通」记录
-- 已知硬伤：n_unique≈10、标签泄漏、SYSTEM 贴合测试集叙事、未走产品 Judge、解析失败并入 observe、Evidence gold 含空 KYC
-- 详见 `RESULTS.json` → `independent_real_model_v1_deprecated`
+| gold \ pred | exclude | observe | suggest_report |
+| --- | --- | --- | --- |
+| exclude | 0 | 4 | 0 |
+| observe | 0 | 1 | 0 |
+| suggest_report | 0 | 0 | 0 |
+
+### 按 tag 分组 Macro-F1
+
+- `escrow_release` (gold=exclude, n=1): macro_f1=0.0, acc=0.0
+- `gov_subsidy` (gold=exclude, n=1): macro_f1=0.0, acc=0.0
+- `inheritance_partial` (gold=observe, n=1): macro_f1=0.3333, acc=1.0
+- `insurance_claim` (gold=exclude, n=1): macro_f1=0.0, acc=0.0
+- `payroll_batch` (gold=exclude, n=1): macro_f1=0.0, acc=0.0
+
+- per_class：`{"exclude": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 4}, "observe": {"precision": 0.2, "recall": 1.0, "f1": 0.3333, "support": 1}, "suggest_report": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0}}`
+- caveat：与 seed_extended 规则模板不同源的组合采样合成集；输入已去除家族名/关键干扰前缀/不透明证据 ID；annotation_reason 仅元数据，不进入模型上下文；不是人工专家标注；禁止写成生产准确率。
 
 ## 能力指标占位（规则同源 stub）
 - golden_set / test_set 仍保留框架槽位；test_set 为空时能力指标 Not evaluated yet。

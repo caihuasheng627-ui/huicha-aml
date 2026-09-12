@@ -313,7 +313,6 @@ export default function App() {
   const [needsToken, setNeedsToken] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [invError, setInvError] = useState(false);
-  const [honestyHint, setHonestyHint] = useState(true);
   const [user, setUser] = useState(() => getStoredUser());
   const [loginOpen, setLoginOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -444,12 +443,6 @@ export default function App() {
       message.success("调查草稿已生成，待人工签发");
     }
   }, [playback.phase]);
-
-  useEffect(() => {
-    if (!honestyHint || !healthInfo?.limitations?.[0]) return undefined;
-    const t = setTimeout(() => setHonestyHint(false), 6000);
-    return () => clearTimeout(t);
-  }, [honestyHint, healthInfo?.limitations?.[0]]);
 
   async function onInvestigate(id = current) {
     if (!id || loading) return;
@@ -737,18 +730,6 @@ export default function App() {
           }
         />
       )}
-      {honestyHint && healthInfo?.limitations?.[0] && (
-        <Alert
-          type="info"
-          banner
-          showIcon
-          closable
-          afterClose={() => setHonestyHint(false)}
-          message="诚实边界"
-          description={`${healthInfo.limitations[0]}；知识库为关键词重叠检索（${healthInfo.kb_retrieval || "keyword-overlap"}），不是语义向量库。`}
-        />
-      )}
-
       <div className="layout">
         <aside className="col">
           <div className="col-title">

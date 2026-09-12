@@ -51,7 +51,7 @@ function WelcomeBrief() {
   return (
     <div className="welcome">
       <div className="welcome-logo">
-        <BrandLogo size={52} />
+        <BrandLogo size={68} />
       </div>
       <div className="welcome-title">循证慧查</div>
       <div className="welcome-subtitle">证据约束的反洗钱 AI 调查工作台 · 快捷操作指南</div>
@@ -554,7 +554,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <BrandLogo size={34} />
+          <BrandLogo size={36} />
           <div className="brand-text">
             <div className="brand-title-row">
               <strong>循证慧查</strong>

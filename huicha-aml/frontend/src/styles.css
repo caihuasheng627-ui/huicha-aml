@@ -66,10 +66,12 @@ body {
 .brand-logo {
   flex: none;
   display: block;
-  transition: transform 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), filter 0.22s ease;
+  filter: drop-shadow(0 2px 4px rgba(15, 39, 68, 0.1));
 }
 .brand:hover .brand-logo {
-  transform: scale(1.04);
+  transform: scale(1.06);
+  filter: drop-shadow(0 3px 6px rgba(15, 39, 68, 0.16));
 }
 .brand-title-row {
   display: flex;
@@ -704,9 +706,12 @@ body {
   text-align: center;
 }
 .welcome-logo {
-  margin-bottom: 12px;
-  opacity: 0.9;
-  filter: drop-shadow(0 2px 8px rgba(15, 39, 68, 0.12));
+  margin-bottom: 14px;
+  filter: drop-shadow(0 4px 14px rgba(15, 39, 68, 0.16));
+  transition: transform 0.25s ease;
+}
+.welcome-logo:hover {
+  transform: scale(1.04);
 }
 .welcome-title {
   font-family: var(--font-brand);

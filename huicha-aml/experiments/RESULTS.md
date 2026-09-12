@@ -22,8 +22,28 @@
 
 ## 4. 幻觉演示账号拦截：通过
 
-## 5. 能力指标（独立标注集）
-- Accuracy / Precision / Recall / F1 / Macro-F1 / FPR / Evidence P&R：**Not evaluated yet**
-- 请运行 `python experiments/benchmark.py` 查看框架状态，不要把本节写成产品准确率。
-
 说明：gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。
+
+## 独立集 / 真实模型
+
+- 标注集：`independent_set.json`（n=220，source=narrative_vignette_v1）
+- 模型：`deepseek-v4-flash-0731`（真实百炼调用，非 stub）
+- Macro-F1：**0.6921**
+- Evidence P：**0.8062** / R：**0.7247**
+- 调用失败条数：0
+- 口径：不是生产准确率；须人工签发后才是处置。
+
+### 混淆矩阵（行=gold，列=pred）
+
+| gold \ pred | exclude | observe | suggest_report |
+| --- | --- | --- | --- |
+| exclude | 53 | 35 | 0 |
+| observe | 0 | 22 | 22 |
+| suggest_report | 0 | 0 | 88 |
+
+- per_class：`{"exclude": {"precision": 1.0, "recall": 0.6023, "f1": 0.7518, "support": 88}, "observe": {"precision": 0.386, "recall": 0.5, "f1": 0.4356, "support": 44}, "suggest_report": {"precision": 0.8, "recall": 1.0, "f1": 0.8889, "support": 88}}`
+- caveat：与 seed_extended 规则模板不同源的合成 vignette 标注集；annotation_reason 为脚本写入的标注理由，不是人工专家标注；禁止写成生产准确率。
+
+## 能力指标占位（规则同源 stub）
+- golden_set / test_set 仍保留框架槽位；test_set 为空时能力指标 Not evaluated yet。
+- 上节为独立 vignette 集上的真实模型实验数字，禁止与 stub 机制验证混写成产品准确率。

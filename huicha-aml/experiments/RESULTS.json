@@ -70,5 +70,106 @@
     ],
     "caveat": "gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。"
   },
-  "hallucination_demo_intercepted": true
+  "hallucination_demo_intercepted": true,
+  "independent_real_model": {
+    "label": "独立集 / 真实模型",
+    "split": "independent",
+    "model": "deepseek-v4-flash-0731",
+    "n": 220,
+    "errors": 0,
+    "source": "narrative_vignette_v1",
+    "macro_f1": 0.6921,
+    "evidence_precision": 0.8062,
+    "evidence_recall": 0.7247,
+    "confusion_matrix": {
+      "labels": [
+        "exclude",
+        "observe",
+        "suggest_report"
+      ],
+      "matrix": {
+        "exclude": {
+          "exclude": 53,
+          "observe": 35,
+          "suggest_report": 0
+        },
+        "observe": {
+          "exclude": 0,
+          "observe": 22,
+          "suggest_report": 22
+        },
+        "suggest_report": {
+          "exclude": 0,
+          "observe": 0,
+          "suggest_report": 88
+        }
+      },
+      "other": 0
+    },
+    "honesty": "不是生产准确率；须人工签发后才是处置。",
+    "caveat": "与 seed_extended 规则模板不同源的合成 vignette 标注集；annotation_reason 为脚本写入的标注理由，不是人工专家标注；禁止写成生产准确率。",
+    "classification": {
+      "n": 220,
+      "accuracy": 0.7409,
+      "macro_f1": 0.6921,
+      "false_positive_rate": 0.1667,
+      "per_class": {
+        "exclude": {
+          "precision": 1.0,
+          "recall": 0.6023,
+          "f1": 0.7518,
+          "support": 88
+        },
+        "observe": {
+          "precision": 0.386,
+          "recall": 0.5,
+          "f1": 0.4356,
+          "support": 44
+        },
+        "suggest_report": {
+          "precision": 0.8,
+          "recall": 1.0,
+          "f1": 0.8889,
+          "support": 88
+        }
+      },
+      "confusion_matrix": {
+        "labels": [
+          "exclude",
+          "observe",
+          "suggest_report"
+        ],
+        "matrix": {
+          "exclude": {
+            "exclude": 53,
+            "observe": 35,
+            "suggest_report": 0
+          },
+          "observe": {
+            "exclude": 0,
+            "observe": 22,
+            "suggest_report": 22
+          },
+          "suggest_report": {
+            "exclude": 0,
+            "observe": 0,
+            "suggest_report": 88
+          }
+        },
+        "other": 0
+      },
+      "label_dist": {
+        "exclude": 88,
+        "observe": 44,
+        "suggest_report": 88
+      },
+      "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+    },
+    "evidence": {
+      "evidence_precision": 0.8062,
+      "evidence_recall": 0.7247,
+      "evidence_f1": 0.7633,
+      "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+    }
+  }
 }

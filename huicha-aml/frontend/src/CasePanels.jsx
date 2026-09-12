@@ -357,8 +357,9 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
                     {it.appended ? "已写入" : SLIP_ST[it.status] || it.status}
                   </small>
                 </div>
-                <p>{it.reason}</p>
-                <p className="slip-how">怎么补：{it.suggested_action}</p>
+                <p title={`${it.reason} 怎么补：${it.suggested_action}`}>
+                  {it.reason} <span className="slip-how">怎么补：{it.suggested_action}</span>
+                </p>
               </div>
             </li>
           );
@@ -374,6 +375,9 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
           {writing ? "写入中…" : `写入草稿备注${selected.length ? `（${selected.length}）` : ""}`}
         </button>
         <span>勾选后写入调查员意见，便于签发或「修改后采纳」时一并带上。</span>
+        {String(data?.human_note || "").includes("【补证清单】") ? (
+          <em className="slip-echo">已落入下方草稿备注，不自动报送。</em>
+        ) : null}
       </div>
     </div>
   );

@@ -337,6 +337,9 @@ export default function App() {
       setChecklist(data);
       setNote(data.human_note || "");
       message.success(`已将 ${data.appended?.length || itemIds.length} 条写入草稿备注`);
+      requestAnimationFrame(() => {
+        document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     } catch (e) {
       message.error(e.message);
     } finally {
@@ -960,7 +963,8 @@ export default function App() {
                     onWrite={onWriteChecklist}
                   />
                   <Input.TextArea
-                    rows={2}
+                    id="investigator-note"
+                    rows={5}
                     style={{ marginTop: 10 }}
                     placeholder="调查员意见（修改说明 / 驳回原因）"
                     value={note}

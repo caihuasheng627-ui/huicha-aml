@@ -60,6 +60,8 @@ Case → Planner → Evidence Collector → Risk Analyst
 
 越界、无证据、未知编号、跨案、未知谓词、谓词经数据核验不成立 → **Reject**。最终分 = 规则因子合计 + **通过校验**的 delta，夹紧到 [0, 1]。
 
+工作台「质询对抗演示集」用 16 条手写越权 Claim 打同一条校验路径（攻击 → 拦截），不是幻觉评测集。
+
 ## 8. Privacy & Security
 
 - PrivacyMap：姓名 → `CLIENT_001`，账号 → `ACCOUNT_001`，仅 LLM 上下文脱敏，签发前受控还原。

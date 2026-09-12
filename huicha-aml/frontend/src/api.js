@@ -185,6 +185,23 @@ export async function fetchChecklist(id) {
   return r.json();
 }
 
+export async function fetchAttacks() {
+  const r = await request("/api/attacks");
+  if (!r.ok) throw new Error(await readError(r, "无法加载质询对抗演示集"));
+  return r.json();
+}
+
+export async function runAttacks(id, { attackId = "", runAll = false } = {}) {
+  const r = await request(`/api/alerts/${id}/attacks/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ attack_id: attackId, run_all: runAll }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "对抗演示失败");
+  return data;
+}
+
 export async function runCounterfactual(id, dropCodes, dropChallenger) {
   const r = await request(`/api/alerts/${id}/counterfactual`, {
     method: "POST",

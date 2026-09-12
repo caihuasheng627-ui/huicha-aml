@@ -35,7 +35,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { AuditTimeline, ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { AttackDemoPanel, AuditTimeline, ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
@@ -900,6 +900,7 @@ export default function App() {
               {inv && <ChallengerPanel run={inv.challenger_run} onSelect={selectEvidence} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <VerifiedClaims rows={inv.challenger} onSelect={selectEvidence} />}
+              {inv && <AttackDemoPanel caseId={current} hasDraft={Boolean(inv)} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && (
                 <CounterfactualBox

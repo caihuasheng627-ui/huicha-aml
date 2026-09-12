@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { fetchAttacks, runAttacks } from "./api";
 
 export function clickSource(e) {
   const raw = String(e?.raw_reference || "");
@@ -257,6 +258,120 @@ export function VerifiedClaims({ rows, onSelect }) {
           <div className="hint">{(r.validation?.reason || "") + " · " + (r.evidence_ids || []).join("、")}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function fmtDelta(delta) {
+  const n = Number(delta || 0);
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
+}
+
+export function AttackDemoPanel({ caseId, hasDraft }) {
+  const [catalog, setCatalog] = useState([]);
+  const [note, setNote] = useState("");
+  const [results, setResults] = useState({});
+  const [summary, setSummary] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setResults({});
+    setSummary(null);
+    setError("");
+    fetchAttacks()
+      .then((data) => {
+        if (!alive) return;
+        setCatalog(data.items || []);
+        setNote(data.note || "");
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError(e.message || "无法加载演示集");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [caseId]);
+
+  async function run(attackId, runAll) {
+    if (!hasDraft) {
+      setError("请先生成调查草稿");
+      return;
+    }
+    setBusy(runAll ? "all" : attackId);
+    setError("");
+    try {
+      const data = await runAttacks(caseId, { attackId, runAll });
+      setResults((prev) => {
+        const next = { ...prev };
+        for (const it of data.items || []) next[it.id] = it;
+        return next;
+      });
+      setSummary({ intercepted: data.intercepted, total: data.total, note: data.note });
+    } catch (e) {
+      setError(e.message || "对抗演示失败");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (!catalog.length && !error) return null;
+
+  const intercepted = Object.values(results).filter((r) => r.rejected).length;
+  const ran = Object.keys(results).length;
+
+  return (
+    <div className="atk">
+      <div className="atk-hd">
+        <div>
+          <b>质询对抗演示集</b>
+          <span>攻击 → 拦截 · 走真实 Validator，不是评测集</span>
+        </div>
+        <button type="button" className="atk-run" disabled={!hasDraft || Boolean(busy)} onClick={() => run("", true)}>
+          {busy === "all" ? "拦截中…" : "一键演示"}
+        </button>
+      </div>
+      {note ? <div className="hint">{note}</div> : null}
+      {error ? <div className="atk-err">{error}</div> : null}
+      {summary ? (
+        <div className="atk-sum">
+          拦截 {summary.intercepted}/{summary.total}
+          {summary.note ? ` · ${summary.note}` : ""}
+        </div>
+      ) : ran ? (
+        <div className="atk-sum">已演示 {ran} 条 · 拦截 {intercepted}</div>
+      ) : (
+        <div className="hint">选一条或一键把越权 Claim 丢给本案校验器。</div>
+      )}
+      <ul className="atk-list">
+        {catalog.map((it) => {
+          const hit = results[it.id];
+          return (
+            <li key={it.id} className={`atk-row${hit ? (hit.rejected ? " is-reject" : " is-pass") : ""}`}>
+              <div className="atk-body">
+                <div className="atk-line">
+                  <abbr className="atk-seal">{it.attack_type_label || it.attack_type}</abbr>
+                  <strong>
+                    {it.id} {it.title}
+                  </strong>
+                  <small>Δ{fmtDelta(it.delta)}</small>
+                </div>
+                <p>{it.claim}</p>
+                {hit ? (
+                  <code className={hit.rejected ? "is-reject" : "is-pass"}>
+                    {hit.rejected ? "Reject" : "Accept"} · {hit.reason || "无原因"}
+                  </code>
+                ) : null}
+              </div>
+              <button type="button" className="atk-one" disabled={!hasDraft || Boolean(busy)} onClick={() => run(it.id, false)}>
+                {busy === it.id ? "…" : "演示"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

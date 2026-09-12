@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .agents import run_investigation
+from .attack_demo import bind_context, get_attack, list_attacks, run_attacks
 from .checklist import (
     apply_remarks_to_report,
     attach_checklist,
@@ -153,6 +154,7 @@ def health():
             "知识库为公开要求转述，关键词检索，条数见 kb_docs",
             "告警为合成数据，gold_label 与规则模板同源",
             "Challenger 调分须封闭谓词在本案快照上执行为真",
+            "质询对抗演示集为手写越权 Claim，走真实 Validator，不是幻觉评测集",
         ],
     }
 
@@ -414,6 +416,11 @@ class CounterfactualBody(BaseModel):
     drop_challenger: bool = False
 
 
+class AttackRunBody(BaseModel):
+    attack_id: str = ""
+    run_all: bool = False
+
+
 def _checklist_payload(db: Session, alert_id: str) -> tuple[Alert, Investigation, dict]:
     alert = db.get(Alert, alert_id)
     inv = get_investigation(db, alert_id)
@@ -446,6 +453,51 @@ def get_checklist(alert_id: str, db: Session = Depends(get_db)):
 @app.get("/api/cases/{case_id}/checklist")
 def get_case_checklist(case_id: str, db: Session = Depends(get_db)):
     return get_checklist(case_id, db)
+
+
+@app.get("/api/attacks")
+def get_attacks():
+    return {
+        "items": list_attacks(),
+        "note": "手写越权 Claim，走真实 Evidence Validator，不是幻觉评测集。",
+    }
+
+
+def _run_attack_demo(db: Session, alert_id: str, body: AttackRunBody) -> dict:
+    alert = db.get(Alert, alert_id)
+    inv = get_investigation(db, alert_id)
+    if not alert:
+        raise HTTPException(404, "告警不存在")
+    if not inv:
+        raise HTTPException(400, "请先生成调查草稿")
+    attack_id = (body.attack_id or "").strip()
+    if not body.run_all and not attack_id:
+        raise HTTPException(400, "请指定 attack_id 或 run_all")
+    if attack_id and not get_attack(attack_id):
+        raise HTTPException(404, "演示攻击不存在")
+    payload = json.loads(inv.payload_json)
+    ctx = bind_context(db, alert_id, payload)
+    ids = None if body.run_all else [attack_id]
+    items = run_attacks(ids, ctx)
+    intercepted = sum(1 for it in items if it.get("rejected"))
+    return {
+        "alert_id": alert_id,
+        "run_all": bool(body.run_all or len(items) > 1),
+        "intercepted": intercepted,
+        "total": len(items),
+        "items": items,
+        "note": "由 Evidence Validator 实判，未进分。",
+    }
+
+
+@app.post("/api/alerts/{alert_id}/attacks/run")
+def post_run_attacks(alert_id: str, body: AttackRunBody, db: Session = Depends(get_db)):
+    return _run_attack_demo(db, alert_id, body)
+
+
+@app.post("/api/cases/{case_id}/attacks/run")
+def post_case_run_attacks(case_id: str, body: AttackRunBody, db: Session = Depends(get_db)):
+    return _run_attack_demo(db, case_id, body)
 
 
 @app.post("/api/alerts/{alert_id}/counterfactual")

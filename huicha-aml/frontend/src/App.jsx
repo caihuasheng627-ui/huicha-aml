@@ -31,6 +31,7 @@ import {
   runInvestigate,
   setDemoToken,
 } from "./api";
+import BrandLogo from "./BrandLogo.jsx";
 import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
@@ -571,9 +572,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <b>查</b>
-          </div>
+          <BrandLogo />
           <div className="brand-text">
             <strong>循证慧查</strong>
           </div>

@@ -50,9 +50,11 @@ const EMPTY_KEYS = [
 function WelcomeBrief() {
   return (
     <div className="welcome">
-      <div className="welcome-mark" aria-hidden="true">
-        循证慧查
+      <div className="welcome-logo">
+        <BrandLogo size={52} />
       </div>
+      <div className="welcome-title">循证慧查</div>
+      <div className="welcome-subtitle">证据约束的反洗钱 AI 调查工作台 · 快捷操作指南</div>
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -552,10 +554,13 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <BrandLogo />
+          <BrandLogo size={34} />
           <div className="brand-text">
-            <strong>循证慧查</strong>
-            <span>告警后调查工作台</span>
+            <div className="brand-title-row">
+              <strong>循证慧查</strong>
+              <span className="brand-tag">AML JUDGE</span>
+            </div>
+            <span>证据约束的反洗钱调查工作台</span>
           </div>
         </div>
         <div className="staff">

@@ -31,6 +31,8 @@ PEER_BASELINE = {
 }
 
 CANDIDATE_RE = re.compile(
+    r"EV-[A-Z0-9\-]+|"
+    r"ALT-[A-Z0-9\-]+|"
     r"TX-[A-Z0-9\-]+|"
     r"6222-[A-Z0-9\-]+|"
     r"ACC-\d+|"
@@ -440,6 +442,7 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
         "accounts": sorted({alert["account_id"], *[t["from_account"] for t in txs], *[t["to_account"] for t in txs]}),
         "dates": sorted({t["occurred_at"][:10] for t in txs} | {alert["created_at"][:10], customer["opened_at"]}),
         "names": sorted(n for n in name_set if n),
+        "ref_ids": [alert["id"]],
     }
     return {
         "alert": alert,
@@ -511,8 +514,11 @@ def fact_check(text: str, facts: dict) -> list[dict]:
     known.update(facts.get("tx_ids", []))
     known.update(facts.get("accounts", []))
     known.update(facts.get("dates", []))
+    # 告警号/证据号里嵌着 YYYYMMDD，模型有时会单独写出紧凑日期，视同已知日期。
+    known.update(str(d).replace("-", "") for d in facts.get("dates", []))
     known.update(facts.get("names", []))
     known.update(facts.get("kb_ids", []))
+    known.update(facts.get("ref_ids", []))
 
     issues = []
     seen = set()

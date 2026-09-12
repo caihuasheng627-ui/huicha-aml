@@ -311,3 +311,112 @@ def test_reporter_generates_all_four_sections(client):
     text = data["report"]["full_text"]
     for section in ("资金交易及客户行为", "疑点分析", "反证与缺失证据", "结论与理由"):
         assert f"【{section}】" in text
+
+
+def _valid_judge(evidence_id: str, disposition: str = "suggest_report") -> dict:
+    return {
+        "disposition": disposition,
+        "confidence": 0.8,
+        "typologies": ["structuring"],
+        "supporting_evidence_ids": [evidence_id],
+        "contradicting_evidence_ids": [],
+        "missing_evidence": ["资金来源说明"],
+        "rationale": [{"text": "依据代表性流水", "evidence_ids": [evidence_id]}],
+        "next_actions": [],
+    }
+
+
+def test_truncated_judge_output_gets_one_repair_before_fallback(client, monkeypatch):
+    calls: list[list] = []
+
+    def fake_enrich(**kwargs):
+        calls.append(kwargs.get("prior_issues") or [])
+        if len(calls) == 1:
+            raise RuntimeError("Judge 输出超过 max_tokens 被截断（completion_tokens=1000），请压缩证据引用数量")
+        return _valid_judge("TX-B-IN-01"), {"finish_reason": "stop"}
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    assert data["judge_repaired"] is True
+    assert data["judge_fallback_reason"] == ""
+    assert data["judge_validation"]["passed"] is True
+    assert data["judge"]["disposition"] == "suggest_report"
+    assert calls[1] and calls[1][0]["kind"] == "invalid_output"
+    assert "截断" in calls[1][0]["message"]
+
+
+def test_judge_missing_evidence_ids_are_sanitized(client, monkeypatch):
+    def fake_enrich(**kwargs):
+        decision = _valid_judge("TX-B-IN-01")
+        decision["missing_evidence"] = [
+            "EV-ALT-B-20260910-001",
+            "EV-ALT-B-20260910-002至030",
+            "TX-B-IN-02",
+            "资金来源说明",
+            "受益所有人信息",
+        ]
+        return decision, {}
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    assert data["judge"]["missing_evidence"] == ["资金来源说明", "受益所有人信息"]
+    assert len(data["judge"]["sanitized_missing_evidence"]) == 3
+    gaps = [i["title"] for i in data["checklist"]["items"] if i["id"].startswith("AI-GAP-")]
+    assert gaps and all("EV-ALT" not in g and "TX-B" not in g for g in gaps)
+    assert data["fact_issues"] == []
+    assert data["can_sign"] is True
+
+
+def test_alert_id_in_report_is_not_flagged_by_fact_check(client, monkeypatch):
+    from app import agents
+
+    original = agents.enrich_full_report
+
+    def with_alert_id(**kwargs):
+        text, usage = original(**kwargs)
+        alert_id = kwargs["context"]["alert"]["id"]
+        return text + f"\n告警编号 {alert_id}，证据 EV-{alert_id}-001，日期 {alert_id[-8:]}。", usage
+
+    monkeypatch.setattr("app.agents.enrich_full_report", with_alert_id)
+    data = client.post("/api/alerts/ALT-L-20260910/investigate").json()
+    assert "ALT-L-20260910" in data["report"]["full_text"]
+    assert data["fact_issues"] == []
+    assert data["can_sign"] is True
+
+
+def test_counterfactual_invalid_output_is_not_reported_as_unchanged(client, monkeypatch):
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        if any(p.get("kind") == "counterfactual" for p in prior):
+            return _valid_judge("TX-NOPE-1", disposition="observe"), {}
+        return _valid_judge("TX-B-IN-01"), {}
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    cf = data["counterfactual"]
+    assert cf["performed"] is True
+    assert cf["validated"] is False
+    assert cf["faithful"] is None
+    assert cf["counterfactual_conclusion"] == "observe"
+    assert "未通过引用校验" in cf["note"]
+    assert "未变化" not in cf["note"]
+
+
+def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
+    seen: dict = {}
+
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        if any(p.get("kind") == "counterfactual" for p in prior):
+            seen["findings"] = kwargs["findings"]
+            seen["allowed"] = kwargs["allowed_evidence"]
+            return _valid_judge(kwargs["allowed_evidence"][0], disposition="observe"), {}
+        return _valid_judge("TX-B-IN-01"), {}
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    removed = set(data["counterfactual"]["removed_evidence_ids"])
+    assert "TX-B-IN-01" in removed
+    assert not (removed & set(seen["allowed"]))
+    assert all(not (removed & set(f.get("evidence_ids") or [])) for f in seen["findings"])
+    assert data["counterfactual"]["faithful"] is True

@@ -315,7 +315,7 @@ export function CounterfactualBox({ cf }) {
       <div className="v2-hd">关键证据反事实</div>
       <p className="hint">
         {cf.performed
-          ? `移除 ${(cf.removed_evidence_ids || []).join("、")}：${DECISION_LABEL[cf.original_conclusion] || cf.original_conclusion} → ${DECISION_LABEL[cf.counterfactual_conclusion] || cf.counterfactual_conclusion || "校验失败"}。${cf.note}`
+          ? `移除 ${(cf.removed_evidence_ids || []).join("、")}：${DECISION_LABEL[cf.original_conclusion] || cf.original_conclusion} → ${DECISION_LABEL[cf.counterfactual_conclusion] || cf.counterfactual_conclusion || "无输出"}${cf.validated === false ? "（该轮输出未通过引用校验）" : ""}。${cf.note}`
           : cf.note || `${cf.assumption}：${cf.original} → ${cf.counterfactual}`}
       </p>
     </div>

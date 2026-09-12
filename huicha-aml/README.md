@@ -90,7 +90,7 @@ cd ../frontend
 npm install
 ```
 
-复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Challenger/Reporter 走内置 stub（不是百炼）。
+复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Challenger/Reporter 走内置 stub（工作台会标「机制演示模式（LLM Stub）」，不是百炼线上模型）。
 
 ## 12. Usage
 

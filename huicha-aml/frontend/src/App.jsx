@@ -16,6 +16,7 @@ import {
 import {
   appendChecklist,
   clearSession,
+  runCounterfactual,
   decide,
   downloadExport,
   fetchAlerts,
@@ -34,7 +35,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { AuditTimeline, ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
@@ -526,6 +527,9 @@ export default function App() {
       </header>
 
       <div className="toolbar">
+        <span className={`llm-badge is-${healthInfo?.llm || "off"}`}>
+          {healthInfo?.llm_label || (healthInfo?.llm === "stub" ? "机制演示模式（LLM Stub）" : healthInfo?.llm === "bailian" ? "百炼/线上模型" : "模型未配置")}
+        </span>
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
           {experimentMode ? "实验模式：用于 Challenger 消融实验" : "AI反向质询 · 已启用"}
         </span>
@@ -642,7 +646,7 @@ export default function App() {
           banner
           showIcon
           message="未配置 DASHSCOPE_API_KEY"
-          description="Challenger/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
+          description="未配置密钥且未开 Stub。可在 backend/.env 填写百炼密钥，或设 HUICHA_LLM_STUB=1 走机制演示（不是线上模型）。"
         />
       )}
       {needsToken && (
@@ -843,8 +847,10 @@ export default function App() {
                   <Tag color="orange">本案为消融结果</Tag>
                 )}
                 {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
-                {inv?.llm?.reporter || inv?.llm?.challenger ? (
-                  <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
+                {inv?.llm?.label ? (
+                  <Tag color={inv.llm.stub ? "default" : "blue"}>{inv.llm.label}</Tag>
+                ) : inv?.llm?.reporter || inv?.llm?.challenger ? (
+                  <Tag color="blue">{inv.llm.model || "百炼/线上模型"}</Tag>
                 ) : null}
               </Space>
               <div className="client-box">
@@ -895,7 +901,15 @@ export default function App() {
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <VerifiedClaims rows={inv.challenger} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
-              {inv && <CounterfactualBox cf={inv.counterfactual} />}
+              {inv && (
+                <CounterfactualBox
+                  cf={inv.counterfactual}
+                  risk={inv.risk}
+                  scoring={inv.scoring}
+                  caseId={current}
+                  onCompute={(codes, dropCh) => runCounterfactual(current, codes, dropCh)}
+                />
+              )}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
               {inv && <RejectedClaims rows={inv.rejected_claims} onSelect={selectEvidence} />}
               {inv?.fact_issues?.length > 0 && (
@@ -1082,22 +1096,7 @@ export default function App() {
                   },
                 ]}
               />
-              <Divider plain orientation="left">
-                操作审计
-              </Divider>
-              {(detail?.audit || [])
-                .filter((x) => x.action !== "tool")
-                .slice(-6)
-                .map((x) => {
-                  const line = auditText(x);
-                  return (
-                    <div className="ev" key={x.id} style={{ cursor: "default" }}>
-                      <code>{line.title}</code>
-                      {line.time ? <span className="hint" style={{ margin: "0 0 0 8px" }}>{line.time}</span> : null}
-                      <div>{line.detail}</div>
-                    </div>
-                  );
-                })}
+              <AuditTimeline events={detail?.audit_timeline || []} />
             </>
           ) : (
             <div className="hint">生成草稿后，这里会显示一度对手方、知识库引用、流水和审计。</div>

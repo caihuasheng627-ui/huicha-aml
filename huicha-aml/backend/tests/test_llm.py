@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.llm import _extract_json_array, _strip_fence, chat, llm_mode, normalize_challenger_items, validate_challenger_items
+from app.llm import _extract_json_array, _strip_fence, chat, llm_label, llm_mode, llm_stub_enabled, normalize_challenger_items, validate_challenger_items
 
 
 def test_normalize_keeps_predicate_and_args():
@@ -32,6 +32,8 @@ def test_stub_mode_chat(monkeypatch):
 
     llm_mod._ENV_LOADED = False
     assert llm_mode() == "stub"
+    assert llm_stub_enabled() is True
+    assert "Stub" in llm_label()
     text, usage = chat(
         [
             {"role": "system", "content": "你是反洗钱 Challenger。predicate 必填。"},

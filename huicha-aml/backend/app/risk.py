@@ -76,16 +76,51 @@ def aggregate(factors: list[dict], *, challenger_delta: float = 0.0) -> dict:
     }
 
 
-def counterfactual(factors: list[dict], drop_codes: list[str], *, challenger_delta: float = 0.0) -> dict:
-    kept = [f for f in factors if f.get("code") not in set(drop_codes)]
-    alt = aggregate(kept, challenger_delta=challenger_delta)
+CONCLUSION_LABEL = {
+    "exclude": "排除",
+    "observe": "继续观察",
+    "suggest_report": "建议上报",
+}
+
+
+def counterfactual(
+    factors: list[dict],
+    drop_codes: list[str] | None = None,
+    *,
+    challenger_delta: float = 0.0,
+    drop_challenger: bool = False,
+) -> dict:
+    codes = [c for c in (drop_codes or []) if c]
+    slots = 2 - (1 if drop_challenger else 0)
+    if slots < 0:
+        drop_challenger = False
+        slots = 2
+    codes = codes[: max(0, slots)]
+    kept = [f for f in factors if f.get("code") not in set(codes)]
+    alt_delta = 0.0 if drop_challenger else challenger_delta
+    alt = aggregate(kept, challenger_delta=alt_delta)
     orig = aggregate(factors, challenger_delta=challenger_delta)
+    names = []
+    by_code = {f.get("code"): f for f in factors}
+    for c in codes:
+        names.append((by_code.get(c) or {}).get("label") or c)
+    if drop_challenger:
+        names.append("Challenger 调整")
+    assumption = f"若无此疑点「{'、'.join(names) or '（未选）'}」"
     return {
-        "dropped": drop_codes,
+        "dropped": codes,
+        "drop_challenger": drop_challenger,
         "original": orig["final"],
         "counterfactual": alt["final"],
         "difference": round(orig["final"] - alt["final"], 4),
-        "assumption": f"若去掉因子 {','.join(drop_codes) or '（无）'} 后重算",
+        "assumption": assumption,
+        "original_conclusion": orig["conclusion"],
         "alt_conclusion": alt["conclusion"],
+        "original_label": CONCLUSION_LABEL[orig["conclusion"]],
+        "alt_label": CONCLUSION_LABEL[alt["conclusion"]],
+        "original_recommendation": orig["recommendation"],
+        "alt_recommendation": alt["recommendation"],
+        "original_recommendation_label": orig["recommendation_label"],
+        "alt_recommendation_label": alt["recommendation_label"],
         "data_note": "rule-based counterfactual, synthetic",
     }

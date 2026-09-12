@@ -74,6 +74,17 @@ def llm_mode() -> str:
         return "off"
 
 
+LLM_LABEL = {
+    "stub": "机制演示模式（LLM Stub）",
+    "bailian": "百炼/线上模型",
+    "off": "模型未配置",
+}
+
+
+def llm_label(mode: str | None = None) -> str:
+    return LLM_LABEL.get(mode or llm_mode(), "模型未配置")
+
+
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     usage = {
         "prompt_tokens": 8,

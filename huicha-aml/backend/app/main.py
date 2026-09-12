@@ -19,7 +19,9 @@ from .checklist import (
 )
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .knowledge import corpus_size, list_knowledge, search_knowledge
-from .llm import llm_mode, llm_model
+from .audit_view import build_audit_timeline
+from .llm import llm_label, llm_mode, llm_model, llm_stub_enabled
+from .risk import counterfactual as rerun_counterfactual
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
 from .security import (
@@ -135,6 +137,8 @@ def health():
         "ok": True,
         "name": "循证慧查",
         "llm": llm_mode(),
+        "llm_stub": llm_stub_enabled(),
+        "llm_label": llm_label(),
         "model": llm_model() if llm_mode() != "off" else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
         "version": "2.1.0",
@@ -280,6 +284,13 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
             }
             for x in logs
         ],
+        "audit_timeline": build_audit_timeline(
+            logs,
+            payload,
+            format_cn=format_cn,
+            human_note=inv.human_note if inv else "",
+            human_decision=inv.human_decision if inv else "",
+        ),
     }
 
 
@@ -398,6 +409,11 @@ class ChecklistAppendBody(BaseModel):
     item_ids: list[str] = []
 
 
+class CounterfactualBody(BaseModel):
+    drop_codes: list[str] = []
+    drop_challenger: bool = False
+
+
 def _checklist_payload(db: Session, alert_id: str) -> tuple[Alert, Investigation, dict]:
     alert = db.get(Alert, alert_id)
     inv = get_investigation(db, alert_id)
@@ -430,6 +446,32 @@ def get_checklist(alert_id: str, db: Session = Depends(get_db)):
 @app.get("/api/cases/{case_id}/checklist")
 def get_case_checklist(case_id: str, db: Session = Depends(get_db)):
     return get_checklist(case_id, db)
+
+
+@app.post("/api/alerts/{alert_id}/counterfactual")
+def post_counterfactual(alert_id: str, body: CounterfactualBody, db: Session = Depends(get_db)):
+    alert = db.get(Alert, alert_id)
+    inv = get_investigation(db, alert_id)
+    if not alert:
+        raise HTTPException(404, "告警不存在")
+    if not inv:
+        raise HTTPException(400, "请先生成调查草稿")
+    codes = [c for c in (body.drop_codes or []) if str(c).strip()]
+    if len(codes) + (1 if body.drop_challenger else 0) > 2:
+        raise HTTPException(400, "最多同时去掉 2 个疑点（规则因子和/或 Challenger Δ）")
+    payload = json.loads(inv.payload_json)
+    factors = (payload.get("risk") or {}).get("factors") or []
+    delta = float((payload.get("scoring") or {}).get("llm_delta") or 0)
+    cf = rerun_counterfactual(
+        factors,
+        codes,
+        challenger_delta=delta,
+        drop_challenger=body.drop_challenger,
+    )
+    payload["counterfactual"] = cf
+    inv.payload_json = json.dumps(payload, ensure_ascii=False)
+    db.commit()
+    return {"ok": True, "alert_id": alert_id, **cf}
 
 
 @app.post("/api/alerts/{alert_id}/checklist/append")

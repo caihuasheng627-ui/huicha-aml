@@ -149,6 +149,8 @@ def test_health_reports_llm(client):
     r = client.get("/api/health")
     body = r.json()
     assert body["llm"] == "bailian"
+    assert body["llm_stub"] is False
+    assert "百炼" in body["llm_label"]
     assert body["auth"] in {"off", "demo_token"}
     assert "*" not in body["cors"]
     assert body["kb_docs"] >= 15

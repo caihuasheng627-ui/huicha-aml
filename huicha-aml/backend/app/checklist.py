@@ -11,9 +11,10 @@ THIN_KYC = frozenset({"缺失", "未知"})
 ANON_PREFIXES = ("CASH-", "POS-")
 REL_MARKERS = ("RELATIVE-", "子女", "亲属", "配偶", "父母")
 UNNAMED_HINTS = ("未核名", "未知", "空壳", "未登记")
-FUNNEL_TYPES = ("归集", "拆分", "快进快出")
+FUNNEL_TYPES = ("归集", "拆分", "快进快出", "多层")
 FUNNEL_TAGS = frozenset({"mule_account", "pass_through", "layering", "structuring", "suspicious_network"})
 REVIEW_BANDS = frozenset({"REPORT_REVIEW", "EDD"})
+HOT_ALERT = ("拆分", "归集", "多层", "快进快出")
 LARGE_AMT = 50_000.0
 NOTE_MARK = "【补证清单】"
 
@@ -47,12 +48,23 @@ def _reco(ctx: dict) -> str:
     return str(ctx.get("recommendation") or "")
 
 
-def _band_priority(reco: str, *, missing: bool) -> str:
+def _hot_case(ctx: dict) -> bool:
+    alert_type = str(ctx.get("alert_type") or "")
+    tags = set(ctx.get("suspicious_types") or [])
+    return any(k in alert_type for k in HOT_ALERT) or bool(tags & FUNNEL_TAGS)
+
+
+def _band_priority(reco: str, *, missing: bool, ctx: dict | None = None) -> str:
     if not missing:
         return "low"
+    hot = _hot_case(ctx or {})
     if reco in REVIEW_BANDS:
         return "high"
     if reco == "MONITOR":
+        return "high" if hot else "medium"
+    if reco == "EDD" or reco == "关注":
+        return "high"
+    if hot:
         return "medium"
     return "low"
 
@@ -224,7 +236,7 @@ def _rule_counterparty_kyc(ctx: dict) -> dict:
             f"决策档 {reco or '未定'}，签发前应能说明对手是谁。",
             suggested_action="向客户经理或开户机构调取对手方尽调摘要，核对应受益所有人与经营地址；现金存入需柜面身份记录。",
             status="missing",
-            priority=_band_priority(reco, missing=True),
+            priority=_band_priority(reco, missing=True, ctx=ctx),
             appended=appended,
         )
     if reco in REVIEW_BANDS:
@@ -266,7 +278,7 @@ def _rule_fund_purpose(ctx: dict) -> dict:
             f"无法单独用流水说明资金从哪来、到哪去。",
             suggested_action="约谈客户索取用途说明；对公补充合同/订单号，对私补充亲属关系或生活用途书面说明。",
             status="missing",
-            priority=_band_priority(reco, missing=True),
+            priority=_band_priority(reco, missing=True, ctx=ctx),
             appended=appended,
         )
     if reco in REVIEW_BANDS:
@@ -333,7 +345,7 @@ def _rule_relationship(ctx: dict) -> dict:
             reason="；".join(why) + "。仅有转账关系，缺少股权、亲属或业务合同证明。",
             suggested_action="收集对手与客户的关系说明：股权/代持、亲属、上下游合同，或客户经理走访记录。",
             status="missing",
-            priority=_band_priority(reco, missing=True),
+            priority=_band_priority(reco, missing=True, ctx=ctx),
             appended=appended,
         )
     if reco in REVIEW_BANDS:
@@ -401,7 +413,7 @@ def _rule_tx_voucher(ctx: dict) -> dict:
             reason=f"存在 {len(large)} 笔大额往来，当前结论不必立刻调原件，但归档时建议抽查回单。",
             suggested_action="按行内抽查要求复印大额回单，不必阻断排除/观察。",
             status="optional",
-            priority=_band_priority(reco, missing=False) if reco == "CLOSE" else "medium",
+            priority=_band_priority(reco, missing=False, ctx=ctx) if reco == "CLOSE" else "medium",
             appended=appended,
         )
     return _item(
@@ -450,7 +462,9 @@ def _rule_customer_edd(ctx: dict) -> dict:
             reason="；".join(bits) + "。现有档案不足以支撑签发后的复核材料包。",
             suggested_action="调阅开户申请、受益所有人、经营场所与近期回访记录；关注类客户按 EDD 清单补齐。",
             status="missing",
-            priority=_band_priority(reco, missing=True) if reco in REVIEW_BANDS or kyc in {"关注", "高风险"} else "medium",
+            priority=_band_priority(reco, missing=True, ctx=ctx)
+            if reco in REVIEW_BANDS or kyc in {"关注", "高风险"}
+            else "medium",
             appended=appended,
         )
     if reco == "MONITOR":
@@ -508,6 +522,8 @@ def summarize(items: list[dict], ctx: dict) -> dict:
         "elements_filled": ctx.get("elements_filled") or 0,
         "elements_total": ctx.get("elements_total") or 0,
         "recommendation": ctx.get("recommendation") or "",
+        "alert_type": ctx.get("alert_type") or "",
+        "band": ctx.get("recommendation") or "",
         "note": "规则清单，不是监管结论；写入草稿备注便于人签前核对，系统不会自动报送。",
     }
 
@@ -515,7 +531,7 @@ def summarize(items: list[dict], ctx: dict) -> dict:
 def format_item_line(item: dict) -> str:
     pri = {"high": "高", "medium": "中", "low": "低"}.get(item.get("priority") or "", item.get("priority") or "")
     return (
-        f"- [{item.get('category')}/{pri}] {item.get('title')}："
+        f"- [优先级{pri}/{item.get('category')}] {item.get('title')}："
         f"{item.get('reason')} 建议：{item.get('suggested_action')}"
     )
 

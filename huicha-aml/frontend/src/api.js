@@ -185,6 +185,17 @@ export async function fetchChecklist(id) {
   return r.json();
 }
 
+export async function runCounterfactual(id, dropCodes, dropChallenger) {
+  const r = await request(`/api/alerts/${id}/counterfactual`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ drop_codes: dropCodes, drop_challenger: dropChallenger }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "反事实重算失败");
+  return data;
+}
+
 export async function appendChecklist(id, itemIds) {
   const r = await request(`/api/alerts/${id}/checklist/append`, {
     method: "POST",

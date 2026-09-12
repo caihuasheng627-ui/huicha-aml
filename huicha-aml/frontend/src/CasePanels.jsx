@@ -283,14 +283,117 @@ export function RejectedClaims({ rows, onSelect }) {
   );
 }
 
-export function CounterfactualBox({ cf }) {
-  if (!cf) return null;
+export function CounterfactualBox({ cf, risk, scoring, caseId, onCompute }) {
+  const factors = (risk?.factors || []).filter((f) => f.code && Math.abs(Number(f.delta) || 0) >= 0.05);
+  const chDelta = Number(scoring?.llm_delta ?? risk?.challenger_delta ?? 0);
+  const hasCh = Math.abs(chDelta) > 1e-9;
+  const [picked, setPicked] = useState(() => new Set((cf?.dropped || []).slice(0, 2)));
+  const [dropCh, setDropCh] = useState(Boolean(cf?.drop_challenger));
+  const [live, setLive] = useState(cf);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setPicked(new Set((cf?.dropped || []).slice(0, 2)));
+    setDropCh(Boolean(cf?.drop_challenger));
+    setLive(cf);
+  }, [caseId, cf?.original, (cf?.dropped || []).join(",")]);
+
+  const used = picked.size + (dropCh ? 1 : 0);
+
+  async function apply(nextCodes, nextCh) {
+    const n = nextCodes.length + (nextCh ? 1 : 0);
+    if (n > 2) return;
+    setPicked(new Set(nextCodes));
+    setDropCh(nextCh);
+    if (!onCompute) return;
+    setBusy(true);
+    try {
+      const out = await onCompute(nextCodes, nextCh);
+      if (out) setLive(out);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleFactor(code) {
+    const next = new Set(picked);
+    if (next.has(code)) next.delete(code);
+    else if (used >= 2) return;
+    else next.add(code);
+    apply([...next], dropCh);
+  }
+
+  function toggleCh() {
+    if (!dropCh && used >= 2) return;
+    apply([...picked], !dropCh);
+  }
+
+  if (!cf && !factors.length) return null;
+  const view = live || cf || {};
+  return (
+    <div className="v2-panel cf-box">
+      <div className="v2-hd">反事实（规则重算）</div>
+      <p className="hint">勾选 1–2 个疑点，查看「若无此疑点」后的分档。不改正式结论，须人签。</p>
+      <ul className="cf-picks">
+        {factors.map((f) => (
+          <li key={f.code}>
+            <label>
+              <input
+                type="checkbox"
+                checked={picked.has(f.code)}
+                disabled={busy || (!picked.has(f.code) && used >= 2)}
+                onChange={() => toggleFactor(f.code)}
+              />
+              <span>{f.label || f.code}</span>
+              <em className={Number(f.delta) < 0 ? "down" : "up"}>
+                {Number(f.delta) > 0 ? "+" : ""}
+                {Number(f.delta).toFixed(2)}
+              </em>
+            </label>
+          </li>
+        ))}
+        {hasCh && (
+          <li>
+            <label>
+              <input type="checkbox" checked={dropCh} disabled={busy || (!dropCh && used >= 2)} onChange={toggleCh} />
+              <span>Challenger 调整</span>
+              <em className={chDelta < 0 ? "down" : "up"}>
+                {chDelta > 0 ? "+" : ""}
+                {chDelta.toFixed(2)}
+              </em>
+            </label>
+          </li>
+        )}
+      </ul>
+      <p className="cf-result">
+        {view.assumption || "若无此疑点"}：{Number(view.original ?? 0).toFixed(2)}（{view.original_label || "原档"}）→{" "}
+        {Number(view.counterfactual ?? 0).toFixed(2)}（{view.alt_label || "反事实档"}）
+        {view.difference != null ? `，差 ${Number(view.difference).toFixed(2)}` : ""}
+      </p>
+    </div>
+  );
+}
+
+export function AuditTimeline({ events }) {
+  const rows = events || [];
+  if (!rows.length) return null;
   return (
     <div className="v2-panel">
-      <div className="v2-hd">反事实（规则重算）</div>
-      <p className="hint">
-        {cf.assumption}：{cf.original} → {cf.counterfactual}（差 {cf.difference}）
-      </p>
+      <div className="v2-hd">巡审时间线</div>
+      <ol className="audit-tl">
+        {rows.map((e) => (
+          <li key={e.id} className={`is-${e.kind}`}>
+            <div>
+              <b>{e.title}</b>
+              <span>
+                {e.actor}
+                {e.at ? ` · ${e.at}` : ""}
+              </span>
+            </div>
+            {e.detail ? <p>{e.detail}</p> : null}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

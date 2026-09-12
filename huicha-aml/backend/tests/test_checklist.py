@@ -57,6 +57,7 @@ def test_incomplete_review_case_lists_missing_materials():
     assert by_id["relationship_proof"]["status"] == "missing"
     assert by_id["large_tx_voucher"]["status"] == "missing"
     assert by_id["customer_edd"]["status"] == "missing"
+    assert by_id["counterparty_kyc"]["priority"] == "high"
     assert all(i["reason"] and i["suggested_action"] for i in items)
 
 
@@ -156,6 +157,7 @@ def test_merge_note_is_idempotent_on_mark():
     second = merge_note(first, [item])
     assert second.count("【补证清单】") == 1
     assert format_item_line(item) in second
+    assert "优先级高" in first
 
 
 def test_context_from_payload_reads_elements_and_reco():
@@ -234,6 +236,31 @@ def test_named_graph_peers_without_kyc_field_are_not_thin():
     )
     kyc = next(i for i in items if i["id"] == "counterparty_kyc")
     assert kyc["status"] == "satisfied"
+
+
+def test_counterfactual_api_and_audit_timeline(client):
+    inv = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    assert inv.status_code == 200
+    factors = (inv.json().get("risk") or {}).get("factors") or []
+    codes = [f["code"] for f in factors if float(f.get("delta") or 0) > 0.1][:1]
+    assert codes
+    r = client.post(
+        "/api/alerts/ALT-B-20260910/counterfactual",
+        json={"drop_codes": codes, "drop_challenger": True},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "若无此疑点" in body["assumption"]
+    assert body["drop_challenger"] is True
+    assert body["alt_label"]
+    too_many = client.post(
+        "/api/alerts/ALT-B-20260910/counterfactual",
+        json={"drop_codes": ["a", "b"], "drop_challenger": True},
+    )
+    assert too_many.status_code == 400
+    detail = client.get("/api/alerts/ALT-B-20260910").json()
+    kinds = {e["kind"] for e in detail.get("audit_timeline") or []}
+    assert "tool" in kinds or "pipeline" in kinds
 
 
 def test_checklist_requires_draft(client):

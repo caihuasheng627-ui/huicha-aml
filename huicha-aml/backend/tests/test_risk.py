@@ -32,6 +32,24 @@ def test_counterfactual_rule_rerun():
     assert cf["original"] > cf["counterfactual"]
     assert cf["dropped"] == ["vel"]
     assert "synthetic" in cf["data_note"]
+    assert "若无此疑点" in cf["assumption"]
+    assert "速度" in cf["assumption"]
+    assert cf["alt_label"]
+
+
+def test_counterfactual_caps_two_and_can_drop_challenger():
+    factors = [
+        {"code": "a", "label": "拆分", "delta": 0.30},
+        {"code": "b", "label": "夜间", "delta": 0.20},
+        {"code": "c", "label": "名单", "delta": 0.10},
+    ]
+    cf = counterfactual(factors, ["a", "b", "c"], challenger_delta=-0.12, drop_challenger=True)
+    assert cf["dropped"] == ["a"]
+    assert cf["drop_challenger"] is True
+    assert "Challenger" in cf["assumption"]
+    both = counterfactual(factors, ["a", "b"], challenger_delta=-0.12, drop_challenger=False)
+    assert both["dropped"] == ["a", "b"]
+    assert both["drop_challenger"] is False
 
 
 def test_score_bands():

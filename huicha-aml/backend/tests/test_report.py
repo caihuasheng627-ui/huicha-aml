@@ -26,6 +26,26 @@ def test_report_binds_evidence_and_regulation(client):
     assert "须" in sr["human_review"] or "人工" in sr["human_review"]
 
 
+def test_regulation_cites_carry_paraphrase_for_review():
+    """法规依据要能在前端展开核对，转述正文与生效日不能缺。"""
+    from app.agents import regulation_cites
+    from app.knowledge import search_knowledge
+
+    hits = search_knowledge("可疑交易报告要素 排除理由 人工签发", kind="regulation", top_k=3)
+    assert hits
+    cites = [c.model_dump() for c in regulation_cites(hits, "2026-09-10")]
+    assert len(cites) == len(hits)
+    for cite in cites:
+        assert cite["regulation_id"].startswith("KB-REG-")
+        assert cite["evidence"] and cite["source"]
+        assert cite["effective_date"] and cite["as_of"] == "2026-09-10"
+
+    fallback = [c.model_dump() for c in regulation_cites([], "2026-09-10")]
+    assert len(fallback) == 1
+    assert fallback[0]["regulation_id"] == ""
+    assert "未检索到" in fallback[0]["title"]
+
+
 def test_export_is_draft_not_filing(client):
     client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
     r = client.get("/api/alerts/ALT-B-20260910/export")

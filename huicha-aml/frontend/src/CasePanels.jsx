@@ -412,16 +412,58 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
 
 export function RegulationBox({ cites, onSelect }) {
   const rows = cites || [];
+  const [openId, setOpenId] = useState("");
   if (!rows.length) return null;
   return (
     <div className="v2-panel">
       <div className="v2-hd">法规依据（转述，须点开核对）</div>
-      {rows.map((r) => (
-        <div key={r.regulation_id || r.title} className="ev" onClick={() => r.regulation_id && onSelect(r.regulation_id)}>
-          <code>{r.regulation_id || "无"}</code> {r.article} {r.title}
-          <div className="hint">{r.source || "未检索到足够法规依据。"}</div>
-        </div>
-      ))}
+      {rows.map((r, i) => {
+        const key = r.regulation_id || r.title || String(i);
+        const opened = openId === key;
+        return (
+          <div key={key} className={`reg-cite${opened ? " is-open" : ""}`}>
+            <button
+              type="button"
+              className="reg-cite-hd"
+              aria-expanded={opened}
+              onClick={() => setOpenId(opened ? "" : key)}
+            >
+              <code>{r.regulation_id || "无编号"}</code>
+              <span className="reg-cite-title">
+                {r.article ? `${r.article} ` : ""}
+                {r.title}
+              </span>
+              <i className="reg-cite-caret">{opened ? "收起" : "展开"}</i>
+            </button>
+            <div className="hint reg-cite-src">{r.source || "未检索到足够法规依据，禁止编造条款。"}</div>
+            {opened && (
+              <div className="reg-cite-body">
+                <p>{r.evidence || "本条没有可展示的转述正文。"}</p>
+                <dl className="reg-cite-meta">
+                  <div>
+                    <dt>条款出处</dt>
+                    <dd>{r.source || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>生效日 / 案发基准日</dt>
+                    <dd>
+                      {r.effective_date || "—"} / {r.as_of || "—"}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="reg-cite-ft">
+                  <span>本文为公开要求转述，不是法规全文，签发前须回原文核对。</span>
+                  {r.regulation_id && (
+                    <button type="button" className="reg-cite-jump" onClick={() => onSelect(r.regulation_id)}>
+                      在右栏知识库定位
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

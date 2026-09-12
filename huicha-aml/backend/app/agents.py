@@ -43,6 +43,33 @@ def search_knowledge_tool(alert_type: str, industry: str, as_of: str = "") -> li
     return retrieve_for_alert(alert_type, industry, as_of=as_of)
 
 
+def regulation_cites(kb_hits: list[dict], as_of: str) -> list[RegulationCite]:
+    """法规依据须带转述正文与版本信息，前端展开即可核对；未命中也要留痕。"""
+    cites = [
+        RegulationCite(
+            regulation_id=h["id"],
+            title=h.get("title") or "",
+            article=h.get("article") or "",
+            evidence=h.get("snippet") or "",
+            source=h.get("source") or "",
+            as_of=as_of,
+            effective_date=h.get("effective_date") or "",
+            kind_label=h.get("kind_label") or "",
+        )
+        for h in kb_hits
+        if h.get("kind") == "regulation"
+    ]
+    return cites or [
+        RegulationCite(
+            regulation_id="",
+            title="未检索到足够法规依据",
+            evidence="禁止编造条款",
+            source="",
+            as_of=as_of,
+        )
+    ]
+
+
 def run_investigation(
     db: Session,
     alert_id: str,
@@ -684,18 +711,7 @@ def _run_investigation_v3(
             network_analysis=f"节点 {len((bundle.get('graph') or {}).get('nodes') or [])}",
             risk_assessment=RECO_LABEL[recommendation],
             challenger_review="；".join(r.get("text") or "" for r in judge.get("rationale") or []),
-            regulation_basis=[
-                RegulationCite(
-                    regulation_id=h["id"],
-                    title=h.get("title") or "",
-                    article=h.get("article") or "",
-                    evidence=h.get("snippet") or "",
-                    source=h.get("source") or "",
-                    as_of=as_of,
-                )
-                for h in kb_hits
-                if h.get("kind") == "regulation"
-            ],
+            regulation_basis=regulation_cites(kb_hits, as_of),
             recommendation=recommendation,
         ).model_dump(),
         "graph": bundle["graph"],
@@ -1195,27 +1211,7 @@ def _run_investigation_inner(
             network_analysis=f"节点 {len((bundle.get('graph') or {}).get('nodes') or [])}",
             risk_assessment=risk["recommendation_label"],
             challenger_review="；".join((c.get("claim") or "") for c in challenger) or "未启用",
-            regulation_basis=[
-                RegulationCite(
-                    regulation_id=h["id"],
-                    title=h.get("title") or "",
-                    article=h.get("article") or "",
-                    evidence=h.get("snippet") or "",
-                    source=h.get("source") or "",
-                    as_of=as_of,
-                )
-                for h in kb_hits
-                if h.get("kind") == "regulation"
-            ]
-            or [
-                RegulationCite(
-                    regulation_id="",
-                    title="未检索到足够法规依据",
-                    evidence="禁止编造条款",
-                    source="",
-                    as_of=as_of,
-                )
-            ],
+            regulation_basis=regulation_cites(kb_hits, as_of),
             recommendation=risk["recommendation"],
         ).model_dump(),
         "graph": bundle["graph"],

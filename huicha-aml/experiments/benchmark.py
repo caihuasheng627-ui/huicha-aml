@@ -369,6 +369,7 @@ def evaluate_independent(
         if scored
         else 0.0,
         "source": payload.get("source"),
+        "data_note": payload.get("data_note"),
         "caveat": payload.get("caveat"),
         "run_log": run_path.relative_to(ROOT).as_posix(),
         "baselines": baselines,
@@ -773,7 +774,12 @@ def main() -> dict:
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
     result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt, set_name=args.set_name)
-    if not args.no_write:
+    placeholder = str(result.get("data_note") or "") == "placeholder" or str(result.get("source") or "").startswith(
+        "real_holdout"
+    )
+    if placeholder and not args.no_write:
+        print("skip RESULTS write: real/placeholder hold-out 不写入主表", flush=True)
+    if not args.no_write and not placeholder:
         ablation = update_results_json(result)
         update_results_md(result, ablation)
     printable = {k: v for k, v in result.items() if k != "by_tag"}

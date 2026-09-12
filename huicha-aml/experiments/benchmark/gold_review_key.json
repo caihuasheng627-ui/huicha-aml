@@ -1,0 +1,159 @@
+{
+  "note": "仅供 score_gold_review.py 对照；复核人不应先看此文件。",
+  "items": [
+    {
+      "review_id": "main:payroll_batch",
+      "tag": "payroll_batch",
+      "set": "main",
+      "gold": "exclude",
+      "reason": "对私批次与在册工资表合计一致，属常规发薪。"
+    },
+    {
+      "review_id": "main:insurance_claim",
+      "tag": "insurance_claim",
+      "set": "main",
+      "gold": "exclude",
+      "reason": "入账与持牌险企赔付书编号一致。"
+    },
+    {
+      "review_id": "main:gov_subsidy",
+      "tag": "gov_subsidy",
+      "set": "main",
+      "gold": "exclude",
+      "reason": "财政专户入账且与公示批次金额一致，无二次拆转。"
+    },
+    {
+      "review_id": "main:escrow_release",
+      "tag": "escrow_release",
+      "set": "main",
+      "gold": "exclude",
+      "reason": "网签合同与监管账户放款指令一致。"
+    },
+    {
+      "review_id": "main:inheritance_partial",
+      "tag": "inheritance_partial",
+      "set": "main",
+      "gold": "observe",
+      "reason": "继承材料不完整，用途说明前后不一致，需补证。"
+    },
+    {
+      "review_id": "main:purpose_docs_gap",
+      "tag": "purpose_docs_gap",
+      "set": "main",
+      "gold": "observe",
+      "reason": "单笔大额转出但合同/发票未齐，尚无清晰异常节奏，宜观察补证。"
+    },
+    {
+      "review_id": "main:atm_smurf",
+      "tag": "atm_smurf",
+      "set": "main",
+      "gold": "suggest_report",
+      "reason": "多台 ATM 连续取现后回流，节奏异常。"
+    },
+    {
+      "review_id": "main:invoice_circular",
+      "tag": "invoice_circular",
+      "set": "main",
+      "gold": "suggest_report",
+      "reason": "关联公司互开票且无物流，资金闭环。"
+    },
+    {
+      "review_id": "main:crypto_onramp",
+      "tag": "crypto_onramp",
+      "set": "main",
+      "gold": "suggest_report",
+      "reason": "现金存入后迅速转至兑换商。"
+    },
+    {
+      "review_id": "main:nested_shell_loan",
+      "tag": "nested_shell_loan",
+      "set": "main",
+      "gold": "suggest_report",
+      "reason": "无真实放款合同的层叠过桥。"
+    },
+    {
+      "review_id": "main:crowdfund_layering",
+      "tag": "crowdfund_layering",
+      "set": "main",
+      "gold": "suggest_report",
+      "reason": "众筹归集后短时过桥至个人，具备典型分层特征。"
+    },
+    {
+      "review_id": "blind:seasonal_stock",
+      "tag": "seasonal_stock",
+      "set": "blind",
+      "gold": "exclude",
+      "reason": "旺季备货采购与出库、进货清单勾稽，属常规经营。"
+    },
+    {
+      "review_id": "blind:equity_transfer",
+      "tag": "equity_transfer",
+      "set": "blind",
+      "gold": "exclude",
+      "reason": "入账为股权转让价款，工商变更与价款一致。"
+    },
+    {
+      "review_id": "blind:court_award",
+      "tag": "court_award",
+      "set": "blind",
+      "gold": "exclude",
+      "reason": "来款为法院执行专户，案号与裁定金额一致。"
+    },
+    {
+      "review_id": "blind:demolition_comp",
+      "tag": "demolition_comp",
+      "set": "blind",
+      "gold": "exclude",
+      "reason": "土地储备中心拨付征收补偿，与征收决定金额一致。"
+    },
+    {
+      "review_id": "blind:dual_pledge",
+      "tag": "dual_pledge",
+      "set": "blind",
+      "gold": "suggest_report",
+      "reason": "同一批货权向两家机构融资，多户放款后当日转出。"
+    },
+    {
+      "review_id": "blind:wager_proxy",
+      "tag": "wager_proxy",
+      "set": "blind",
+      "gold": "suggest_report",
+      "reason": "多户代付后夜间转出至单一私户，客户承认代收赌资。"
+    },
+    {
+      "review_id": "blind:fx_split",
+      "tag": "fx_split",
+      "set": "blind",
+      "gold": "suggest_report",
+      "reason": "连续多笔接近申报线的跨境汇出，缺乏真实贸易单证。"
+    },
+    {
+      "review_id": "blind:staff_pass",
+      "tag": "staff_pass",
+      "set": "blind",
+      "gold": "suggest_report",
+      "reason": "员工户代收下游货款后夜间转给实际控制人。"
+    },
+    {
+      "review_id": "blind:shell_payroll",
+      "tag": "shell_payroll",
+      "set": "blind",
+      "gold": "suggest_report",
+      "reason": "空壳企业以劳务费名义对私代发后资金回到出资方。"
+    },
+    {
+      "review_id": "blind:first_large",
+      "tag": "first_large",
+      "set": "blind",
+      "gold": "observe",
+      "reason": "新开户首笔大额对公支付，对手可查但书面依据未齐。"
+    },
+    {
+      "review_id": "blind:docs_pending",
+      "tag": "docs_pending",
+      "set": "blind",
+      "gold": "observe",
+      "reason": "他行转入大额，继承材料不完整，尚无异常节奏。"
+    }
+  ]
+}

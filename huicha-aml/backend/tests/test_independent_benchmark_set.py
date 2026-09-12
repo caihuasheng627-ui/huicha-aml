@@ -3,27 +3,35 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SET_PATH = ROOT / "experiments" / "benchmark" / "independent_set.json"
+BENCH = ROOT / "experiments" / "benchmark"
+SET_PATH = BENCH / "independent_set.json"
+NOPOL_PATH = BENCH / "independent_set_nopolarity.json"
+BLIND_PATH = BENCH / "blind_set.json"
+
+sys.path.insert(0, str(BENCH))
+from blind_families import JUDGE_V3_EXEMPLARS  # noqa: E402
 
 LEAK_TOKENS = ("叙事族", "关键线索", "干扰线索", "合成", "占位", "synthetic", "gold", "annotation_reason")
 
+# 盲区集只约束「人写的输入」：规则层 / 知识库原文不受控。
+BLIND_SCAN_KEYS = ("alert_type", "industry", "summary", "customer", "candidate_evidence", "transactions")
 
-def _load() -> dict:
-    return json.loads(SET_PATH.read_text(encoding="utf-8"))
+
+def _load(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_independent_set_unique_and_no_leakage():
-    payload = _load()
+def _assert_unique_no_leak(payload: dict) -> None:
     cases = payload["cases"]
     assert len(cases) >= 200
     fps = {c["fingerprint"] for c in cases}
     assert len(fps) >= 200
     assert payload.get("n_unique", len(fps)) >= 200
-
     for case in cases:
         vig = case["vignette"]
         blob = json.dumps(vig, ensure_ascii=False)
@@ -31,7 +39,6 @@ def test_independent_set_unique_and_no_leakage():
             assert token not in blob, f"{case['case_id']} 输入含泄漏/占位字样: {token}"
         assert case["tag"] not in blob
         assert case["gold"] not in blob
-        # v2 的 observe 泄漏源：missing_evidence 不得再作为 Judge 输入出现
         assert "missing_evidence" not in vig
         for ev in vig["candidate_evidence"]:
             assert not str(ev["id"]).endswith("-S")
@@ -39,9 +46,12 @@ def test_independent_set_unique_and_no_leakage():
             assert str(ev["id"]).startswith("IX-")
 
 
+def test_independent_set_unique_and_no_leakage():
+    _assert_unique_no_leak(_load(SET_PATH))
+
+
 def test_independent_set_evidence_ids_are_product_compatible():
-    """产品 enrich_judge 会过滤 EV- 前缀；独立集必须只用 TX-/IX-/KB-/C-/ACC- 编号。"""
-    for case in _load()["cases"]:
+    for case in _load(SET_PATH)["cases"]:
         vig = case["vignette"]
         for eid in vig["allowed_evidence"]:
             assert not str(eid).startswith("EV-"), eid
@@ -56,8 +66,7 @@ def test_independent_set_evidence_ids_are_product_compatible():
 
 
 def test_independent_set_rules_layer_and_polarity():
-    """流水须让产品规则层真的触发：exclude 族有反极性开脱证据，上报族有规则层 support finding。"""
-    cases = _load()["cases"]
+    cases = _load(SET_PATH)["cases"]
     codes_by_tag: dict[str, Counter] = {}
     for case in cases:
         vig = case["vignette"]
@@ -70,10 +79,8 @@ def test_independent_set_rules_layer_and_polarity():
         if case["gold"] == "suggest_report":
             assert "support" in note_pol, case["case_id"]
         assert any(f["code"] not in ("case-note", "alert-brief") for f in findings), case["case_id"]
-        # 交易结构必须与告警一致：中心账户出现在每条流水的一侧或形成过桥链
         acc = vig["alert"]["account_id"]
         assert any(acc in (t["from_account"], t["to_account"]) for t in vig["transactions"])
-    # 上报族至少一个规则层 support 码在该族大多数样本中出现
     support_codes = {"structuring", "funnel", "night-out", "layering", "watchlist", "unregistered-counterparty"}
     for tag in ("atm_smurf", "invoice_circular", "crypto_onramp", "nested_shell_loan", "crowdfund_layering"):
         counts = codes_by_tag[tag]
@@ -82,9 +89,43 @@ def test_independent_set_rules_layer_and_polarity():
 
 
 def test_independent_set_no_missing_evidence_label_leak():
-    """三档都不再带任何待补材料输入；gold 与输入中的“缺/待补”字样只允许来自叙事本身。"""
-    payload = _load()
+    payload = _load(SET_PATH)
     assert "不传 missing_evidence" in payload["judge_input_contract"]
     for case in payload["cases"]:
         vig = case["vignette"]
         assert "missing" not in json.dumps({k: v for k, v in vig.items() if k != "kb_hits"}, ensure_ascii=False).lower()
+
+
+def test_nopolarity_set_notes_are_context_only():
+    payload = _load(NOPOL_PATH)
+    assert payload["variant"] == "nopolarity"
+    _assert_unique_no_leak(payload)
+    for case in payload["cases"]:
+        notes = [f for f in case["vignette"]["findings"] if f["code"] == "case-note"]
+        assert notes and all(f["polarity"] == "context" for f in notes), case["case_id"]
+        # 规则层极性仍保留
+        rules = [f for f in case["vignette"]["findings"] if f["code"] not in ("case-note", "alert-brief")]
+        assert rules
+
+
+def test_blind_set_avoids_judge_v3_exemplars():
+    payload = _load(BLIND_PATH)
+    assert payload["variant"] == "blind"
+    _assert_unique_no_leak(payload)
+    for case in payload["cases"]:
+        vig = case["vignette"]
+        scanned = {k: vig[k] for k in BLIND_SCAN_KEYS if k in vig}
+        blob = json.dumps(scanned, ensure_ascii=False)
+        for token in JUDGE_V3_EXEMPLARS:
+            assert token not in blob, f"{case['case_id']} {case['tag']} 含例举词 {token}"
+        for f in vig["findings"]:
+            if f["code"] in ("case-note", "alert-brief"):
+                for token in JUDGE_V3_EXEMPLARS:
+                    assert token not in (f.get("detail") or ""), (case["case_id"], f["code"], token)
+        for t in vig["transactions"]:
+            for token in JUDGE_V3_EXEMPLARS:
+                assert token not in (t.get("remark") or ""), (case["case_id"], t["remark"], token)
+        assert "过桥" not in (vig["baseline"].get("peer_note") or "")
+        assert "归集" not in (vig["baseline"].get("peer_note") or "")
+        assert "阈值" not in (vig["baseline"].get("peer_note") or "")
+        assert "存入" not in (vig["baseline"].get("peer_note") or "")

@@ -35,6 +35,13 @@ from app.prompts import prompt_version  # noqa: E402
 BENCH_DIR = Path(__file__).parent / "benchmark"
 RUNS_DIR = BENCH_DIR / "runs"
 
+SET_FILES = {
+    "v3": "independent_set.json",
+    "independent": "independent_set.json",
+    "nopolarity": "independent_set_nopolarity.json",
+    "blind": "blind_set.json",
+}
+
 CONFIDENCE_BINS = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01))
 NARRATIVE_PREFIX = "IX-"
 
@@ -271,21 +278,31 @@ def _narrative_only(ids: list[str]) -> list[str]:
     return [x for x in ids if str(x).startswith(NARRATIVE_PREFIX)]
 
 
-def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0, prompt_kind: str | None = None) -> dict:
+def evaluate_independent(
+    *,
+    limit: int | None = None,
+    sleep_s: float = 0.0,
+    prompt_kind: str | None = None,
+    set_name: str = "v3",
+) -> dict:
     os.environ.pop("HUICHA_LLM_STUB", None)
     require_api_key()
     prompt_used = prompt_kind or prompt_version("judge")
-    payload = load_split("independent_set.json")
+    set_file = SET_FILES.get(set_name, set_name)
+    if not set_file.endswith(".json"):
+        set_file = f"{set_file}.json"
+    payload = load_split(set_file)
     cases = list(payload.get("cases") or [])
     if limit is not None:
         cases = cases[: max(0, limit)]
     if not cases:
-        raise RuntimeError("independent_set.json 为空，请先运行 build_independent_set.py")
+        raise RuntimeError(f"{set_file} 为空，请先运行 build_independent_set.py --variant …")
 
     baselines = offline_baselines(cases)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    run_path = RUNS_DIR / f"{ts}_{prompt_used}.jsonl"
+    variant = payload.get("variant") or set_name
+    run_path = RUNS_DIR / f"{ts}_{variant}_{prompt_used}.jsonl"
 
     rows: list[dict] = []
     call_errors = 0
@@ -334,7 +351,9 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0, prom
         "label": "独立集 / 真实模型 / 产品 Judge 流水线",
         "protocol": "enrich_judge(db=None) → normalize_judge → verify_judge → apply_guardrails",
         "prompt": prompt_used,
-        "split": "independent",
+        "split": payload.get("split") or "independent",
+        "variant": variant,
+        "set_file": set_file,
         "model": llm_model(),
         "n": len(rows),
         "n_unique_dataset": payload.get("n_unique"),
@@ -362,6 +381,7 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0, prom
         "missing_evidence": missing_evidence_report(scored),
         "confusion_matrix": clf.get("confusion_matrix"),
         "macro_f1": clf.get("macro_f1"),
+        "observe_pred_rate": round(sum(1 for r in scored if r.get("pred") == "observe") / len(scored), 4) if scored else None,
         "honesty": (
             "不是生产准确率；须人工签发。"
             "本协议已去除标签泄漏并走产品 Judge 契约（enrich_judge 直调）；仍为合成 vignette。"
@@ -500,6 +520,7 @@ ABLATION_METRICS = [
     ("exclude_recall", "exclude 召回"),
     ("observe_recall", "observe 召回"),
     ("suggest_report_recall", "suggest_report 召回"),
+    ("observe_pred_rate", "observe 预测率"),
 ]
 
 
@@ -522,6 +543,7 @@ def _flatten_for_ablation(result: dict) -> dict:
         "exclude_recall": (per_class.get("exclude") or {}).get("recall"),
         "observe_recall": (per_class.get("observe") or {}).get("recall"),
         "suggest_report_recall": (per_class.get("suggest_report") or {}).get("recall"),
+        "observe_pred_rate": result.get("observe_pred_rate"),
         "confusion_matrix": (result.get("confusion_matrix") or {}).get("matrix"),
     }
 
@@ -558,8 +580,32 @@ def render_ablation_md(ablation: dict) -> list[str]:
     return lines
 
 
+def render_validity_md(comparison: dict) -> list[str]:
+    cells = comparison.get("cells") or {}
+    if not cells:
+        return []
+    lines = ["## 有效性消融（主集 / 去极性 / 盲区）", "", f"- {comparison.get('note')}", ""]
+    keys = [
+        ("macro_f1", "Macro-F1"),
+        ("exclude_recall", "exclude 召回"),
+        ("suggest_report_recall", "suggest_report 召回"),
+        ("observe_pred_rate", "observe 预测率"),
+    ]
+    for source, runs in cells.items():
+        lines.append(f"### `{source}`")
+        lines.append("")
+        prompts = sorted(runs)
+        lines.append("| 指标 | " + " | ".join(f"`{p}`" for p in prompts) + " |")
+        lines.append("| --- | " + " | ".join(["---"] * len(prompts)) + " |")
+        for key, label in keys:
+            lines.append(f"| {label} | " + " | ".join(_fmt(runs[p].get(key)) for p in prompts) + " |")
+        lines.append("")
+    return lines
+
+
 def update_results_md(result: dict, ablation: dict | None = None) -> None:
     md_path = Path(__file__).parent / "RESULTS.md"
+    json_path = Path(__file__).parent / "RESULTS.json"
     text = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     marker = "## 独立集 / 真实模型"
     stub_tail = (
@@ -570,6 +616,18 @@ def update_results_md(result: dict, ablation: dict | None = None) -> None:
     section = "\n".join(render_md_section(result))
     if ablation:
         section += "\n" + "\n".join(render_ablation_md(ablation))
+    if json_path.exists():
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+        extra = []
+        for key in ("independent_ablation", "nopolarity_ablation", "blind_ablation"):
+            if key in data and data[key] and key == "independent_ablation" and ablation:
+                continue
+            if data.get(key):
+                extra.extend(render_ablation_md(data[key]))
+        if data.get("validity_comparison"):
+            extra.extend(render_validity_md(data["validity_comparison"]))
+        if extra:
+            section += "\n" + "\n".join(extra)
     if marker in text:
         head, _, _rest = text.partition(marker)
         base = head.rstrip() + "\n\n"
@@ -585,6 +643,8 @@ RESULT_KEEP_KEYS = [
     "protocol",
     "prompt",
     "split",
+    "variant",
+    "set_file",
     "model",
     "n",
     "n_unique_dataset",
@@ -610,11 +670,12 @@ RESULT_KEEP_KEYS = [
     "caveat",
     "legacy_note",
     "classification",
+    "observe_pred_rate",
 ]
 
 
 def update_results_json(result: dict) -> dict | None:
-    """写入最新一次结果；按 prompt 保留各版本最近一次，用于消融对比。返回 ablation（若有）。"""
+    """按 source×prompt 分槽保存，换集不覆盖旧消融。返回当前 source 的 prompt 消融（若有）。"""
     path = Path(__file__).parent / "RESULTS.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if "independent_real_model" in data and "independent_real_model_v1_deprecated" not in data:
@@ -626,17 +687,35 @@ def update_results_json(result: dict) -> dict | None:
         )
         data["independent_real_model_v1_deprecated"] = old
     slim = {k: result[k] for k in RESULT_KEEP_KEYS if k in result}
-    # v2 集（missing_evidence 泄漏、无规则层）的结果不与 v3 集混比：换源时清空按 prompt 的对比槽。
-    runs = data.get("independent_real_model_runs") or {}
-    if any((r.get("source") != result.get("source")) for r in runs.values()):
-        data["independent_real_model_runs_superseded"] = runs
-        runs = {}
-    runs[str(result.get("prompt"))] = slim
-    data["independent_real_model_runs"] = runs
+    src = str(result.get("source") or "unknown")
+    by_source = data.get("runs_by_source") or {}
+    if not by_source and data.get("independent_real_model_runs"):
+        by_source = {"narrative_vignette_v3_rules_layer": dict(data["independent_real_model_runs"])}
+    src_runs = dict(by_source.get(src) or {})
+    src_runs[str(result.get("prompt"))] = slim
+    by_source[src] = src_runs
+    data["runs_by_source"] = by_source
     data["independent_real_model"] = slim
-    ablation = build_ablation(runs)
-    if ablation:
-        data["independent_ablation"] = ablation
+    if src == "narrative_vignette_v3_rules_layer":
+        data["independent_real_model_runs"] = src_runs
+        ablation = build_ablation(src_runs)
+        if ablation:
+            data["independent_ablation"] = ablation
+    else:
+        ablation = build_ablation(src_runs)
+        slot = {
+            "narrative_vignette_v3_rules_layer_nopolarity": "nopolarity_ablation",
+            "narrative_vignette_blind_holdout": "blind_ablation",
+        }.get(src)
+        if slot and ablation:
+            data[slot] = ablation
+    data["validity_comparison"] = {
+        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 hold-out；同一模型与后处理。",
+        "cells": {
+            source: {p: _flatten_for_ablation(run) for p, run in runs.items()}
+            for source, runs in sorted(by_source.items())
+        },
+    }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return ablation
 
@@ -653,6 +732,12 @@ def main() -> dict:
     )
     parser.add_argument("--no-write", action="store_true", help="不写 RESULTS.json / RESULTS.md（试跑用）")
     parser.add_argument("--rerender", action="store_true", help="不调模型，用 RESULTS.json 现有结果重渲染 RESULTS.md")
+    parser.add_argument(
+        "--set",
+        dest="set_name",
+        default="v3",
+        help="数据集：v3 / nopolarity / blind，或 json 文件名。默认 independent_set.json",
+    )
     args = parser.parse_args()
     if args.rerender:
         data = json.loads((Path(__file__).parent / "RESULTS.json").read_text(encoding="utf-8"))
@@ -666,12 +751,16 @@ def main() -> dict:
         print(json.dumps({"rerendered": True, "prompts": list(runs.keys())}, ensure_ascii=False))
         return latest
     if args.baselines_only:
-        payload = load_split("independent_set.json")
+        set_file = SET_FILES.get(args.set_name, args.set_name)
+        if not str(set_file).endswith(".json"):
+            set_file = f"{set_file}.json"
+        payload = load_split(set_file)
         out = {
             "n": len(payload.get("cases") or []),
             "n_unique": payload.get("n_unique"),
             "baselines": offline_baselines(payload.get("cases") or []),
             "source": payload.get("source"),
+            "set": set_file,
         }
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
@@ -679,7 +768,7 @@ def main() -> dict:
         out = framework_status()
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
-    result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt)
+    result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt, set_name=args.set_name)
     if not args.no_write:
         ablation = update_results_json(result)
         update_results_md(result, ablation)

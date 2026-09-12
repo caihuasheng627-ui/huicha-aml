@@ -44,6 +44,11 @@ EXTRA_PEER = {
     "个人-受雇": {"typical_monthly_in": 15_000, "typical_ticket": 12_000, "note": "受雇个人以固定工资入账为主，单笔大额需结合用途凭证"},
     "个人-购房": {"typical_monthly_in": 20_000, "typical_ticket": 15_000, "note": "购房期间可出现监管账户放款等一次性大额入账"},
     "个人-继承": {"typical_monthly_in": 8_000, "typical_ticket": 5_000, "note": "养老金为主的账户偶发亲属或遗产大额入账需结合权利证明"},
+    "建材批发": {"typical_monthly_in": 1_200_000, "typical_ticket": 80_000, "note": "建材批发旺季备货支出抬升属常见经营节奏"},
+    "建筑工程": {"typical_monthly_in": 2_000_000, "typical_ticket": 200_000, "note": "施工企业按节点收工程款、向分包方支付进度款"},
+    "跨境电商": {"typical_monthly_in": 600_000, "typical_ticket": 25_000, "note": "跨境零售入账分散、出账对接物流与平台结算"},
+    "房地产": {"typical_monthly_in": 800_000, "typical_ticket": 150_000, "note": "房企账户可见售房回款与拆迁、土地相关一次性大额"},
+    "个人-灵活就业": {"typical_monthly_in": 20_000, "typical_ticket": 8_000, "note": "灵活就业账户以劳务与代收代付为主，大额需核背景"},
 }
 
 CUSTOMER_SUMMARY = {
@@ -56,6 +61,11 @@ CUSTOMER_SUMMARY = {
     "个人-购房": "个人客户，近期存在购房相关资金往来。",
     "个人-继承": "个人客户，账户以养老金入账为主。",
     "个人-无固定职业": "个人客户，无固定职业，账户流水以零散往来为主。",
+    "建材批发": "建材批发企业客户，账户主要用于进货与下游配送结算。",
+    "建筑工程": "建筑工程企业客户，账户用于工程款收付与分包结算。",
+    "跨境电商": "跨境电商企业客户，账户用于平台货款与物流费用收付。",
+    "房地产": "房地产企业客户，账户用于售房回款与项目支出。",
+    "个人-灵活就业": "个人客户，灵活就业，账户以劳务收入与代收代付为主。",
 }
 
 ENTERPRISE_PREFIX = ["华辰", "鼎泰", "瑞和", "恒远", "盛邦", "中孚", "宏图", "远洲", "启明", "锦程", "凯达", "润泽"]
@@ -65,6 +75,10 @@ ENTERPRISE_SUFFIX = {
     "投资咨询": ["投资咨询有限公司", "企业管理咨询有限公司"],
     "互联网服务": ["网络科技有限公司", "信息技术有限公司"],
     "贸易代理": ["贸易有限公司", "进出口代理有限公司", "商贸有限公司"],
+    "建材批发": ["建材有限公司", "建材经销有限公司"],
+    "建筑工程": ["建筑工程有限公司", "建设集团有限公司"],
+    "跨境电商": ["跨境零售有限公司", "电子商务有限公司"],
+    "房地产": ["房地产开发有限公司", "置业有限公司"],
 }
 SURNAMES = ["王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴", "徐", "孙", "马", "朱", "胡", "郭", "林", "何"]
 
@@ -629,7 +643,11 @@ def _baseline(customer: dict, txs: list[dict], account_id: str) -> dict:
     outflow = [t for t in txs if t["from_account"] == account_id]
     in_sum = round(sum(t["amount"] for t in inflow), 2)
     out_sum = round(sum(t["amount"] for t in outflow), 2)
-    peer = PEER_BASELINE.get(customer["industry"]) or EXTRA_PEER[customer["industry"]]
+    peer = PEER_BASELINE.get(customer["industry"]) or EXTRA_PEER.get(customer["industry"]) or {
+        "typical_monthly_in": 100_000,
+        "typical_ticket": 20_000,
+        "note": "该行业暂无同业样本区间，请结合客户经营规模判断",
+    }
     return {
         "industry": customer["industry"],
         "sample_in_count": len(inflow),
@@ -662,8 +680,15 @@ def _graph(account_id: str, center_label: str, txs: list[dict], labels: dict[str
 
 def _customer_name(rng: random.Random, fam: dict) -> str:
     if fam["kind"] == "enterprise":
-        return rng.choice(ENTERPRISE_PREFIX) + rng.choice(ENTERPRISE_SUFFIX[fam["industry"]])
+        suffixes = ENTERPRISE_SUFFIX.get(fam["industry"]) or fam.get("name_suffixes") or ["有限公司"]
+        return rng.choice(ENTERPRISE_PREFIX) + rng.choice(suffixes)
     return rng.choice(SURNAMES) + "**"
+
+
+def _tx_builder(fam: dict):
+    if callable(fam.get("tx_builder")):
+        return fam["tx_builder"]
+    return TX_BUILDERS[fam["tag"]]
 
 
 def _fingerprint(case: dict) -> str:
@@ -689,7 +714,8 @@ def _slim_kb(hits: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------- 主流程
 
 
-def build_case(rng: random.Random, fam: dict, case_id: str, seq: int) -> dict:
+def build_case(rng: random.Random, fam: dict, case_id: str, seq: int, *, note_polarity: bool = True) -> dict:
+    """note_polarity=False：叙事项一律 context，极性只保留产品规则层真正触发的（消融 2）。"""
     day = f"2026-{rng.randint(3, 9):02d}-{rng.randint(1, 28):02d}"
     account_id = f"ACC-{rng.randint(100000, 999999)}"
     customer_id = f"C-{rng.randint(10000, 99999)}"
@@ -705,7 +731,7 @@ def build_case(rng: random.Random, fam: dict, case_id: str, seq: int) -> dict:
         "flags": flags,
         "labels": {},
     }
-    raw_txs, amount_wan, n_eff = TX_BUILDERS[fam["tag"]](rng, account_id, ctx)
+    raw_txs, amount_wan, n_eff = _tx_builder(fam)(rng, account_id, ctx)
     raw_txs.sort(key=lambda t: t["occurred_at"])
     txs = []
     for k, t in enumerate(raw_txs):
@@ -723,7 +749,7 @@ def build_case(rng: random.Random, fam: dict, case_id: str, seq: int) -> dict:
         "industry": fam["industry"],
         "opened_at": opened_at,
         "kyc_level": rng.choice(["普通", "普通", "标准"]),
-        "summary": CUSTOMER_SUMMARY[fam["industry"]],
+        "summary": fam.get("customer_summary") or CUSTOMER_SUMMARY[fam["industry"]],
     }
     in_amt = sum(t["amount"] for t in txs if t["to_account"] == account_id)
     out_amt = sum(t["amount"] for t in txs if t["from_account"] == account_id)
@@ -766,7 +792,7 @@ def build_case(rng: random.Random, fam: dict, case_id: str, seq: int) -> dict:
                 "title": f"调查记录{j + 1}",
                 "detail": it["text"],
                 "evidence_ids": [eid],
-                "polarity": it["polarity"],
+                "polarity": it["polarity"] if note_polarity else "context",
             }
         )
         if it["role"] == "key":
@@ -820,18 +846,26 @@ def build_case(rng: random.Random, fam: dict, case_id: str, seq: int) -> dict:
     }
 
 
-def build_cases(n: int = 240) -> list[dict]:
-    rng = random.Random(SEED)
+def build_cases(
+    n: int = 240,
+    *,
+    families: list[dict] | None = None,
+    seed: int = SEED,
+    note_polarity: bool = True,
+    id_prefix: str = "IND",
+) -> list[dict]:
+    families = families or FAMILIES
+    rng = random.Random(seed)
     cases: list[dict] = []
     seen: set[str] = set()
     attempts = 0
     i = 0
     while len(cases) < n and attempts < n * 40:
         attempts += 1
-        fam = FAMILIES[i % len(FAMILIES)]
+        fam = families[i % len(families)]
         i += 1
-        case_id = f"IND-{len(cases) + 1:04d}"
-        case = build_case(rng, fam, case_id, len(cases) + 1)
+        case_id = f"{id_prefix}-{len(cases) + 1:04d}"
+        case = build_case(rng, fam, case_id, len(cases) + 1, note_polarity=note_polarity)
         fp = _fingerprint(case)
         if fp in seen:
             continue
@@ -843,28 +877,91 @@ def build_cases(n: int = 240) -> list[dict]:
     return cases
 
 
-def main() -> Path:
-    out = Path(__file__).with_name("independent_set.json")
-    cases = build_cases(240)
-    payload = {
-        "data_note": "synthetic-independent-v3",
-        "split": "independent",
+BASE_CAVEAT = (
+    "与 seed_extended 规则模板不同源的组合采样合成集；"
+    "流水按叙事族真实结构生成并经产品 analyst_rules.analyze() 产出规则层 findings；"
+    "不向 Judge 传 missing_evidence；"
+    "输入已去除家族名/关键干扰前缀/合成占位字样；annotation_reason 仅元数据；"
+    "不是人工专家标注；禁止写成生产准确率。"
+)
+
+VARIANTS = {
+    # 主集：叙事项带极性
+    "v3": {
+        "file": "independent_set.json",
         "source": "narrative_vignette_v3_rules_layer",
+        "data_note": "synthetic-independent-v3",
+        "n": 240,
         "seed": SEED,
+        "note_polarity": True,
+        "id_prefix": "IND",
+        "caveat_extra": "叙事项带 support/counter/context 极性。",
+    },
+    # 消融 2：同族同种子，叙事项极性全部置为 context，只保留规则层极性
+    "nopolarity": {
+        "file": "independent_set_nopolarity.json",
+        "source": "narrative_vignette_v3_rules_layer_nopolarity",
+        "data_note": "synthetic-independent-v3-nopolarity",
+        "n": 240,
+        "seed": SEED,
+        "note_polarity": False,
+        "id_prefix": "IND",
+        "caveat_extra": "叙事项极性一律 context；极性只来自产品规则层真正触发的 finding。用于拆解「极性提示」对 Judge 的贡献。",
+    },
+    # 消融 1：prompt 盲区 hold-out——叙事不含 judge_v3 例举词，类型学在例举之外
+    "blind": {
+        "file": "blind_set.json",
+        "source": "narrative_vignette_blind_holdout",
+        "data_note": "synthetic-blind-holdout-v1",
+        "n": 220,
+        "seed": SEED + 7,
+        "note_polarity": True,
+        "id_prefix": "BLD",
+        "caveat_extra": "叙事文本不含 judge_v3 判定标准中例举的任何类型学词；类型学形态在例举之外。规则层 finding 文本为产品输出，不受禁词约束。",
+    },
+}
+
+
+def build_payload(variant: str) -> dict:
+    spec = VARIANTS[variant]
+    families = FAMILIES
+    if variant == "blind":
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from blind_families import BLIND_FAMILIES  # noqa: E402
+
+        families = BLIND_FAMILIES
+    cases = build_cases(
+        spec["n"],
+        families=families,
+        seed=spec["seed"],
+        note_polarity=spec["note_polarity"],
+        id_prefix=spec["id_prefix"],
+    )
+    return {
+        "data_note": spec["data_note"],
+        "split": "independent" if variant != "blind" else "blind_holdout",
+        "variant": variant,
+        "source": spec["source"],
+        "seed": spec["seed"],
         "n": len(cases),
         "n_unique": len({c["fingerprint"] for c in cases}),
+        "families": [f["tag"] for f in families],
         "judge_input_contract": "enrich_judge(alert, customer, findings, transactions, baseline, kb_hits, allowed_evidence)；不传 missing_evidence",
-        "caveat": (
-            "与 seed_extended 规则模板不同源的组合采样合成集；"
-            "流水按叙事族真实结构生成并经产品 analyst_rules.analyze() 产出规则层 findings；"
-            "叙事项带 support/counter/context 极性；不向 Judge 传 missing_evidence；"
-            "输入已去除家族名/关键干扰前缀/合成占位字样；annotation_reason 仅元数据；"
-            "不是人工专家标注；禁止写成生产准确率。"
-        ),
+        "caveat": BASE_CAVEAT + spec["caveat_extra"],
         "cases": cases,
     }
+
+
+def main(argv: list[str] | None = None) -> Path:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variant", choices=sorted(VARIANTS), default="v3")
+    args = parser.parse_args(argv)
+    payload = build_payload(args.variant)
+    out = Path(__file__).with_name(VARIANTS[args.variant]["file"])
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"wrote {out} n={payload['n']} n_unique={payload['n_unique']}")
+    print(f"wrote {out} variant={args.variant} n={payload['n']} n_unique={payload['n_unique']}")
     return out
 
 

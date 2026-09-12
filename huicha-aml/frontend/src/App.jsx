@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -32,6 +32,7 @@ import {
   setDemoToken,
 } from "./api";
 import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
 const HUMAN = {
@@ -85,11 +86,6 @@ function nowText() {
   return new Date().toLocaleString("zh-CN", { hour12: false });
 }
 
-function shortLabel(s, n = 8) {
-  const t = String(s || "");
-  return t.length > n ? `${t.slice(0, n)}…` : t;
-}
-
 function isChannelToken(id, prefix) {
   return id === `${prefix}-AGG` || String(id).startsWith(`${prefix}-`);
 }
@@ -106,23 +102,6 @@ function evidenceMatches(e, selected) {
     return true;
   }
   return false;
-}
-
-function edgeHot(e, selected) {
-  if (!selected) return false;
-  if (e.id === selected || (e.tx_ids || []).includes(selected)) return true;
-  if (e.source === selected || e.target === selected) return true;
-  if (isChannelToken(selected, "CASH") && (e.source === "CASH-AGG" || e.target === "CASH-AGG")) return true;
-  if (isChannelToken(selected, "POS") && (e.source === "POS-AGG" || e.target === "POS-AGG")) return true;
-  return false;
-}
-
-function nodeHot(n, selected, hotEdges) {
-  if (!selected) return false;
-  if (n.id === selected) return true;
-  if (isChannelToken(selected, "CASH") && n.id === "CASH-AGG") return true;
-  if (isChannelToken(selected, "POS") && n.id === "POS-AGG") return true;
-  return hotEdges.some((e) => e.source === n.id || e.target === n.id);
 }
 
 function auditText(x) {
@@ -160,101 +139,6 @@ function ReportText({ text, issues, onSelect }) {
         }
         return <span key={i}>{p}</span>;
       })}
-    </div>
-  );
-}
-
-function Graph({ graph, selected, onSelect }) {
-  const nodes = graph?.nodes || [];
-  const edges = graph?.edges || [];
-  const layout = useMemo(() => {
-    const cx = 180;
-    const cy = 100;
-    const others = nodes.filter((n) => n.kind !== "center");
-    const map = {};
-    nodes.forEach((n) => {
-      if (n.kind === "center") map[n.id] = { x: cx, y: cy, ...n };
-    });
-    const r = others.length > 6 ? 68 : 84;
-    others.forEach((n, i) => {
-      const a = (Math.PI * 2 * i) / Math.max(others.length, 1) - Math.PI / 2;
-      map[n.id] = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * 64, ...n };
-    });
-    return map;
-  }, [nodes]);
-
-  const hotEdges = edges.filter((e) => edgeHot(e, selected));
-
-  return (
-    <div className="graph">
-      <svg className="graph-live" viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet">
-        {edges.map((e, i) => {
-          const a = layout[e.source];
-          const b = layout[e.target];
-          if (!a || !b) return null;
-          const hot = edgeHot(e, selected);
-          const mx = (a.x + b.x) / 2;
-          const my = (a.y + b.y) / 2;
-          return (
-            <g key={`${e.source}-${e.target}-${e.id}`}>
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={hot ? "#c8161d" : "#94a3b8"}
-                strokeWidth={hot ? 2.4 : 1.1}
-                style={{ animationDelay: `${i * 40}ms` }}
-              />
-              {e.amount != null && (
-                <text x={mx} y={my - 4} textAnchor="middle" fill={hot ? "#9f1239" : "#64748b"} fontSize="8">
-                  {yuan(e.amount)}
-                  {e.count > 1 ? ` · ${e.count}笔` : ""}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        {Object.values(layout).map((n) => {
-          const hot = nodeHot(n, selected, hotEdges);
-          const fill =
-            n.kind === "watch" ? "#c8161d" : n.kind === "center" ? "#0a1628" : n.kind === "channel" ? "#0f7b4a" : "#1b4f8a";
-          return (
-            <g key={n.id} onClick={() => onSelect?.(n.id)} style={{ cursor: "pointer" }}>
-              <title>{n.label || n.id}</title>
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={n.kind === "center" ? 15 : hot ? 11 : 9}
-                fill={fill}
-                stroke={hot ? "#c8161d" : "#fff"}
-                strokeWidth="2"
-              />
-              <text x={n.x} y={n.y + 22} textAnchor="middle" fill="#334155" fontSize="10">
-                {shortLabel(n.label || n.id, 7)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="graph-legend" aria-hidden="true">
-        <span>
-          <i className="dot center" />
-          主体
-        </span>
-        <span>
-          <i className="dot peer" />
-          对手方
-        </span>
-        <span>
-          <i className="dot channel" />
-          渠道
-        </span>
-        <span>
-          <i className="dot watch" />
-          关注名单
-        </span>
-      </div>
     </div>
   );
 }
@@ -1085,7 +969,7 @@ export default function App() {
           </div>
           {inv ? (
             <>
-              <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} />
+              <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} formatYuan={yuan} />
               <EvidenceLists
                 graph={inv.evidence_graph}
                 claims={inv.claims}

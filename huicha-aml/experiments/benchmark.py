@@ -1,11 +1,11 @@
-"""Benchmark v2：独立组合采样集 + 产品 Judge 流水线。
+"""Benchmark v3：独立组合采样集（规则层同构）+ 产品 Judge 流水线。
 
 必须：
-- 使用 prompts.judge_v2 + enrich_judge
+- 直接调用产品 `enrich_judge(db=None)`（prompt 由产品 `prompt_version("judge")` 决定）
 - 经 normalize_judge → verify_judge → apply_guardrails
 - 原始输出落盘 runs/<timestamp>.jsonl
 - 解析失败单独计数，不并入 observe
-- 分组指标 + 无信息/关键词基线
+- 分组指标 + 无信息/关键词基线 + confidence 直方图 + observe 缺材料比例
 
 口径：实验对照，不是生产准确率；须人工签发。
 """
@@ -15,9 +15,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import statistics
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,13 +26,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT))
 
+from app import llm as llm_mod  # noqa: E402
 from app.decision import apply_guardrails, normalize_judge, verify_judge  # noqa: E402
-from app.llm import JUDGE_MAX_TOKENS, _parse_model_json, chat, llm_model, require_api_key  # noqa: E402
+from app.llm import enrich_judge, llm_model, require_api_key  # noqa: E402
 from app.metrics_lib import LABELS, classification_report, evidence_prf  # noqa: E402
-from app.prompts import PROMPTS  # noqa: E402
+from app.prompts import prompt_version  # noqa: E402
 
 BENCH_DIR = Path(__file__).parent / "benchmark"
 RUNS_DIR = BENCH_DIR / "runs"
+
+CONFIDENCE_BINS = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01))
+NARRATIVE_PREFIX = "IX-"
 
 
 def load_split(name: str) -> dict:
@@ -91,122 +96,110 @@ def per_tag_report(rows: list[dict]) -> dict:
 
 
 def _case_to_judge_inputs(case: dict) -> dict:
+    """独立集 v3 已按产品 bundle 结构落盘：这里只做取值，不再拼装任何非产品字段。"""
     vig = case["vignette"]
-    evidences = list(vig.get("candidate_evidence") or [])
-    allowed = [e["id"] for e in evidences]
-    for t in vig.get("transactions") or []:
-        if t.get("id") and t["id"] not in allowed:
-            allowed.append(t["id"])
+    txs = list(vig.get("transactions") or [])
     findings = list(vig.get("findings") or [])
-    if not findings:
-        findings = [
-            {
-                "title": f"材料摘录{i + 1}",
-                "detail": e.get("text") or "",
-                "evidence_ids": [e["id"]],
-                "code": "vignette-fact",
-                "polarity": "context",
-            }
-            for i, e in enumerate(evidences)
-        ]
     customer = dict(vig.get("customer") or {})
     customer.setdefault("id", f"C-{case['case_id']}")
-    alert = {
-        "id": case["case_id"],
-        "alert_type": vig.get("alert_type") or "",
-        "upstream": "independent-benchmark-v2",
-        "account_id": f"ACC-{case['case_id']}",
-        "created_at": "2026-09-12 10:00:00",
-        "title": vig.get("summary") or "",
-    }
+    alert = dict(vig.get("alert") or {})
+    alert.setdefault("id", case["case_id"])
+    alert.setdefault("alert_type", vig.get("alert_type") or "")
+    alert.setdefault("upstream", "independent-benchmark")
+    allowed = list(vig.get("allowed_evidence") or [])
+    if not allowed:
+        allowed = sorted(
+            {t["id"] for t in txs if t.get("id")}
+            | {e["id"] for e in vig.get("candidate_evidence") or []}
+            | {f_id for f in findings for f_id in f.get("evidence_ids") or []}
+        )
     return {
         "alert": alert,
         "customer": customer,
         "findings": findings,
-        "transactions": list(vig.get("transactions") or []),
-        "baseline": dict(vig.get("baseline") or {"peer_note": "synthetic"}),
+        "transactions": txs,
+        "baseline": dict(vig.get("baseline") or {}),
         "kb_hits": list(vig.get("kb_hits") or []),
         "allowed_evidence": allowed,
-        "missing_evidence": list(vig.get("missing_evidence") or []),
         "watch_hits": list(vig.get("watch_hits") or []),
     }
 
 
-def _predict_one(case: dict) -> dict:
-    """走产品 Judge 契约：judge_v2 + normalize → verify → guardrails。
+class _ChatRecorder:
+    """包一层产品 chat，只为把 raw_text 落盘；不改变请求内容。"""
 
-    直接调 chat 以保留 raw_text；判定逻辑与 enrich_judge 后处理一致，不改护栏。
-    """
+    def __init__(self) -> None:
+        self.last_text = ""
+        self.last_usage: dict = {}
+        self._orig = llm_mod.chat
+
+    def __enter__(self) -> "_ChatRecorder":
+        def _wrapped(messages, **kwargs):
+            text, usage = self._orig(messages, **kwargs)
+            self.last_text, self.last_usage = text, usage
+            return text, usage
+
+        llm_mod.chat = _wrapped
+        return self
+
+    def __exit__(self, *exc) -> None:
+        llm_mod.chat = self._orig
+
+
+def _judge_kwargs(prompt_kind: str | None) -> dict:
+    return {"prompt_kind": prompt_kind} if prompt_kind else {}
+
+
+def _predict_one(case: dict, *, prompt_kind: str | None = None) -> dict:
+    """走产品 Judge 契约：enrich_judge(db=None) → normalize → verify → guardrails。"""
     inputs = _case_to_judge_inputs(case)
     allowed_set = set(inputs["allowed_evidence"])
-    context = {
-        "alert_trigger": {
-            "type": inputs["alert"].get("alert_type"),
-            "source": inputs["alert"].get("upstream"),
-            "note": "仅为待复核线索，不直接决定 disposition",
-        },
-        "customer": {
-            key: inputs["customer"].get(key)
-            for key in ("id", "name", "kind", "industry", "opened_at", "kyc_level", "summary")
-        },
-        "findings": inputs["findings"],
-        "transactions": inputs["transactions"][:30],
-        "baseline": inputs["baseline"],
-        "knowledge": [
-            {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}
-            for h in inputs["kb_hits"][:8]
-        ],
-        "allowed_evidence_ids": list(inputs["allowed_evidence"])[:120],
-        "missing_evidence": inputs["missing_evidence"],
-        "repair_issues": [],
-        "output_limits": {
-            "supporting_evidence_ids": 10,
-            "contradicting_evidence_ids": 10,
-            "rationale": 5,
-            "evidence_ids_per_rationale": 6,
-            "missing_evidence": 5,
-            "next_actions": 5,
-        },
-        # 候选证据正文（产品路径里由工具结果提供；此处显式给出以避免空编号）
-        "evidence_bundle": [
-            {"id": e["id"], "text": e.get("text") or ""} for e in (case.get("vignette") or {}).get("candidate_evidence") or []
-        ],
-        "case_summary": case.get("vignette", {}).get("summary") or "",
-    }
     raw_text = ""
     usage: dict = {}
     parse_ok = False
     verify: dict = {}
     guardrails: dict = {}
+    decision: dict = {}
     pred = None
     support_ids: list[str] = []
     contra_ids: list[str] = []
     error = ""
-    try:
-        raw_text, usage = chat(
-            [
-                {"role": "system", "content": PROMPTS["judge_v2"]},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-            temperature=0.0,
-            max_tokens=JUDGE_MAX_TOKENS,
-        )
-        raw = _parse_model_json(raw_text, usage, role="Judge")
-        decision = normalize_judge(raw, known_ids=allowed_set)
-        parse_ok = True
-        verify = verify_judge(decision, allowed_evidence=allowed_set)
-        guardrails = apply_guardrails(decision, watch_hits=inputs["watch_hits"], fact_issues=None)
-        pred = guardrails["final_conclusion"]
-        support_ids = [x for x in (decision.get("supporting_evidence_ids") or []) if x in allowed_set]
-        contra_ids = [x for x in (decision.get("contradicting_evidence_ids") or []) if x in allowed_set]
-    except Exception as exc:  # noqa: BLE001
-        error = str(exc)[:400]
+    with _ChatRecorder() as rec:
+        try:
+            raw, usage = enrich_judge(
+                db=None,
+                alert=inputs["alert"],
+                customer=inputs["customer"],
+                findings=inputs["findings"],
+                transactions=inputs["transactions"],
+                baseline=inputs["baseline"],
+                kb_hits=inputs["kb_hits"],
+                allowed_evidence=inputs["allowed_evidence"],
+                **_judge_kwargs(prompt_kind),
+            )
+            raw_text = rec.last_text
+            decision = normalize_judge(raw, known_ids=allowed_set)
+            parse_ok = True
+            verify = verify_judge(decision, allowed_evidence=allowed_set)
+            guardrails = apply_guardrails(decision, watch_hits=inputs["watch_hits"], fact_issues=None)
+            pred = guardrails["final_conclusion"]
+            support_ids = [x for x in (decision.get("supporting_evidence_ids") or []) if x in allowed_set]
+            contra_ids = [x for x in (decision.get("contradicting_evidence_ids") or []) if x in allowed_set]
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)[:400]
+            raw_text = raw_text or rec.last_text
+            usage = usage or rec.last_usage
 
     return {
         "case_id": case["case_id"],
         "tag": case.get("tag") or "",
         "gold": case["gold"],
         "pred": pred,
+        "proposed": decision.get("disposition") if decision else None,
+        "confidence": decision.get("confidence") if decision else None,
+        "missing_evidence": list(decision.get("missing_evidence") or []) if decision else [],
+        "sanitized_missing_evidence": list(decision.get("sanitized_missing_evidence") or []) if decision else [],
+        "rationale_n": len(decision.get("rationale") or []) if decision else 0,
         "parse_ok": parse_ok,
         "verify_passed": bool(verify.get("passed")) if verify else False,
         "verify_issues": verify.get("issues") if verify else [],
@@ -215,6 +208,7 @@ def _predict_one(case: dict) -> dict:
         "gold_contradict_ids": list(case.get("gold_contradict_ids") or []),
         "pred_support_ids": support_ids,
         "pred_contradict_ids": contra_ids,
+        "rule_finding_codes": list(case.get("rule_finding_codes") or []),
         "annotation_reason": case.get("annotation_reason") or "",
         "raw_text": (raw_text or "")[:4000],
         "usage": usage,
@@ -224,9 +218,63 @@ def _predict_one(case: dict) -> dict:
     }
 
 
-def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0) -> dict:
+def confidence_report(rows: list[dict]) -> dict:
+    """confidence 是否真在变：直方图 + 去重值数 + 标准差 + 各 gold 档均值。"""
+    vals = [float(r["confidence"]) for r in rows if isinstance(r.get("confidence"), (int, float))]
+    hist = {}
+    for lo, hi in CONFIDENCE_BINS:
+        label = f"[{lo:.1f},{min(hi, 1.0):.1f}{']' if hi > 1 else ')'}"
+        hist[label] = sum(1 for v in vals if lo <= v < hi)
+    by_gold: dict[str, list[float]] = defaultdict(list)
+    by_pred: dict[str, list[float]] = defaultdict(list)
+    for r in rows:
+        v = r.get("confidence")
+        if isinstance(v, (int, float)):
+            by_gold[r["gold"]].append(float(v))
+            if r.get("pred") in LABELS:
+                by_pred[r["pred"]].append(float(v))
+    return {
+        "n": len(vals),
+        "histogram": hist,
+        "distinct_values": len({round(v, 2) for v in vals}),
+        "mean": round(statistics.fmean(vals), 4) if vals else None,
+        "stdev": round(statistics.pstdev(vals), 4) if len(vals) > 1 else 0.0,
+        "min": min(vals) if vals else None,
+        "max": max(vals) if vals else None,
+        "mean_by_gold": {k: round(statistics.fmean(v), 4) for k, v in sorted(by_gold.items())},
+        "mean_by_pred": {k: round(statistics.fmean(v), 4) for k, v in sorted(by_pred.items())},
+        "value_counts_top": dict(Counter(round(v, 2) for v in vals).most_common(6)),
+    }
+
+
+def missing_evidence_report(rows: list[dict]) -> dict:
+    """observe 预测中带非空 missing_evidence 的比例（judge_v3 要求 observe 必列待补材料）。"""
+    out: dict = {}
+    for label in LABELS:
+        items = [r for r in rows if r.get("pred") == label]
+        with_missing = [r for r in items if r.get("missing_evidence")]
+        out[label] = {
+            "n": len(items),
+            "with_missing_n": len(with_missing),
+            "with_missing_ratio": round(len(with_missing) / len(items), 4) if items else None,
+            "avg_missing_len": round(statistics.fmean(len(r["missing_evidence"]) for r in items), 3) if items else None,
+        }
+    observe = out.get("observe") or {}
+    return {
+        "by_pred": out,
+        "observe_with_missing_ratio": observe.get("with_missing_ratio"),
+        "sanitized_id_like_n": sum(len(r.get("sanitized_missing_evidence") or []) for r in rows),
+    }
+
+
+def _narrative_only(ids: list[str]) -> list[str]:
+    return [x for x in ids if str(x).startswith(NARRATIVE_PREFIX)]
+
+
+def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0, prompt_kind: str | None = None) -> dict:
     os.environ.pop("HUICHA_LLM_STUB", None)
     require_api_key()
+    prompt_used = prompt_kind or prompt_version("judge")
     payload = load_split("independent_set.json")
     cases = list(payload.get("cases") or [])
     if limit is not None:
@@ -237,14 +285,14 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0) -> d
     baselines = offline_baselines(cases)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    run_path = RUNS_DIR / f"{ts}.jsonl"
+    run_path = RUNS_DIR / f"{ts}_{prompt_used}.jsonl"
 
     rows: list[dict] = []
     call_errors = 0
     parse_failures = 0
     with run_path.open("w", encoding="utf-8") as fh:
         for i, case in enumerate(cases, start=1):
-            row = _predict_one(case)
+            row = _predict_one(case, prompt_kind=prompt_kind)
             if row.get("error") and not row.get("parse_ok"):
                 call_errors += 1
             if not row.get("parse_ok") or row.get("pred") not in LABELS:
@@ -264,18 +312,28 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0) -> d
     y_true = [r["gold"] for r in scored]
     y_pred = [r["pred"] for r in scored]
     clf = classification_report(y_true, y_pred) if scored else classification_report([], [])
+    # 证据 P/R 只在叙事项（IX-）上计算：gold 只标注叙事项，TX/KB 引用单独统计引用率。
     support_ev = evidence_prf(
-        [r["pred_support_ids"] for r in scored],
+        [_narrative_only(r["pred_support_ids"]) for r in scored],
         [r["gold_support_ids"] for r in scored],
     )
     contra_ev = evidence_prf(
-        [r["pred_contradict_ids"] for r in scored],
+        [_narrative_only(r["pred_contradict_ids"]) for r in scored],
         [r["gold_contradict_ids"] for r in scored],
+    )
+    tx_cite_rate = (
+        round(
+            sum(1 for r in scored if any(str(x).startswith("TX-") for x in r["pred_support_ids"] + r["pred_contradict_ids"]))
+            / len(scored),
+            4,
+        )
+        if scored
+        else None
     )
     return {
         "label": "独立集 / 真实模型 / 产品 Judge 流水线",
-        "protocol": "enrich_judge → normalize_judge → verify_judge → apply_guardrails",
-        "prompt": "judge_v2",
+        "protocol": "enrich_judge(db=None) → normalize_judge → verify_judge → apply_guardrails",
+        "prompt": prompt_used,
         "split": "independent",
         "model": llm_model(),
         "n": len(rows),
@@ -290,7 +348,7 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0) -> d
         else 0.0,
         "source": payload.get("source"),
         "caveat": payload.get("caveat"),
-        "run_log": str(run_path.as_posix()),
+        "run_log": run_path.relative_to(ROOT).as_posix(),
         "baselines": baselines,
         "classification": clf,
         "by_tag": per_tag_report(rows),
@@ -298,11 +356,15 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0) -> d
         "evidence_contradict": contra_ev,
         "evidence_precision": support_ev.get("evidence_precision"),
         "evidence_recall": support_ev.get("evidence_recall"),
+        "evidence_scope": "仅叙事项 IX- 编号参与 P/R；TX-/KB- 引用不计入",
+        "tx_cite_rate": tx_cite_rate,
+        "confidence": confidence_report(scored),
+        "missing_evidence": missing_evidence_report(scored),
         "confusion_matrix": clf.get("confusion_matrix"),
         "macro_f1": clf.get("macro_f1"),
         "honesty": (
             "不是生产准确率；须人工签发。"
-            "本协议已去除标签泄漏并走产品 Judge 契约；仍为合成 vignette。"
+            "本协议已去除标签泄漏并走产品 Judge 契约（enrich_judge 直调）；仍为合成 vignette。"
         ),
         "legacy_note": (
             "v1 结果（Macro-F1≈0.69）因 n_unique≈10、标签泄漏、自写 prompt 已降级，"
@@ -347,16 +409,24 @@ def framework_status() -> dict:
         "note": golden.get("caveat"),
         "independent_caveat": independent.get("caveat"),
         "hint": "真实评估: python experiments/benchmark.py --real",
-        "protocol": "product judge_v2 pipeline",
+        "protocol": f"product {prompt_version('judge')} pipeline (enrich_judge direct)",
     }
+
+
+def _fmt(v) -> str:
+    if isinstance(v, float):
+        return f"{v:.4f}"
+    return str(v) if v is not None else "—"
 
 
 def render_md_section(result: dict) -> list[str]:
     cm = (result.get("confusion_matrix") or {}).get("matrix") or {}
     labels = (result.get("confusion_matrix") or {}).get("labels") or list(LABELS)
     base = result.get("baselines") or {}
+    conf = result.get("confidence") or {}
+    miss = result.get("missing_evidence") or {}
     lines = [
-        "## 独立集 / 真实模型（v2 协议）",
+        f"## 独立集 / 真实模型（v3 协议 · prompt={result.get('prompt')}）",
         "",
         f"- 协议：`{result.get('protocol')}` · prompt=`{result.get('prompt')}`",
         f"- 标注集：`independent_set.json`（n={result['n']}，n_unique={result.get('n_unique_dataset')}，source={result.get('source')}）",
@@ -364,8 +434,9 @@ def render_md_section(result: dict) -> list[str]:
         f"- 计分条数：{result.get('n_scored')}（parse_failures={result.get('parse_failures')}，call_errors={result.get('call_errors')}）",
         f"- verify 通过率：{result.get('verify_pass_rate')}",
         f"- Macro-F1：**{result.get('macro_f1')}**",
-        f"- Evidence 支持侧 P/R：**{result.get('evidence_precision')} / {result.get('evidence_recall')}**",
+        f"- Evidence 支持侧 P/R：**{result.get('evidence_precision')} / {result.get('evidence_recall')}**（{result.get('evidence_scope')}）",
         f"- Evidence 反证侧 P/R：**{(result.get('evidence_contradict') or {}).get('evidence_precision')} / {(result.get('evidence_contradict') or {}).get('evidence_recall')}**",
+        f"- 引用过 TX- 编号的样本比例：{result.get('tx_cite_rate')}",
         f"- 基线 Macro-F1：always_report={(base.get('always_suggest_report') or {}).get('macro_f1')} · keyword={(base.get('keyword_match') or {}).get('macro_f1')}",
         f"- 原始输出：`{result.get('run_log')}`",
         f"- 口径：{result.get('honesty')}",
@@ -379,7 +450,28 @@ def render_md_section(result: dict) -> list[str]:
     for a in labels:
         row = cm.get(a) or {}
         lines.append("| " + a + " | " + " | ".join(str(row.get(b, 0)) for b in labels) + " |")
-    lines.extend(["", "### 按 tag 分组 Macro-F1", ""])
+    lines.extend(["", "### confidence 分布", ""])
+    hist = conf.get("histogram") or {}
+    lines.append("| 区间 | " + " | ".join(hist.keys()) + " |")
+    lines.append("| --- | " + " | ".join(["---"] * len(hist)) + " |")
+    lines.append("| 条数 | " + " | ".join(str(v) for v in hist.values()) + " |")
+    lines.extend(
+        [
+            "",
+            f"- 去重取值数={conf.get('distinct_values')} · mean={conf.get('mean')} · stdev={conf.get('stdev')} · min/max={conf.get('min')}/{conf.get('max')}",
+            f"- 按 gold 均值：`{json.dumps(conf.get('mean_by_gold') or {}, ensure_ascii=False)}` · 按 pred 均值：`{json.dumps(conf.get('mean_by_pred') or {}, ensure_ascii=False)}`",
+            f"- 最常见取值：`{json.dumps(conf.get('value_counts_top') or {}, ensure_ascii=False)}`",
+            "",
+            "### missing_evidence 契约",
+            "",
+            f"- observe 预测中带非空 missing_evidence 的比例：**{miss.get('observe_with_missing_ratio')}**",
+            f"- 按 pred：`{json.dumps(miss.get('by_pred') or {}, ensure_ascii=False)}`",
+            f"- 被 sanitize 掉的编号样条目数：{miss.get('sanitized_id_like_n')}",
+            "",
+            "### 按 tag 分组 Macro-F1",
+            "",
+        ]
+    )
     for tag, info in (result.get("by_tag") or {}).items():
         lines.append(
             f"- `{tag}` (gold={info.get('gold')}, n={info.get('n')}): macro_f1={info.get('macro_f1')}, acc={info.get('accuracy')}"
@@ -395,7 +487,78 @@ def render_md_section(result: dict) -> list[str]:
     return lines
 
 
-def update_results_md(result: dict) -> None:
+ABLATION_METRICS = [
+    ("macro_f1", "Macro-F1"),
+    ("accuracy", "Accuracy"),
+    ("evidence_precision", "Evidence P（支持侧）"),
+    ("evidence_recall", "Evidence R（支持侧）"),
+    ("verify_pass_rate", "verify 通过率"),
+    ("parse_failures", "parse_failures"),
+    ("confidence_distinct", "confidence 去重取值数"),
+    ("confidence_stdev", "confidence 标准差"),
+    ("observe_with_missing_ratio", "observe 带 missing 比例"),
+    ("exclude_recall", "exclude 召回"),
+    ("observe_recall", "observe 召回"),
+    ("suggest_report_recall", "suggest_report 召回"),
+]
+
+
+def _flatten_for_ablation(result: dict) -> dict:
+    per_class = (result.get("classification") or {}).get("per_class") or {}
+    conf = result.get("confidence") or {}
+    return {
+        "prompt": result.get("prompt"),
+        "run_log": result.get("run_log"),
+        "n_scored": result.get("n_scored"),
+        "macro_f1": result.get("macro_f1"),
+        "accuracy": (result.get("classification") or {}).get("accuracy"),
+        "evidence_precision": result.get("evidence_precision"),
+        "evidence_recall": result.get("evidence_recall"),
+        "verify_pass_rate": result.get("verify_pass_rate"),
+        "parse_failures": result.get("parse_failures"),
+        "confidence_distinct": conf.get("distinct_values"),
+        "confidence_stdev": conf.get("stdev"),
+        "observe_with_missing_ratio": (result.get("missing_evidence") or {}).get("observe_with_missing_ratio"),
+        "exclude_recall": (per_class.get("exclude") or {}).get("recall"),
+        "observe_recall": (per_class.get("observe") or {}).get("recall"),
+        "suggest_report_recall": (per_class.get("suggest_report") or {}).get("recall"),
+        "confusion_matrix": (result.get("confusion_matrix") or {}).get("matrix"),
+    }
+
+
+def build_ablation(runs: dict[str, dict]) -> dict | None:
+    """同一独立集上不同 judge prompt 的并排对比；只有 ≥2 个 prompt 时才有意义。"""
+    if len(runs) < 2:
+        return None
+    ordered = sorted(runs.keys())
+    return {
+        "note": "同一 independent_set.json、同一模型、同一后处理；唯一变量为 judge prompt 版本。",
+        "prompts": ordered,
+        "rows": {p: _flatten_for_ablation(runs[p]) for p in ordered},
+    }
+
+
+def render_ablation_md(ablation: dict) -> list[str]:
+    prompts = ablation["prompts"]
+    lines = [
+        "## 消融：judge prompt 版本对比（同一独立集）",
+        "",
+        f"- {ablation['note']}",
+        "",
+        "| 指标 | " + " | ".join(f"`{p}`" for p in prompts) + " |",
+        "| --- | " + " | ".join(["---"] * len(prompts)) + " |",
+    ]
+    for key, label in ABLATION_METRICS:
+        lines.append(f"| {label} | " + " | ".join(_fmt(ablation["rows"][p].get(key)) for p in prompts) + " |")
+    lines.append("")
+    for p in prompts:
+        cm = ablation["rows"][p].get("confusion_matrix") or {}
+        lines.append(f"- `{p}` 混淆矩阵（行=gold）：`{json.dumps(cm, ensure_ascii=False)}` · 原始输出 `{ablation['rows'][p].get('run_log')}`")
+    lines.append("")
+    return lines
+
+
+def update_results_md(result: dict, ablation: dict | None = None) -> None:
     md_path = Path(__file__).parent / "RESULTS.md"
     text = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     marker = "## 独立集 / 真实模型"
@@ -405,6 +568,8 @@ def update_results_md(result: dict) -> None:
         "- 上节为独立 vignette × 产品 Judge 的实验数字，禁止与 stub 机制验证混写成产品准确率。\n"
     )
     section = "\n".join(render_md_section(result))
+    if ablation:
+        section += "\n" + "\n".join(render_ablation_md(ablation))
     if marker in text:
         head, _, _rest = text.partition(marker)
         base = head.rstrip() + "\n\n"
@@ -415,10 +580,43 @@ def update_results_md(result: dict) -> None:
     md_path.write_text(base + section + "\n" + stub_tail, encoding="utf-8")
 
 
-def update_results_json(result: dict) -> None:
+RESULT_KEEP_KEYS = [
+    "label",
+    "protocol",
+    "prompt",
+    "split",
+    "model",
+    "n",
+    "n_unique_dataset",
+    "n_scored",
+    "parse_failures",
+    "call_errors",
+    "verify_pass_rate",
+    "source",
+    "macro_f1",
+    "evidence_precision",
+    "evidence_recall",
+    "evidence_scope",
+    "tx_cite_rate",
+    "evidence_support",
+    "evidence_contradict",
+    "confidence",
+    "missing_evidence",
+    "confusion_matrix",
+    "baselines",
+    "by_tag",
+    "run_log",
+    "honesty",
+    "caveat",
+    "legacy_note",
+    "classification",
+]
+
+
+def update_results_json(result: dict) -> dict | None:
+    """写入最新一次结果；按 prompt 保留各版本最近一次，用于消融对比。返回 ablation（若有）。"""
     path = Path(__file__).parent / "RESULTS.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    # 降级旧结果
     if "independent_real_model" in data and "independent_real_model_v1_deprecated" not in data:
         old = data["independent_real_model"]
         old["deprecated"] = True
@@ -427,35 +625,20 @@ def update_results_json(result: dict) -> None:
             "仅作流水线打通记录，不得解释为模型能力。"
         )
         data["independent_real_model_v1_deprecated"] = old
-    keep_keys = [
-        "label",
-        "protocol",
-        "prompt",
-        "split",
-        "model",
-        "n",
-        "n_unique_dataset",
-        "n_scored",
-        "parse_failures",
-        "call_errors",
-        "verify_pass_rate",
-        "source",
-        "macro_f1",
-        "evidence_precision",
-        "evidence_recall",
-        "evidence_support",
-        "evidence_contradict",
-        "confusion_matrix",
-        "baselines",
-        "by_tag",
-        "run_log",
-        "honesty",
-        "caveat",
-        "legacy_note",
-        "classification",
-    ]
-    data["independent_real_model"] = {k: result[k] for k in keep_keys if k in result}
+    slim = {k: result[k] for k in RESULT_KEEP_KEYS if k in result}
+    # v2 集（missing_evidence 泄漏、无规则层）的结果不与 v3 集混比：换源时清空按 prompt 的对比槽。
+    runs = data.get("independent_real_model_runs") or {}
+    if any((r.get("source") != result.get("source")) for r in runs.values()):
+        data["independent_real_model_runs_superseded"] = runs
+        runs = {}
+    runs[str(result.get("prompt"))] = slim
+    data["independent_real_model_runs"] = runs
+    data["independent_real_model"] = slim
+    ablation = build_ablation(runs)
+    if ablation:
+        data["independent_ablation"] = ablation
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return ablation
 
 
 def main() -> dict:
@@ -463,7 +646,25 @@ def main() -> dict:
     parser.add_argument("--real", action="store_true", help="独立集上真实调用产品 Judge")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--baselines-only", action="store_true", help="只算离线基线，不调模型")
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        help="覆盖 judge prompt 版本（如 judge_v2 / judge_v3）；默认用产品 prompt_version('judge')。仅作消融，不改产品默认值。",
+    )
+    parser.add_argument("--no-write", action="store_true", help="不写 RESULTS.json / RESULTS.md（试跑用）")
+    parser.add_argument("--rerender", action="store_true", help="不调模型，用 RESULTS.json 现有结果重渲染 RESULTS.md")
     args = parser.parse_args()
+    if args.rerender:
+        data = json.loads((Path(__file__).parent / "RESULTS.json").read_text(encoding="utf-8"))
+        latest = data.get("independent_real_model") or {}
+        runs = data.get("independent_real_model_runs") or {}
+        ablation = build_ablation(runs)
+        if ablation:
+            data["independent_ablation"] = ablation
+            (Path(__file__).parent / "RESULTS.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        update_results_md(latest, ablation)
+        print(json.dumps({"rerendered": True, "prompts": list(runs.keys())}, ensure_ascii=False))
+        return latest
     if args.baselines_only:
         payload = load_split("independent_set.json")
         out = {
@@ -478,9 +679,10 @@ def main() -> dict:
         out = framework_status()
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
-    result = evaluate_independent(limit=args.limit)
-    update_results_json(result)
-    update_results_md(result)
+    result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt)
+    if not args.no_write:
+        ablation = update_results_json(result)
+        update_results_md(result, ablation)
     printable = {k: v for k, v in result.items() if k != "by_tag"}
     printable["by_tag_n"] = len(result.get("by_tag") or {})
     print(json.dumps(printable, ensure_ascii=False, indent=2))

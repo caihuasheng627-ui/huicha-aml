@@ -64,7 +64,9 @@ Case → Planner → Evidence Collector → Indicator Analyst
 
 每条 `rationale` 必须引用本轮工具返回的证据编号。未知编号、无引用理由、建议上报但无支持证据 → 整份建议校验失败并阻断签发。`confidence` 只是模型自评把握度，不是校准概率。
 
-真实百炼调用中已处理的模型行为（prompt `judge_v2`）：
+当前 Judge prompt 为 `judge_v3`：在 `judge_v2` 的引用契约之上写明三档可操作判定标准——来源与去向均有完整合理解释且干扰点已解释 → `exclude`；无清晰异常节奏但缺关键材料 → `observe`（必须列 `missing_evidence`）；异常节奏（短时多点取现回流、当日多层递减过桥、关联对倒闭环、现金→兑换商、分散归集→集中外转）且无经营/生活解释 → `suggest_report`（不因材料不全降档）。另要求 `missing_evidence` 为空时不得给 `observe`、每条理由写明推向哪一档、`confidence` 随证据强弱变化。消融对比见 `experiments/REAL_MODEL_REPORT.md`。
+
+真实百炼调用中已处理的模型行为（`judge_v2` 起沿用）：
 
 - 输出被 `max_tokens` 截断或非 JSON：先带针对性提示重试一次，再降级到规则对照；截断输出不写缓存。
 - `missing_evidence` 被填成证据编号/编号区间：自动剔除并记录到 `sanitized_missing_evidence`，只保留材料描述。
@@ -82,9 +84,10 @@ Case → Planner → Evidence Collector → Indicator Analyst
 ## 9. Benchmark
 
 - 机制验证：`cd backend && python -m app.experiments`（模板精标 + stub，**不是准确率**）。
-- 能力指标框架：`python experiments/benchmark.py` → **Not evaluated yet**。
+- 能力指标框架：`python experiments/benchmark.py`（框架状态与离线基线）；`--real` 在独立合成集上真实调用产品 Judge，`--prompt judge_v2` 做消融。
 - 当前库约 80 条模板精标（`ALT-EXT-01`…）+ 路演案 A/B/C/D/F/L；`gold_label` 与规则模板同源。
-- 独立测试集约 300–1000 条：TODO。
+- 独立合成集 v3：240 条唯一输入、11 个叙事族、规则层同构、无标签泄漏（`experiments/benchmark/independent_set.json`）。真实模型消融（同一集，唯一变量 prompt）：`judge_v2` Macro-F1 0.39 → `judge_v3` 0.97；**合成集实验对照，不是生产准确率**，读数与限制见 `experiments/REAL_MODEL_REPORT.md`。
+- 人工标注的真实脱敏 hold-out：TODO。
 
 ## 10. Demo
 

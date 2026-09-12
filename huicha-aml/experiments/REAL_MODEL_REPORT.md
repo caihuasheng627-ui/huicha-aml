@@ -149,12 +149,13 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 - 「比 v2 集的 0.17 提升 0.8」——两套集不可比；可比的是**同一 v3 集上** 0.39 → 0.97。  
 - confidence 是校准概率。
 
-### 下一步
+### 下一步（§9 已做 1、2）
 
-1. **例举之外的类型学 hold-out**：新增 judge_v3 标准里没有例举的上报族（如贸易融资重复质押、赌博资金归集、跨境拆分汇出）与更难的排除族（合理但复杂的经营解释），只跑不改 prompt，看泛化。  
-2. **inheritance_partial 边界**：6 条偏严样本做人工复核，决定是修标准（「单笔突增但来源为亲属且无外转 ⇒ observe」）还是接受偏严。  
-3. **parse_failures**：两版共 8 条均为模型输出 JSON 结构不完整（finish_reason=stop，非 max_tokens 截断）；产品路径有针对性重试，benchmark 保持单独计数不并入 observe。  
-4. 少量真实脱敏案由调查员标注后作为最终 hold-out（与本集无关）。
+1. ~~例举之外的类型学 hold-out~~ → 见 §9.1，盲区集 keyword 0.11、judge_v3 Macro-F1 0.93。  
+2. ~~去掉叙事项极性~~ → 见 §9.2，v3 几乎不动（0.9662→0.9656），v2 上报召回 0.62→0.50。  
+3. **inheritance_partial / docs_pending 边界**：观察族偏严仍在（主集 6 条、盲区 10 条）。  
+4. **parse_failures**：模型 JSON 结构不完整单独计数。  
+5. 少量真实脱敏案由调查员标注后作为最终 hold-out。
 
 ---
 
@@ -166,5 +167,45 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `RESULTS.json` → `independent_real_model`（最新）· `independent_real_model_runs.{judge_v2,judge_v3}` · `independent_ablation` | 结构化全量 |
 | `SELF_TEST_PLAYBOOK.md` | 复现流程（含 `--prompt` 消融、`--rerender`） |
 | `benchmark/build_independent_set.py` · `benchmark/independent_set.json` | 数据生成器与数据 |
-| `benchmark/runs/20260912T144147Z_judge_v2.jsonl` · `benchmark/runs/20260912T151253Z_judge_v3.jsonl` | 逐条 raw 输出 |
-| `backend/tests/test_independent_benchmark_set.py` | 数据集不变量 |
+| `benchmark/runs/20260912T144147Z_judge_v2.jsonl` · `benchmark/runs/20260912T151253Z_judge_v3.jsonl` | 主集逐条 raw |
+| `benchmark/blind_set.json` · `runs/20260912T161440Z_blind_judge_v3.jsonl` · `runs/20260912T165213Z_blind_judge_v2.jsonl` | 盲区 hold-out |
+| `benchmark/independent_set_nopolarity.json` · `runs/20260912T173531Z_nopolarity_judge_v2.jsonl` · `runs/20260912T183509Z_nopolarity_judge_v3.jsonl` | 去极性消融 |
+| `RESULTS.json` → `runs_by_source` · `validity_comparison` | 三集 × 两 prompt |
+| `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
+
+---
+
+## 9. 有效性复测（盲区 hold-out + 去极性）
+
+同一模型 `deepseek-v4-flash-0731`、同一 `enrich_judge` 后处理；**不改** `judge_v3` 正文。
+
+### 9.1 盲区 hold-out（`blind_set.json`，n=220，11 个新族）
+
+叙事、备注、客户摘要、告警类型、叙事项**禁止**出现 judge_v3 例举词（工资表/赔付书/财政/网签/合同/公证书/用途说明/发票/取现/回流/多层/递减/过桥/关联/对倒/闭环/现金/兑换商/归集/集中外转/阈值/存入）。类型学换成：旺季备货、股权转让、法院执行、征收补偿、重复质押融资、代收竞猜款、跨境贴线连汇、员工代收货款、空壳劳务代发、新户首笔大额、继承材料不齐。规则层 findings 仍是产品 `analyze()` 原文（不受禁词约束）。
+
+| 方法 | Macro-F1 | exclude 召回 | report 召回 | observe 预测率 | keyword 基线 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| keyword_match | 0.1096 | 0 | 0.01 | ≈0.99 | — |
+| judge_v2 | 0.4259 | 0.00 | 0.73 | 0.671 | 0.11 |
+| judge_v3 | **0.9286** | 0.9875 | 1.00 | 0.138 | 0.11 |
+
+混淆（v3，n_scored=217）：exclude 79/80 对（1 条 equity_transfer→observe）；observe 29/39（10 条偏严上报：docs_pending 6 + first_large 4）；report 98/98。无 exclude↔report 危险对角。
+
+**读数**：旧 keyword 基线在盲区上塌到 0.11，说明表面词面匹配已经被拆掉；v3 仍到 0.93，说明它主要靠「来源去向能否闭合 / 有没有异常节奏」这套抽象标准，而不只是例举词表。v2 在盲区上排除档依然全灭（79→observe），和主集同构——「不敢判 exclude」不是因为主集词面泄漏。
+
+0.93 仍是合成集乐观估计：规则层 finding 文本（产品自己写的「拆分存入」「夜间转出」等）模型仍能看见；金标仍是按族预设的 11 个判断。
+
+### 9.2 去极性（同主集同种子，叙事项 polarity 一律 `context`）
+
+| prompt | 主集（有极性）Macro-F1 | 去极性 Macro-F1 | report 召回 主集→去极性 | observe 预测率 去极性 |
+| --- | ---: | ---: | ---: | ---: |
+| judge_v2 | 0.3867 | **0.3434** | 0.619 → **0.495** | 0.772 |
+| judge_v3 | 0.9662 | **0.9656** | 1.000 → 1.000 | 0.158 |
+
+v3 几乎不依赖叙事项上的 support/counter 标签（差值 <0.001）；v2 去掉极性后更不敢报（observe 率 72%→77%）。极性半泄漏解释不了 v3 的 0.97，它解释的是 v2 上报档里多出来的那一截。
+
+### 9.3 三句话结论
+
+1. **API 与协议成立**；词面重合把主集 v3 从「真实泛化」抬到了 0.97，盲区把这个水分挤到 0.93，方向没变。  
+2. **v3 相对 v2 的贡献是真的**：两套集上排除召回都是 0→≈1，observe 率从 67–77% 降到 14–16%。  
+3. **不能对外说 93% 生产能力**；下一步仍是调查员标注的真实 hold-out，以及观察族偏严（继承/新户首笔）要不要改标准。

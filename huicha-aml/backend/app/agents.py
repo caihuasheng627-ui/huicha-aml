@@ -52,8 +52,10 @@ def regulation_cites(kb_hits: list[dict], as_of: str) -> list[RegulationCite]:
             article=h.get("article") or "",
             evidence=h.get("snippet") or "",
             source=h.get("source") or "",
-            as_of=as_of,
+            as_of=as_of or h.get("as_of") or "",
             effective_date=h.get("effective_date") or "",
+            expiry_date=h.get("expiry_date") or "",
+            version=h.get("version") or "",
             kind_label=h.get("kind_label") or "",
         )
         for h in kb_hits

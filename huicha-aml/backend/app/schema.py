@@ -105,6 +105,8 @@ class RegulationCite(BaseModel):
     source: str = ""
     as_of: str = ""
     effective_date: str = ""
+    expiry_date: str = ""
+    version: str = ""
     kind_label: str = ""
 
 

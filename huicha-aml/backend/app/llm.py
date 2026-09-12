@@ -84,6 +84,66 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     }
     sys = messages[0]["content"] if messages else ""
     user = messages[-1]["content"] if messages else ""
+    if "调查 Judge" in sys or "disposition" in sys:
+        try:
+            data = json.loads(user)
+        except json.JSONDecodeError:
+            data = {}
+        findings = data.get("findings") or []
+        codes = {str(f.get("code") or "") for f in findings}
+        if {"structuring", "funnel", "layering", "watchlist"} & codes:
+            disposition, confidence = "suggest_report", 0.78
+        elif {"unregistered-counterparty"} & codes or data.get("missing_evidence"):
+            disposition, confidence = "observe", 0.62
+        else:
+            disposition, confidence = "exclude", 0.72
+        support = [
+            eid
+            for f in findings
+            if f.get("polarity") == "support"
+            for eid in (f.get("evidence_ids") or [])
+        ][:6]
+        counter = [
+            eid
+            for f in findings
+            if f.get("polarity") == "counter"
+            for eid in (f.get("evidence_ids") or [])
+        ][:6]
+        cited = support or counter or list(data.get("allowed_evidence_ids") or [])[:2]
+        return (
+            json.dumps(
+                {
+                    "disposition": disposition,
+                    "confidence": confidence,
+                    "typologies": sorted(codes & {"structuring", "funnel", "layering", "watchlist"}),
+                    "supporting_evidence_ids": support,
+                    "contradicting_evidence_ids": counter,
+                    "missing_evidence": data.get("missing_evidence") or [],
+                    "rationale": [{"text": "依据本案已调取事实形成初步建议。", "evidence_ids": cited}],
+                    "next_actions": ["由调查员复核证据与缺失材料"],
+                },
+                ensure_ascii=False,
+            ),
+            usage,
+        )
+    if "完整四段调查底稿" in sys:
+        try:
+            data = json.loads(user)
+        except json.JSONDecodeError:
+            data = {}
+        ids = "、".join((data.get("evidence_ids") or [])[:6]) or "（无）"
+        conclusion = data.get("conclusion_label") or "待审"
+        return (
+            "\n".join(
+                [
+                    f"【资金交易及客户行为】已调取本案客户与交易事实，关键证据 {ids}。",
+                    f"【疑点分析】依据已核验指标形成{conclusion}的初步建议，证据 {ids}。",
+                    f"【反证与缺失证据】已区分反向证据和待补材料，证据 {ids}。",
+                    f"【结论与理由】{conclusion}。须人工签发，不可自动报送，证据 {ids}。",
+                ]
+            ),
+            usage,
+        )
     if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
         try:
             data = json.loads(user)
@@ -239,6 +299,23 @@ def _extract_json_array(text: str) -> list:
             last_err = e
             continue
     raise RuntimeError(f"Challenger 返回非 JSON：{text[:400]}") from last_err
+
+
+def _extract_json_object(text: str) -> dict:
+    raw = _strip_fence(text)
+    raw = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.I).strip()
+    candidates = [raw]
+    start, end = raw.find("{"), raw.rfind("}")
+    if start >= 0 and end > start:
+        candidates.append(raw[start : end + 1])
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            continue
+    raise RuntimeError(f"模型返回非 JSON 对象：{text[:400]}")
 
 
 def _unmask_value(value, privacy: PrivacyMap | None):
@@ -451,4 +528,97 @@ def enrich_report_reason(
         raise RuntimeError("Reporter 返回空文本")
     if key:
         _cache_put(db, key, "reporter_v2", text if not privacy else privacy.mask_text(text), usage)
+    return text, usage
+
+
+def enrich_judge(
+    *,
+    db: Session | None = None,
+    privacy: PrivacyMap | None = None,
+    alert: dict,
+    customer: dict,
+    findings: list[dict],
+    transactions: list[dict],
+    baseline: dict,
+    kb_hits: list[dict],
+    allowed_evidence: list[str],
+    missing_evidence: list[str] | None = None,
+    prior_issues: list[dict] | None = None,
+) -> tuple[dict, dict]:
+    context = {
+        "alert_trigger": {
+            "type": alert.get("alert_type"),
+            "source": alert.get("upstream"),
+            "note": "仅为待复核线索，不直接决定 disposition",
+        },
+        "customer": {
+            key: customer.get(key)
+            for key in ("id", "name", "kind", "industry", "opened_at", "kyc_level", "summary")
+        },
+        "findings": findings,
+        "transactions": transactions[:30],
+        "baseline": baseline,
+        "knowledge": [
+            {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}
+            for h in kb_hits[:8]
+        ],
+        "allowed_evidence_ids": allowed_evidence[:120],
+        "missing_evidence": missing_evidence or [],
+        "repair_issues": prior_issues or [],
+    }
+    if privacy:
+        context = privacy.mask_obj(context)
+    key = None if prior_issues else _cache_key("judge_v1", context)
+    cached = _cache_get(db, key) if key else None
+    if cached:
+        text, usage = cached
+    else:
+        from .prompts import PROMPTS
+
+        text, usage = chat(
+            [
+                {"role": "system", "content": PROMPTS["judge_v1"]},
+                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+            ],
+            temperature=0.0,
+            max_tokens=1000,
+        )
+        if key:
+            _cache_put(db, key, "judge_v1", text, usage)
+    data = _extract_json_object(text)
+    return _unmask_value(data, privacy), usage
+
+
+def enrich_full_report(
+    *,
+    db: Session | None = None,
+    privacy: PrivacyMap | None = None,
+    context: dict,
+    prior_issues: list[dict] | None = None,
+) -> tuple[str, dict]:
+    payload = {**context, "repair_issues": prior_issues or []}
+    if privacy:
+        payload = privacy.mask_obj(payload)
+    key = None if prior_issues else _cache_key("reporter_v3", payload)
+    cached = _cache_get(db, key) if key else None
+    if cached:
+        text, usage = cached
+    else:
+        from .prompts import PROMPTS
+
+        text, usage = chat(
+            [
+                {"role": "system", "content": PROMPTS["reporter_v3"]},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+            temperature=0.0,
+            max_tokens=1200,
+        )
+        if key:
+            _cache_put(db, key, "reporter_v3", text, usage)
+    text = _strip_fence(text)
+    if privacy:
+        text = privacy.unmask_text(text)
+    if not text:
+        raise RuntimeError("Reporter 返回空文本")
     return text, usage

@@ -20,6 +20,7 @@ AMLTag = Literal[
     "other",
 ]
 
+Disposition = Literal["exclude", "observe", "suggest_report"]
 Recommendation = Literal["CLOSE", "MONITOR", "EDD", "REPORT_REVIEW"]
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
 CaseStatus = Literal["OPEN", "INVESTIGATING", "PENDING_REVIEW", "CLOSED", "REPORTED"]
@@ -78,6 +79,22 @@ class ValidationResult(BaseModel):
     observed: dict = Field(default_factory=dict)
     reason: str = ""
     rejected_delta: float | None = None
+
+
+class JudgeRationale(BaseModel):
+    text: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class JudgeDecision(BaseModel):
+    disposition: Disposition
+    confidence: float = Field(ge=0.0, le=1.0)
+    typologies: list[str] = Field(default_factory=list)
+    supporting_evidence_ids: list[str] = Field(default_factory=list)
+    contradicting_evidence_ids: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    rationale: list[JudgeRationale] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
 
 
 class RegulationCite(BaseModel):

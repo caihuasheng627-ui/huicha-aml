@@ -37,6 +37,60 @@ def client(monkeypatch):
             "model": "deepseek-v4-flash-0731",
         }
         sys = messages[0]["content"]
+        if "调查 Judge" in sys or "disposition" in sys:
+            data = json.loads(user)
+            findings = data.get("findings") or []
+            codes = {f.get("code") for f in findings}
+            if {"structuring", "funnel", "layering", "watchlist"} & codes:
+                disposition, confidence = "suggest_report", 0.78
+            elif "unregistered-counterparty" in codes:
+                disposition, confidence = "observe", 0.62
+            else:
+                disposition, confidence = "exclude", 0.72
+            support = [
+                evidence_id
+                for finding in findings
+                if finding.get("polarity") == "support"
+                for evidence_id in finding.get("evidence_ids", [])
+            ][:6]
+            counter = [
+                evidence_id
+                for finding in findings
+                if finding.get("polarity") == "counter"
+                for evidence_id in finding.get("evidence_ids", [])
+            ][:6]
+            cited = support or counter or data.get("allowed_evidence_ids", [])[:2]
+            return (
+                json.dumps(
+                    {
+                        "disposition": disposition,
+                        "confidence": confidence,
+                        "typologies": list(codes & {"structuring", "funnel", "layering", "watchlist"}),
+                        "supporting_evidence_ids": support,
+                        "contradicting_evidence_ids": counter,
+                        "missing_evidence": [],
+                        "rationale": [{"text": "单测 Judge 建议", "evidence_ids": cited}],
+                        "next_actions": ["人工复核"],
+                    },
+                    ensure_ascii=False,
+                ),
+                usage,
+            )
+        if "完整四段调查底稿" in sys:
+            data = json.loads(user)
+            ids = "、".join(data.get("evidence_ids", [])[:4])
+            conclusion = data["conclusion_label"]
+            return (
+                "\n".join(
+                    [
+                        f"【资金交易及客户行为】已核对证据 {ids}。",
+                        f"【疑点分析】形成{conclusion}初步建议，证据 {ids}。",
+                        f"【反证与缺失证据】已核查反向材料，证据 {ids}。",
+                        f"【结论与理由】{conclusion}。须人工签发，不可自动报送，证据 {ids}。",
+                    ]
+                ),
+                usage,
+            )
         if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
             try:
                 data = json.loads(user)

@@ -7,14 +7,15 @@ from sqlalchemy.orm import Session
 from .analyst_rules import CONCLUSION_LABEL, analyze, rule_prior, score_to_conclusion
 from .case_store import evidence_case_index, persist_investigation
 from .checklist import attach_checklist, enrich_counterparties
+from .decision import apply_guardrails, decision_claims, normalize_judge, rule_baseline, verify_judge
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
-from .llm import enrich_challenger, enrich_report_reason, llm_model
+from .llm import enrich_challenger, enrich_full_report, enrich_judge, enrich_report_reason, llm_model
 from .predicates import case_facts
 from .logging_util import audit, warning
 from .privacy import PrivacyMap
 from .prompts import prompt_version
-from .report_draft import apply_reason, render_report
+from .report_draft import apply_full_text, apply_reason, render_report
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL, aggregate, counterfactual, score_to_level
 from .schema import InvestigationPlan, PlanStep, RegulationCite, StructuredReport
 from .tool_audit import bind_tool_context, reset_tool_context, tool
@@ -54,7 +55,7 @@ def run_investigation(
     tool_trace: list = []
     tokens = bind_tool_context(db=db, alert_id=alert_id, trace=tool_trace)
     try:
-        return _run_investigation_inner(
+        return _run_investigation_v3(
             db,
             alert_id,
             use_challenger=use_challenger,
@@ -211,6 +212,487 @@ def _challenger_stage(
         "rejected": rejected,
         "hints": hints,
     }
+
+
+def _run_investigation_v3(
+    db: Session,
+    alert_id: str,
+    *,
+    use_challenger: bool,
+    inject_hallucination: bool,
+    experiment_mode: bool,
+    started: float,
+    tool_trace: list,
+) -> dict:
+    """V3：AI 给完整调查建议；规则仅作指标、对照和硬护栏。"""
+    collected = _collect_stage(db, alert_id)
+    bundle = collected["bundle"]
+    alert = collected["alert"]
+    customer = collected["customer"]
+    txs = collected["txs"]
+    kb_hits = collected["kb_hits"]
+    baseline = bundle["baseline"]
+    watch_hits = bundle["watch_hits"]
+    planned = collected["planned"]
+    as_of = collected["as_of"]
+    account_id = collected["account_id"]
+    privacy = PrivacyMap()
+    privacy.build_from_bundle(bundle)
+
+    analyst = analyze(
+        alert=alert,
+        customer=customer,
+        txs=txs,
+        account_id=account_id,
+        baseline=baseline,
+        watch_hits=watch_hits,
+        graph=bundle["graph"],
+    )
+    findings = analyst["findings"]
+    baseline_result = rule_baseline(analyst)
+    ev_graph = build_evidence_graph(alert["id"], bundle, kb_hits)
+    allowed_evidence = sorted(
+        source_ids_of(ev_graph)
+        | {t["id"] for t in txs}
+        | {customer["id"], alert["account_id"]}
+        | {e for f in findings for e in f.get("evidence_ids", [])}
+    )
+
+    judge_usage: dict = {}
+    judge_repaired = False
+    fallback_reason = ""
+    if use_challenger:
+        try:
+            raw_judge, judge_usage = enrich_judge(
+                db=db,
+                privacy=privacy,
+                alert=alert,
+                customer=customer,
+                findings=findings,
+                transactions=txs,
+                baseline=baseline,
+                kb_hits=kb_hits,
+                allowed_evidence=allowed_evidence,
+            )
+            judge = normalize_judge(raw_judge)
+            judge_validation = verify_judge(judge, allowed_evidence=set(allowed_evidence))
+            if not judge_validation["passed"]:
+                judge_repaired = True
+                raw_judge, judge_usage = enrich_judge(
+                    db=db,
+                    privacy=privacy,
+                    alert=alert,
+                    customer=customer,
+                    findings=findings,
+                    transactions=txs,
+                    baseline=baseline,
+                    kb_hits=kb_hits,
+                    allowed_evidence=allowed_evidence,
+                    prior_issues=judge_validation["issues"],
+                )
+                judge = normalize_judge(raw_judge)
+                judge_validation = verify_judge(judge, allowed_evidence=set(allowed_evidence))
+        except (RuntimeError, ValueError) as exc:
+            fallback_reason = str(exc)
+            judge = {
+                "disposition": baseline_result["conclusion"],
+                "confidence": baseline_result["score"],
+                "typologies": tags_from_findings(findings),
+                "supporting_evidence_ids": [
+                    e for f in findings if f.get("polarity") == "support" for e in f.get("evidence_ids", [])
+                ][:8],
+                "contradicting_evidence_ids": [
+                    e for f in findings if f.get("polarity") == "counter" for e in f.get("evidence_ids", [])
+                ][:8],
+                "missing_evidence": ["AI Judge 调用失败，须人工完整复核"],
+                "rationale": [],
+                "next_actions": ["人工复核规则对照与原始证据"],
+            }
+            judge_validation = {
+                "passed": False,
+                "issues": [{"kind": "judge_failure", "message": fallback_reason}],
+                "citation_count": 0,
+                "invalid_ids": [],
+                "score_kind": "fallback",
+                "reason": "AI Judge 失败，已降级为规则对照",
+            }
+    else:
+        judge = {
+            "disposition": baseline_result["conclusion"],
+            "confidence": baseline_result["score"],
+            "typologies": tags_from_findings(findings),
+            "supporting_evidence_ids": [
+                e for f in findings if f.get("polarity") == "support" for e in f.get("evidence_ids", [])
+            ][:8],
+            "contradicting_evidence_ids": [
+                e for f in findings if f.get("polarity") == "counter" for e in f.get("evidence_ids", [])
+            ][:8],
+            "missing_evidence": ["AI Judge 已关闭，当前仅展示规则对照"],
+            "rationale": [],
+            "next_actions": ["启用 AI Judge 或由调查员人工研判"],
+        }
+        judge_validation = {
+            "passed": True,
+            "issues": [],
+            "citation_count": 0,
+            "invalid_ids": [],
+            "score_kind": "rule_only_ablation",
+            "reason": "实验模式：AI Judge 已关闭",
+        }
+
+    guardrails = apply_guardrails(judge, watch_hits=watch_hits)
+    conclusion = guardrails["final_conclusion"]
+    confidence = float(judge.get("confidence") or 0)
+    confidence = max(0.0, min(1.0, confidence))
+
+    # 对 Judge 声称的关键支持证据做一次最小剔除，观察建议是否连贯变化。
+    counterfactual_result = {
+        "performed": False,
+        "faithful": None,
+        "removed_evidence_ids": [],
+        "original_conclusion": judge["disposition"],
+        "counterfactual_conclusion": "",
+        "note": "无可剔除的关键支持证据，未执行 AI 反事实。",
+    }
+    if use_challenger and judge_validation["passed"] and judge.get("supporting_evidence_ids"):
+        key_id = judge["supporting_evidence_ids"][0]
+        cf_findings = [
+            {**f, "evidence_ids": [e for e in (f.get("evidence_ids") or []) if e != key_id]}
+            for f in findings
+            if not (f.get("evidence_ids") == [key_id])
+        ]
+        try:
+            raw_cf, _ = enrich_judge(
+                db=db,
+                privacy=privacy,
+                alert=alert,
+                customer=customer,
+                findings=cf_findings,
+                transactions=[t for t in txs if t.get("id") != key_id],
+                baseline=baseline,
+                kb_hits=kb_hits,
+                allowed_evidence=[e for e in allowed_evidence if e != key_id],
+                prior_issues=[{"kind": "counterfactual", "message": f"移除关键证据 {key_id} 后重新判断"}],
+            )
+            cf_judge = normalize_judge(raw_cf)
+            cf_valid = verify_judge(cf_judge, allowed_evidence=set(allowed_evidence) - {key_id})
+            counterfactual_result = {
+                "performed": True,
+                "faithful": bool(cf_valid["passed"] and cf_judge["disposition"] != judge["disposition"]),
+                "removed_evidence_ids": [key_id],
+                "original_conclusion": judge["disposition"],
+                "counterfactual_conclusion": cf_judge["disposition"] if cf_valid["passed"] else "",
+                "note": (
+                    "移除模型声明的关键证据后建议随之变化"
+                    if cf_valid["passed"] and cf_judge["disposition"] != judge["disposition"]
+                    else "移除关键证据后建议未变化，已标记供人工复核"
+                ),
+            }
+        except (RuntimeError, ValueError) as exc:
+            counterfactual_result["note"] = f"反事实执行失败：{exc}"
+
+    report = render_report(
+        alert,
+        customer,
+        baseline,
+        findings,
+        [],
+        conclusion,
+        txs,
+        analyst["inflow"],
+        analyst["outflow"],
+        use_challenger,
+        kb_hits,
+    )
+    reporter_usage: dict = {}
+    fact_retry = False
+    if use_challenger and judge_validation["passed"]:
+        report_context = {
+            "conclusion": conclusion,
+            "conclusion_label": CONCLUSION_LABEL[conclusion],
+            "customer": {k: customer.get(k) for k in ("id", "name", "industry", "opened_at")},
+            "alert": {k: alert.get(k) for k in ("id", "alert_type", "account_id", "created_at")},
+            "judge": judge,
+            "findings": findings,
+            "evidence_ids": allowed_evidence,
+            "regulation_ids": [h["id"] for h in kb_hits if h.get("kind") == "regulation"],
+            "template": report["full_text"],
+        }
+        try:
+            full_text, reporter_usage = enrich_full_report(
+                db=db, privacy=privacy, context=report_context
+            )
+            apply_full_text(report, full_text, conclusion)
+            report_issues = fact_check(report["full_text"], bundle["facts"])
+            if report_issues:
+                fact_retry = True
+                full_text, reporter_usage = enrich_full_report(
+                    db=db,
+                    privacy=privacy,
+                    context=report_context,
+                    prior_issues=report_issues,
+                )
+                apply_full_text(report, full_text, conclusion)
+        except RuntimeError as exc:
+            warning(f"Reporter 全文生成失败，使用确定性模板: {exc}")
+
+    if inject_hallucination:
+        poison = f"另发现未在工具结果中出现的对手账户 {FAKE_ACCOUNT}。"
+        report["reason"] += poison
+        report["full_text"] += "\n【注入幻觉演示】" + poison
+    fact_issues = fact_check(report["full_text"], bundle["facts"])
+    guardrails = apply_guardrails(judge, watch_hits=watch_hits, fact_issues=fact_issues)
+    conclusion = guardrails["final_conclusion"]
+
+    for i, row in enumerate(judge.get("rationale") or [], start=1):
+        ev_graph.append(
+            {
+                "evidence_id": f"EV-{alert['id']}-J{i:03d}",
+                "case_id": alert["id"],
+                "evidence_type": "MODEL",
+                "source_type": "judge",
+                "source_id": (row.get("evidence_ids") or [""])[0],
+                "description": row.get("text") or "",
+                "raw_reference": ",".join(row.get("evidence_ids") or []),
+                "timestamp": "",
+                "reliability": confidence,
+                "created_by": "judge",
+                "polarity": "support",
+                "metadata": {"confidence_kind": "llm_self_assessed_not_calibrated"},
+                "data_note": "synthetic",
+            }
+        )
+
+    plan = [
+        f"按告警类型选择只读工具：{'、'.join(planned)}",
+        "从流水、KYC、图谱和知识库提取支持/反向/缺失证据",
+        "AI Judge 输出完整三档建议与逐条引用",
+        "Skeptic 校验证据契约并执行一次关键证据反事实",
+        "政策护栏只作否决或升级，不参与加权",
+        "Reporter 生成四段全文并做事实回查",
+        "Human Approval（Agent 不得报送）",
+    ]
+    steps = [
+        {
+            "role": "Planner",
+            "title": "生成只读调查计划",
+            "content": f"本轮计划 {len(planned)} 个白名单工具；上游告警只决定取数范围，不进入结论加分。",
+            "items": plan,
+        },
+        {
+            "role": "Collector",
+            "title": "证据归集",
+            "content": f"已调取 {len(txs)} 笔交易、{len(kb_hits)} 条知识、{len(tool_trace)} 次工具调用。",
+            "items": [f"工具：{name}" for name in planned],
+        },
+        {
+            "role": "Analyst",
+            "title": "事实指标与规则对照",
+            "content": f"提取 {len(findings)} 项事实指标；规则对照为{CONCLUSION_LABEL[baseline_result['conclusion']]}，不决定最终建议。",
+            "items": [f"{f['title']}：{f['detail']}" for f in findings],
+        },
+        {
+            "role": "Judge",
+            "title": "证据约束的 AI 调查建议",
+            "content": f"AI 建议{CONCLUSION_LABEL[judge['disposition']]}；自评把握度 {confidence:.2f}（未校准）。",
+            "items": [f"{r['text']}（证据 {','.join(r.get('evidence_ids') or [])}）" for r in judge.get("rationale") or []],
+        },
+        {
+            "role": "Skeptic",
+            "title": "引用校验与反事实检查",
+            "content": judge_validation["reason"],
+            "items": [
+                *(i.get("message") or str(i) for i in judge_validation.get("issues") or []),
+                counterfactual_result["note"],
+            ],
+        },
+        {
+            "role": "PolicyGuardrail",
+            "title": "政策硬护栏",
+            "content": guardrails["note"],
+            "items": [f"{c['label']}：{c['effect']}" for c in guardrails["checks"]],
+        },
+        {
+            "role": "Reporter",
+            "title": "四段全文草稿 + 事实回查",
+            "content": f"全文由 Reporter 生成并回查；发现 {len(fact_issues)} 个事实问题。",
+            "items": ["Agent 不可自动报送，须调查员签发。"],
+        },
+    ]
+    risk_level = {"exclude": "LOW", "observe": "MEDIUM", "suggest_report": "HIGH"}[conclusion]
+    recommendation = CONCLUSION_TO_RECO[conclusion]
+    risk = {
+        "factors": baseline_result["factors"],
+        "rule_baseline": baseline_result,
+        "judge": judge,
+        "guardrails": guardrails,
+        "final": confidence,
+        "conclusion": conclusion,
+        "recommendation": recommendation,
+        "recommendation_label": RECO_LABEL[recommendation],
+        "risk_level": risk_level,
+        "note": "最终建议来自通过证据契约的 AI Judge；规则分仅作对照，护栏仅作政策边界。",
+    }
+    evidence = [
+        {
+            "id": t["id"],
+            "type": "transaction",
+            "from_account": t["from_account"],
+            "to_account": t["to_account"],
+            "amount": t["amount"],
+            "occurred_at": t["occurred_at"],
+            "channel": t["channel"],
+            "remark": t["remark"],
+            "summary": f"{t['occurred_at']} {t['from_account']} → {t['to_account']} {yuan(t['amount']).strip()}",
+        }
+        for t in txs
+    ]
+    evidence.append(
+        {
+            "id": customer["id"],
+            "type": "kyc",
+            "summary": f"{customer['name']}，{customer['industry']}，开户 {customer['opened_at']}",
+        }
+    )
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    payload = {
+        "alert": alert,
+        "customer": customer,
+        "plan": plan,
+        "steps": steps,
+        "tool_trace": tool_trace,
+        "findings": findings,
+        "judge": judge,
+        "judge_validation": judge_validation,
+        "judge_repaired": judge_repaired,
+        "judge_fallback_reason": fallback_reason,
+        "rule_baseline": baseline_result,
+        "policy_guardrails": guardrails,
+        "counterfactual": counterfactual_result,
+        "use_challenger": use_challenger,
+        "case_challenger_enabled": use_challenger,
+        "experiment_mode": experiment_mode,
+        "challenger": [],
+        "challenger_run": {
+            "enabled": use_challenger,
+            "ablation": not use_challenger,
+            "label": "AI Judge",
+            "initial_score": baseline_result["score"],
+            "initial_conclusion": baseline_result["conclusion"],
+            "initial_label": CONCLUSION_LABEL[baseline_result["conclusion"]],
+            "final_score": confidence,
+            "final_conclusion": conclusion,
+            "final_label": CONCLUSION_LABEL[conclusion],
+            "claims": decision_claims(judge),
+            "validator": judge_validation,
+        },
+        "validator_result": judge_validation,
+        "scoring": {
+            "base": baseline_result["score"],
+            "rule_prior": 0.0,
+            "llm_delta": 0.0,
+            "raw": confidence,
+            "final": confidence,
+            "mode": "judge_not_additive",
+            "note": "规则对照与 AI 自评把握度不相加。",
+        },
+        "llm": {
+            "judge": use_challenger,
+            "reporter": use_challenger,
+            "provider": "阿里云百炼 / DashScope",
+            "model": llm_model(),
+            "masked": True,
+            "fact_retry": fact_retry,
+            "usage": {"judge": judge_usage, "reporter": reporter_usage},
+        },
+        "privacy": {"masked_names": len(privacy.name_to_mask), "masked_accounts": len(privacy.acct_to_mask)},
+        "conclusion": conclusion,
+        "conclusion_label": CONCLUSION_LABEL[conclusion],
+        "confidence": round(confidence, 2),
+        "confidence_kind": "llm_self_assessed_not_calibrated" if use_challenger else "rule_score_not_calibrated",
+        "report": report,
+        "evidence": evidence,
+        "evidence_graph": ev_graph,
+        "claims": decision_claims(judge),
+        "rejected_claims": judge_validation.get("issues") or [],
+        "timeline": collected["timeline"],
+        "risk": risk,
+        "investigation_plan": InvestigationPlan(
+            case_id=alert["id"],
+            investigation_plan=[
+                PlanStep(step=i + 1, tool=name, purpose="只读取数", required=True)
+                for i, name in enumerate(planned)
+                if name in ALLOWED_TOOLS
+            ],
+        ).model_dump(),
+        "prompt_versions": {
+            "planner": prompt_version("planner"),
+            "judge": prompt_version("judge"),
+            "skeptic": prompt_version("skeptic"),
+            "reporter": prompt_version("reporter"),
+        },
+        "data_note": "synthetic",
+        "case_v2": {
+            "case_id": alert["id"],
+            "status": "INVESTIGATING",
+            "risk_level": risk_level,
+            "recommendation": recommendation,
+            "recommendation_label": RECO_LABEL[recommendation],
+            "suspicious_types": tags_from_findings(findings),
+            "human_required": True,
+            "data_note": "synthetic",
+        },
+        "structured_report": StructuredReport(
+            case_overview=f"{alert['title']} / {alert['id']}",
+            customer_profile=customer.get("summary") or customer["name"],
+            transaction_summary=f"流入{len(analyst['inflow'])} 流出{len(analyst['outflow'])}",
+            suspicious_patterns=[f["title"] for f in findings],
+            evidence_ids=judge.get("supporting_evidence_ids") or [],
+            counter_evidence_ids=judge.get("contradicting_evidence_ids") or [],
+            network_analysis=f"节点 {len((bundle.get('graph') or {}).get('nodes') or [])}",
+            risk_assessment=RECO_LABEL[recommendation],
+            challenger_review="；".join(r.get("text") or "" for r in judge.get("rationale") or []),
+            regulation_basis=[
+                RegulationCite(
+                    regulation_id=h["id"],
+                    title=h.get("title") or "",
+                    article=h.get("article") or "",
+                    evidence=h.get("snippet") or "",
+                    source=h.get("source") or "",
+                    as_of=as_of,
+                )
+                for h in kb_hits
+                if h.get("kind") == "regulation"
+            ],
+            recommendation=recommendation,
+        ).model_dump(),
+        "graph": bundle["graph"],
+        "baseline": baseline,
+        "watch_hits": watch_hits,
+        "kb_hits": kb_hits,
+        "transactions": txs,
+        "fact_issues": fact_issues,
+        "can_sign": len(fact_issues) == 0 and (judge_validation["passed"] or not use_challenger),
+        "elapsed_ms": elapsed_ms,
+        "comparison": {
+            "agent_ms": elapsed_ms,
+            "tools_called": len(tool_trace),
+            "elements_filled": sum(1 for e in report["elements"] if (e.get("value") or "").strip()),
+            "elements_total": len(report["elements"]),
+            "evidence_linkable": True,
+            "note": "规则对照与 AI Judge 并排呈现，分歧交由调查员裁决。",
+        },
+    }
+    attach_checklist(
+        payload,
+        counterparties=enrich_counterparties(db, alert["account_id"], txs, bundle.get("graph") or {}),
+    )
+    try:
+        persist_investigation(db, payload)
+        audit(f"case persisted {alert['id']}")
+    except Exception as exc:
+        warning(f"case persist skipped: {exc}")
+    return payload
 
 
 def _run_investigation_inner(

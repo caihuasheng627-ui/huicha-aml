@@ -1,4 +1,4 @@
-"""Analyst 规则打底。LLM 不在这里写最终分。"""
+"""Analyst 只从案件事实提取指标；规则分仅作为透明对照。"""
 
 from __future__ import annotations
 
@@ -111,36 +111,24 @@ def analyze(
     out_labels = peer_labels_from_graph(graph, account_id, txs, "out")
 
     if "大额" in alert["alert_type"] or "频繁" in alert["alert_type"]:
-        score += 0.44
         findings.append(
             {
-                "code": "upstream-alert",
+                "code": "alert-trigger",
                 "title": "上游监测命中大额/频繁",
                 "detail": f"检测系统因「{alert['alert_type']}」生成告警，金额{yuan(alert['amount'])}。是否误报需用行业基线与对手方验证。",
                 "evidence_ids": [t["id"] for t in txs[:4]],
-            }
-        )
-        risk_factors.append(
-            {
-                "code": "upstream-alert",
-                "label": "上游大额/频繁",
-                "delta": 0.44,
-                "evidence_ids": [t["id"] for t in txs[:4]],
-                "source": "rule",
-                "tag": "high_velocity",
+                "polarity": "context",
             }
         )
 
     if "拆分" in alert["alert_type"] or "归集" in alert["alert_type"]:
-        score += 0.16
-        risk_factors.append(
+        findings.append(
             {
-                "code": "alert-typology",
-                "label": "告警类型拆分/归集",
-                "delta": 0.16,
+                "code": "alert-typology-context",
+                "title": "上游类型学标签（待复核）",
+                "detail": f"上游标签为「{alert['alert_type']}」，只决定调查工具，不直接进入规则对照分。",
                 "evidence_ids": [t["id"] for t in txs[:3]],
-                "source": "rule",
-                "tag": "structuring" if "拆分" in alert["alert_type"] else "suspicious_network",
+                "polarity": "context",
             }
         )
 
@@ -163,6 +151,7 @@ def analyze(
                     f"基线说明：{baseline['peer_note']}"
                 ),
                 "evidence_ids": [t["id"] for t in txs[:6]],
+                "polarity": "counter",
             }
         )
 
@@ -174,6 +163,7 @@ def analyze(
                 "title": "疑似拆分存入以规避大额申报阈值",
                 "detail": f"近窗有 {len(near)} 笔流入落在 4.9 万–5 万区间（如{yuan(near[0]['amount'])}，记录 {near[0]['id']}），随后出现集中转出。",
                 "evidence_ids": [t["id"] for t in near[:8]] + [t["id"] for t in outflow],
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -195,6 +185,7 @@ def analyze(
                 "title": "多个个人账户向新设企业归集",
                 "detail": f"流入对手方 {len(in_accounts)} 个，开户日 {customer['opened_at']}，KYC 为{customer['kyc_level']}。",
                 "evidence_ids": [t["id"] for t in inflow],
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -216,6 +207,7 @@ def analyze(
                 "title": "对手方命中演示关注名单",
                 "detail": "、".join(h["name"] for h in watch_hits) + " 出现在流出路径中。",
                 "evidence_ids": [t["id"] for t in outflow],
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -237,6 +229,7 @@ def analyze(
                 "title": "存在夜间集中转出",
                 "detail": f"流出发生在 {outflow[-1]['occurred_at']}，记录 {outflow[-1]['id']}，金额{yuan(outflow[-1]['amount'])}。",
                 "evidence_ids": [t["id"] for t in night_out],
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -259,6 +252,7 @@ def analyze(
                 "title": "大额转至未登记对手",
                 "detail": f"存在流向未登记账户的交易（如 {unk_out[0]['id']}），用途待尽调核实。",
                 "evidence_ids": [t["id"] for t in unk_out],
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -287,6 +281,7 @@ def analyze(
                     f"首笔 {hops[0]['id']} {hops[0]['occurred_at']}，末笔 {hops[-1]['id']} {hops[-1]['occurred_at']}。"
                 ),
                 "evidence_ids": hop_ids,
+                "polarity": "support",
             }
         )
         risk_factors.append(
@@ -307,6 +302,7 @@ def analyze(
                 "title": "未形成典型可疑模式",
                 "detail": "交易笔数或对手方不足以支持上报，建议结合柜面用途说明观察或排除。",
                 "evidence_ids": [t["id"] for t in txs[:3]],
+                "polarity": "counter",
             }
         )
 

@@ -242,7 +242,7 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation }) {
         <b className={conclusionTone(label)}>{label}</b>
       </div>
       <ul>
-        <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion}</em></li>
+        <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score ?? 0).toFixed(2)}</em></li>
         <li><span>AI Judge</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
         <li><span>政策护栏后</span><em>{label}</em></li>
         <li><span>AI 自评把握度</span><em>{ablation ? "—" : Number(judge?.confidence ?? 0).toFixed(2)}</em></li>
@@ -251,8 +251,8 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation }) {
         {ablation
           ? "本案为 Judge OFF 消融结果，仅展示规则对照。"
           : same
-            ? "AI 与规则对照一致；两者没有做加权合成。"
-            : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。"}
+            ? "AI 与规则对照一致，没有加权合成。把握度是「对结论有多确定」，不是风险高低。"
+            : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。把握度不是风险分。"}
       </div>
     </div>
   );
@@ -843,15 +843,17 @@ export default function App() {
                   <div className="v">{inv ? inv.conclusion_label : "未生成"}</div>
                 </div>
                 <div className="kpi-card">
-                  <div className="k">可解释风险评分</div>
-                  <div className="v">{inv ? Number(inv.confidence).toFixed(2) : "—"}</div>
+                  <div className="k">规则对照分</div>
+                  <div className="v">{inv ? Number(inv.rule_baseline?.score ?? inv.scoring?.base ?? 0).toFixed(2) : "—"}</div>
                   {inv && (
                     <div className="conf-bar" aria-hidden="true">
-                      <i style={{ width: `${Math.max(2, Math.min(98, Number(inv.confidence) * 100))}%` }} />
+                      <i style={{ width: `${Math.max(2, Math.min(98, Number(inv.rule_baseline?.score ?? inv.scoring?.base ?? 0) * 100))}%` }} />
                     </div>
                   )}
                   <div className="hint" style={{ margin: "6px 0 0" }}>
-                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则对照，非校准分数" : "AI 自评把握度，未校准"}
+                    {inv
+                      ? `<0.35 排除 / <0.55 观察。AI 把握度 ${Number(inv.judge?.confidence ?? inv.confidence ?? 0).toFixed(2)} 是确定程度，不是风险。`
+                      : "低于 0.35 为排除档"}
                   </div>
                 </div>
                 <div className="kpi-card">

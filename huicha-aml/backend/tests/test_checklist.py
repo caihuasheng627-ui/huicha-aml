@@ -1,7 +1,9 @@
 from app.checklist import (
+    attach_checklist,
     context_from_payload,
     format_item_line,
     generate_checklist,
+    material_gap_titles,
     merge_note,
 )
 
@@ -234,6 +236,42 @@ def test_named_graph_peers_without_kyc_field_are_not_thin():
     )
     kyc = next(i for i in items if i["id"] == "counterparty_kyc")
     assert kyc["status"] == "satisfied"
+
+
+def test_material_gap_titles_drop_evidence_ids():
+    assert material_gap_titles(
+        [
+            "EV-ALT-EXT-27-003",
+            "TX-X27-01",
+            "KB-REG-01",
+            "补充实际控制人关系证明",
+            "补充实际控制人关系证明",
+            "EV-ALT-EXT-27-004",
+            "受益所有人声明",
+            "开户申请原件",
+            "再来一条不该进",
+        ]
+    ) == ["补充实际控制人关系证明", "受益所有人声明", "开户申请原件"]
+
+
+def test_attach_checklist_ignores_evidence_id_gaps():
+    payload = {
+        "alert": {"id": "ALT-EXT-27", "account_id": "6222-X27", "alert_type": "拆分存入后集中转出"},
+        "customer": {"id": "C-X27", "name": "演示拆分户27", "kind": "individual", "kyc_level": "普通"},
+        "transactions": [],
+        "judge": {
+            "missing_evidence": [
+                "EV-ALT-EXT-27-003",
+                "EV-ALT-EXT-27-004",
+                "补充实际控制人关系证明",
+            ]
+        },
+    }
+    blob = attach_checklist(payload)
+    titles = [i["title"] for i in blob["items"] if str(i["id"]).startswith("AI-GAP-")]
+    assert titles == ["补充实际控制人关系证明"]
+    assert payload["judge"]["missing_evidence"] == ["补充实际控制人关系证明"]
+    assert not any(str(i["title"]).startswith("EV-") for i in blob["items"])
 
 
 def test_checklist_requires_draft(client):

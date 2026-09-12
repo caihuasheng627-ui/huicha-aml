@@ -235,10 +235,15 @@ const DECISION_LABEL = {
   suggest_report: "建议上报",
 };
 
+function materialGaps(list) {
+  return (list || []).filter((t) => /[\u4e00-\u9fff]/.test(t) && !/^(EV|TX|KB|ALT)-/i.test(String(t).trim()));
+}
+
 export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }) {
   if (!judge || !baseline) return null;
   const support = judge.supporting_evidence_ids || [];
   const counter = judge.contradicting_evidence_ids || [];
+  const missing = materialGaps(judge.missing_evidence);
   return (
     <div className="ch-panel">
       <div className="v2-hd">证据约束的 AI Judge</div>
@@ -256,7 +261,7 @@ export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }
         </li>
         <li>
           <b>支持 / 反向 / 缺失</b>
-          <span>{support.length} / {counter.length} / {(judge.missing_evidence || []).length}</span>
+          <span>{support.length} / {counter.length} / {missing.length}</span>
           <ul>
             {(judge.rationale || []).slice(0, 4).map((row, i) => (
               <li key={`${row.text}-${i}`}>
@@ -276,9 +281,7 @@ export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }
           </span>
         </li>
       </ol>
-      {(judge.missing_evidence || []).length > 0 && (
-        <div className="hint">待补：{judge.missing_evidence.join("；")}</div>
-      )}
+      {missing.length > 0 && <div className="hint">待补：{missing.join("；")}</div>}
     </div>
   );
 }
@@ -323,7 +326,7 @@ const SLIP_PRI = { high: "高", medium: "中", low: "低" };
 const SLIP_ST = { missing: "待补", optional: "可选", satisfied: "已齐" };
 
 export function SupplementChecklist({ data, loading, writing, onWrite }) {
-  const items = data?.items || [];
+  const items = (data?.items || []).filter((it) => !/^AI-GAP-/.test(it.id || "") || materialGaps([it.title]).length);
   const actionable = items.filter((it) => it.status !== "satisfied");
   const [picked, setPicked] = useState(() => new Set());
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from .analyst_rules import score_to_conclusion
+from .checklist import material_gap_titles
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
 from .schema import JudgeDecision
 
@@ -77,11 +78,12 @@ def normalize_judge(raw: dict, *, known_ids: set[str] | None = None) -> dict:
     ):
         value = data.get(key)
         data[key] = value if isinstance(value, list) else []
+    data["missing_evidence"], dropped = sanitize_missing_evidence(data.get("missing_evidence") or [], known_ids=known_ids)
+    data["missing_evidence"] = material_gap_titles(data["missing_evidence"])
     rationale = data.get("rationale")
     if isinstance(rationale, str):
         rationale = [{"text": rationale, "evidence_ids": data["supporting_evidence_ids"]}]
     data["rationale"] = rationale if isinstance(rationale, list) else []
-    data["missing_evidence"], dropped = sanitize_missing_evidence(data["missing_evidence"], known_ids=known_ids)
     result = JudgeDecision.model_validate(data).model_dump()
     if dropped:
         result["sanitized_missing_evidence"] = dropped

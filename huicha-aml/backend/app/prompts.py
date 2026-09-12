@@ -33,9 +33,10 @@ PROMPTS = {
         "字段必须为 disposition(exclude/observe/suggest_report)、confidence(0到1)、typologies、"
         "supporting_evidence_ids、contradicting_evidence_ids、missing_evidence、"
         "rationale（每项含 text 与 evidence_ids）、next_actions。"
+        "已调取证据编号只能进 supporting/contradicting，禁止写入 missing_evidence。"
         "每条理由必须引用 allowed_evidence_ids 中的编号，且只引用最能代表该理由的少数几条（每条理由不超过 6 个编号，"
         "同类交易只需列代表性编号，不要穷举全部流水）。"
-        "missing_evidence 只写尚未取得的材料的中文描述（如「贸易合同」「受益所有人信息」），"
+        "missing_evidence 只写尚未调取的中文材料名，最多 3 条（如「贸易合同」「受益所有人证明」），"
         "禁止填写任何证据编号或编号区间。"
         "遵守 output_limits 中的数量上限；若有 repair_issues，须针对性修正后重新输出。不要 Markdown。"
     ),

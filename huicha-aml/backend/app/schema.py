@@ -104,6 +104,8 @@ class RegulationCite(BaseModel):
     evidence: str = ""
     source: str = ""
     as_of: str = ""
+    effective_date: str = ""
+    kind_label: str = ""
 
 
 class StructuredReport(BaseModel):

@@ -11,6 +11,7 @@ import {
   Table,
   Tag,
   Timeline,
+  Tooltip,
   message,
 } from "antd";
 import {
@@ -37,6 +38,7 @@ import BrandLogo from "./BrandLogo.jsx";
 import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
+import SystemManual from "./SystemManual.jsx";
 
 const EMPTY_KEYS = [
   ["打开案例 A 排除", "1"],
@@ -44,6 +46,7 @@ const EMPTY_KEYS = [
   ["打开案例 C 归集", "3"],
   ["打开案例 F 观察", "4"],
   ["打开案例 L 多层", "5"],
+  ["系统说明书", "H"],
   ["按当前策略重跑", "选中案件后点按钮"],
 ];
 
@@ -313,6 +316,7 @@ export default function App() {
   const [honestyHint, setHonestyHint] = useState(true);
   const [user, setUser] = useState(() => getStoredUser());
   const [loginOpen, setLoginOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [demoAccounts, setDemoAccounts] = useState([]);
   const [loginForm] = Form.useForm();
@@ -424,6 +428,10 @@ export default function App() {
   useEffect(() => {
     function onKey(e) {
       if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+      if (e.key === "h" || e.key === "H") {
+        setManualOpen((v) => !v);
+        return;
+      }
       const hit = DEMOS.find((d) => d.key === e.key);
       if (hit) open(hit.id).catch((err) => message.error(err.message));
     }
@@ -565,6 +573,11 @@ export default function App() {
         </div>
         <div className="staff">
           <span className="top-clock">{clock}</span>
+          <Tooltip title="按 H 也可打开">
+            <button type="button" className="ghost-btn manual-btn" onClick={() => setManualOpen(true)}>
+              系统说明书
+            </button>
+          </Tooltip>
           {user ? (
             <div className="user-chip">
               <div className="user-meta">
@@ -584,6 +597,8 @@ export default function App() {
           )}
         </div>
       </header>
+
+      <SystemManual open={manualOpen} onClose={() => setManualOpen(false)} health={healthInfo} />
 
       <div className="toolbar">
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>

@@ -1250,18 +1250,19 @@ body {
   padding: 0;
   min-width: 0;
 }
-.theater-path-line,
-.theater-path-fill {
+.theater-path-line {
   position: absolute;
   left: calc(100% / 12);
   right: calc(100% / 12);
   top: 11px;
   height: 2px;
   background: #d5dee8;
+  overflow: hidden;
   pointer-events: none;
 }
 .theater-path-fill {
-  right: auto;
+  display: block;
+  height: 100%;
   width: 0;
   background: var(--link);
   transition: width 0.35s ease;
@@ -1728,7 +1729,7 @@ body {
   .theater-feed-track.is-rolling {
     animation: none;
   }
-  .pipeline-fill { transition: none; }
+  .pipeline-fill, .theater-path-fill { transition: none; }
 }
 @media print {
   .topbar, .footer, .toolbar, .actions, .pipeline-rail { display: none !important; }

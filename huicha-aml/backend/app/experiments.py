@@ -1,4 +1,4 @@
-"""三项可复现实验：事实回查拦截、Challenger 消融、精标一致率。
+"""可复现机制实验：事实回查、Judge/规则分歧、引用契约与反事实。
 
 用法：
   cd backend
@@ -18,7 +18,6 @@ from sqlalchemy.pool import StaticPool
 from .agents import FAKE_ACCOUNT, run_investigation
 from .database import Base
 from .models import Alert
-from .predicates import stub_challenger_item
 from .seed import seed_if_empty
 from .tools import fact_check
 
@@ -81,7 +80,7 @@ def experiment_fact_check(n: int = 200, seed: int = 42) -> dict:
 
 
 def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
-    """在全部带 gold_label 的案子上跑 Challenger 开/关，统计消融与一致率。"""
+    """统计 AI Judge 与独立规则对照的分歧、引用契约和反事实覆盖。"""
     if monkey_chat:
         import app.llm as llm_mod
 
@@ -89,82 +88,61 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
 
     alerts = db.query(Alert).filter(Alert.gold_label != "").all()
     rows = []
-    false_report_on = 0
-    false_report_off = 0
-    gold_exclude = 0
-    match_on = 0
+    judge_gold_match = 0
+    rule_gold_match = 0
+    judge_rule_disagree = 0
+    citation_pass = 0
+    counterfactual_run = 0
+    counterfactual_faithful = 0
     for a in alerts:
         gold = a.gold_label
         r_on = run_investigation(db, a.id, use_challenger=True, inject_hallucination=False)
-        r_off = run_investigation(db, a.id, use_challenger=False, inject_hallucination=False)
+        rule = r_on["rule_baseline"]
+        cf = r_on["counterfactual"]
         rows.append(
             {
                 "id": a.id,
                 "gold": gold,
-                "on": r_on["conclusion"],
-                "off": r_off["conclusion"],
+                "judge": r_on["conclusion"],
+                "rule_baseline": rule["conclusion"],
                 "demo_tag": a.demo_tag,
-                "rule_prior": (r_on.get("scoring") or {}).get("rule_prior"),
-                "llm_delta": (r_on.get("scoring") or {}).get("llm_delta"),
+                "citation_contract": r_on["judge_validation"]["passed"],
+                "counterfactual_performed": cf["performed"],
+                "counterfactual_faithful": cf["faithful"],
             }
         )
-        if gold == "exclude":
-            gold_exclude += 1
-            if r_on["conclusion"] == "suggest_report":
-                false_report_on += 1
-            if r_off["conclusion"] == "suggest_report":
-                false_report_off += 1
         if r_on["conclusion"] == gold:
-            match_on += 1
+            judge_gold_match += 1
+        if rule["conclusion"] == gold:
+            rule_gold_match += 1
+        if r_on["conclusion"] != rule["conclusion"]:
+            judge_rule_disagree += 1
+        citation_pass += int(r_on["judge_validation"]["passed"])
+        counterfactual_run += int(cf["performed"])
+        counterfactual_faithful += int(cf["faithful"] is True)
 
     n = len(rows) or 1
-    priors = [r["rule_prior"] for r in rows if r.get("rule_prior") is not None]
-    deltas = [r["llm_delta"] for r in rows if r.get("llm_delta") is not None]
     return {
-        "name": "机制验证：Challenger 开/关（模板精标 + stub delta）",
+        "name": "机制验证：证据 Judge vs 独立规则对照（固定 stub）",
         "n_labeled": len(rows),
-        "consistency_rate_challenger_on": round(match_on / n, 4),
-        "gold_exclude_n": gold_exclude,
-        "false_suggest_report_rate_on": round(false_report_on / max(gold_exclude, 1), 4),
-        "false_suggest_report_rate_off": round(false_report_off / max(gold_exclude, 1), 4),
-        "false_report_lift": round(
-            (false_report_off / max(gold_exclude, 1)) - (false_report_on / max(gold_exclude, 1)), 4
-        ),
-        "mean_rule_prior": round(sum(priors) / max(len(priors), 1), 4),
-        "mean_llm_delta": round(sum(deltas) / max(len(deltas), 1), 4),
-        "observe_present": any(r["on"] == "observe" or r["gold"] == "observe" for r in rows),
-        "sample": [r for r in rows if r["demo_tag"] in {"A", "B", "C", "F"}][:8],
+        "judge_template_match_rate": round(judge_gold_match / n, 4),
+        "rule_template_match_rate": round(rule_gold_match / n, 4),
+        "judge_rule_disagreement_rate": round(judge_rule_disagree / n, 4),
+        "citation_contract_pass_rate": round(citation_pass / n, 4),
+        "counterfactual_coverage": round(counterfactual_run / n, 4),
+        "counterfactual_change_rate": round(counterfactual_faithful / max(counterfactual_run, 1), 4),
+        "sample": [r for r in rows if r["demo_tag"] in {"A", "B", "C", "F", "L"}][:10],
         "caveat": (
-            "gold_label 由生成模板写入，与规则分支同源；"
-            "LLM 为 stub：先挑选一条对本案为真的封闭谓词，再给固定 delta（默认 -0.12），不是真实百炼。"
-            "数字证明流水线可复现，不代表调查准确率。"
+            "gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。"
+            "这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。"
         ),
     }
 
 
 def _stub_chat(messages, *, temperature=0.0, max_tokens=900):
-    usage = {"prompt_tokens": 8, "completion_tokens": 16, "total_tokens": 24, "cached": False, "model": "stub"}
-    sys = messages[0]["content"]
-    user = messages[-1]["content"]
-    if "Challenger" in sys or "质疑" in sys or "delta" in sys or "predicate" in sys:
-        try:
-            data = json.loads(user)
-        except Exception:
-            data = {}
-        item = stub_challenger_item(
-            data if isinstance(data, dict) else {},
-            claim="实验反证",
-            detail="合成实验用反证，不含虚构账号。",
-            delta=-0.12,
-        )
-        payload = {"items": [item]}
-        return json.dumps(payload, ensure_ascii=False), usage
-    data = json.loads(user)
-    text = (
-        f"结论为{data['conclusion']}。客户相关交易编号：{data['allowed_tx_ids']}。"
-        "须人工签发，不可自动报送。"
-    )
-    return text, usage
+    from .llm import _offline_stub_chat
+
+    return _offline_stub_chat(messages)
 
 
 def run_all(out_dir: Path | None = None) -> dict:
@@ -195,23 +173,23 @@ def run_all(out_dir: Path | None = None) -> dict:
         "",
         "生成命令：`py -m app.experiments`",
         "",
-        "**口径**：下列数字验证「规则 + 有界 delta + 回查」流水线能跑通、消融方向符合预期。",
-        "精标由生成模板写入（与规则同源），模型为固定 stub delta，**不是**独立标注集上的调查准确率。",
+        "**口径**：下列数字验证「证据 Judge + 规则对照 + 硬护栏 + 回查」流水线能跑通。",
+        "精标由生成模板写入，Judge 为确定性 stub，**不是**独立标注集上的调查准确率。",
         "",
         "## 1. 事实回查（正则，不经大模型）",
         f"- 毒化样本 n={fact['n_poison']}，拦截率 **{fact['intercept_rate']:.1%}**",
         f"- 干净阈值/概数误报率 **{fact['clean_false_positive_rate']:.1%}**（n={fact['n_clean']}）",
         "",
-        "## 2. Challenger 开/关（exclude 子集）",
-        f"- 模板精标 n={abl['n_labeled']}，其中 gold=exclude {abl['gold_exclude_n']} 条",
-        f"- 开质疑：误建议上报 **{abl['false_suggest_report_rate_on']:.1%}**",
-        f"- 关质疑：误建议上报 **{abl['false_suggest_report_rate_off']:.1%}**（抬升 {abl['false_report_lift']:+.1%}）",
-        f"- 开质疑时平均规则先验 {abl['mean_rule_prior']:+.2f}、stub delta {abl['mean_llm_delta']:+.2f}",
-        "- 抬升主要来自规则先验（批发 −0.30 等）；stub 只提供固定 −0.12，不能写成「大模型压误报」。",
+        "## 2. AI Judge 与规则对照（非加权）",
+        f"- 模板精标 n={abl['n_labeled']}",
+        f"- Judge 与规则对照分歧率 **{abl['judge_rule_disagreement_rate']:.1%}**",
+        f"- Judge 与模板标签重合 **{abl['judge_template_match_rate']:.1%}**；规则对照重合 **{abl['rule_template_match_rate']:.1%}**",
+        "- 重合率由合成模板与确定性 stub 构造，只用于检查流程，不是准确率。",
         "",
-        "## 3. 与模板 gold 的档位重合（勿当准确率）",
-        f"- 重合率 {abl['consistency_rate_challenger_on']:.1%}（n={abl['n_labeled']}）——由构造保证，路演勿念成能力指标",
-        f"- 「继续观察」档是否出现：{'是' if abl['observe_present'] else '否'}",
+        "## 3. 可审计机制",
+        f"- 结构化引用契约通过率 **{abl['citation_contract_pass_rate']:.1%}**",
+        f"- 关键证据反事实覆盖率 **{abl['counterfactual_coverage']:.1%}**",
+        f"- 已执行反事实中结论变化率 **{abl['counterfactual_change_rate']:.1%}**（仅为机制指标）",
         "",
         f"## 4. 幻觉演示账号拦截：{'通过' if hall_ok else '失败'}",
         "",

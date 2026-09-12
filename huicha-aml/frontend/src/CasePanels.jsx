@@ -18,7 +18,7 @@ export function RiskFactors({ risk, onSelect }) {
   return (
     <div className="v2-panel">
       <div className="v2-hd">
-        风险因子 · {risk.risk_level} · {risk.recommendation_label}
+        规则指标对照 · 不决定最终建议
       </div>
       <ul className="v2-factors">
         {factors.map((f) => (
@@ -33,7 +33,7 @@ export function RiskFactors({ risk, onSelect }) {
           </li>
         ))}
       </ul>
-      <div className="hint">每项可点证据编号。AI 建议不是监管结论，须人签。</div>
+      <div className="hint">每项可点回证据。规则对照与 AI 建议不做加权合成。</div>
     </div>
   );
 }
@@ -234,6 +234,60 @@ function fmtDelta(n) {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
 }
 
+const DECISION_LABEL = {
+  exclude: "排除",
+  observe: "继续观察",
+  suggest_report: "建议上报",
+};
+
+export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }) {
+  if (!judge || !baseline) return null;
+  const support = judge.supporting_evidence_ids || [];
+  const counter = judge.contradicting_evidence_ids || [];
+  return (
+    <div className="ch-panel">
+      <div className="v2-hd">证据约束的 AI Judge</div>
+      <div className={validation?.passed ? "ch-on" : "ch-ablation"}>
+        {validation?.reason || "等待证据契约校验"}；把握度为模型自评，未经概率校准。
+      </div>
+      <ol className="ch-flow">
+        <li>
+          <b>规则对照</b>
+          <span>{DECISION_LABEL[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score || 0).toFixed(2)}</span>
+        </li>
+        <li>
+          <b>AI 完整建议</b>
+          <span>{DECISION_LABEL[judge.disposition] || judge.disposition} · 自评 {Number(judge.confidence || 0).toFixed(2)}</span>
+        </li>
+        <li>
+          <b>支持 / 反向 / 缺失</b>
+          <span>{support.length} / {counter.length} / {(judge.missing_evidence || []).length}</span>
+          <ul>
+            {(judge.rationale || []).slice(0, 4).map((row, i) => (
+              <li key={`${row.text}-${i}`}>
+                <button type="button" className="token" onClick={() => row.evidence_ids?.[0] && onSelect(row.evidence_ids[0])}>
+                  {row.text}
+                </button>
+                <em>{(row.evidence_ids || []).join("、")}</em>
+              </li>
+            ))}
+          </ul>
+        </li>
+        <li>
+          <b>政策护栏后</b>
+          <span>
+            {DECISION_LABEL[guardrails?.final_conclusion] || guardrails?.final_conclusion}
+            {guardrails?.overridden ? " · 已覆盖模型建议" : " · 未触发结论覆盖"} · 须人工签发
+          </span>
+        </li>
+      </ol>
+      {(judge.missing_evidence || []).length > 0 && (
+        <div className="hint">待补：{judge.missing_evidence.join("；")}</div>
+      )}
+    </div>
+  );
+}
+
 export function ChallengerPanel({ run, onSelect }) {
   if (!run) return null;
   const bound = Number(run.delta_bound ?? 0.15);
@@ -360,8 +414,8 @@ export function RejectedClaims({ rows, onSelect }) {
           tabIndex={0}
           onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
         >
-          <code>{r.validation?.reason || "已拒绝"}</code>
-          <div>{r.claim || r.title}</div>
+          <code>{r.validation?.reason || r.message || r.kind || "已拒绝"}</code>
+          <div>{r.claim || r.title || "Judge 输出未通过证据契约"}</div>
           {r.predicate ? <div className="hint">谓词 {r.predicate}</div> : null}
         </div>
       ))}
@@ -373,9 +427,11 @@ export function CounterfactualBox({ cf }) {
   if (!cf) return null;
   return (
     <div className="v2-panel">
-      <div className="v2-hd">反事实（规则重算）</div>
+      <div className="v2-hd">关键证据反事实</div>
       <p className="hint">
-        {cf.assumption}：{cf.original} → {cf.counterfactual}（差 {cf.difference}）
+        {cf.performed
+          ? `移除 ${(cf.removed_evidence_ids || []).join("、")}：${DECISION_LABEL[cf.original_conclusion] || cf.original_conclusion} → ${DECISION_LABEL[cf.counterfactual_conclusion] || cf.counterfactual_conclusion || "校验失败"}。${cf.note}`
+          : cf.note || `${cf.assumption}：${cf.original} → ${cf.counterfactual}`}
       </p>
     </div>
   );

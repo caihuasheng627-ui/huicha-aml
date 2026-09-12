@@ -337,7 +337,7 @@ def investigate(
             {
                 "summary": (
                     f"生成调查草稿，建议结论「{result['conclusion_label']}」，"
-                    f"AI反向质询{'开启' if use_challenger else '关闭'}，"
+                    f"AI Judge{'开启' if use_challenger else '关闭'}，"
                     f"{'实验模式' if experiment_mode else '正常模式'}，"
                     f"幻觉演示{'开启' if inject_hallucination else '关闭'}。{tools}"
                 ),
@@ -345,7 +345,7 @@ def investigate(
                 "timestamp": format_cn(utcnow()),
                 "agent": "pipeline",
                 "model": (result.get("llm") or {}).get("model") or "",
-                "prompt_version": (result.get("prompt_versions") or {}).get("challenger") or "",
+                "prompt_version": (result.get("prompt_versions") or {}).get("judge") or "",
                 "prompt_versions": result.get("prompt_versions") or {},
                 "challenger_enabled": use_challenger,
                 "experiment_mode": experiment_mode,
@@ -357,10 +357,13 @@ def investigate(
                 "rule_prior": scoring.get("rule_prior"),
                 "llm_delta": scoring.get("llm_delta"),
                 "final_score": scoring.get("final"),
+                "rule_baseline": result.get("rule_baseline") or {},
+                "judge_decision": result.get("judge") or {},
+                "policy_guardrails": result.get("policy_guardrails") or {},
                 "evidence_ids": [e.get("id") for e in (result.get("evidence") or [])[:20]],
                 "counter_evidence_ids": (result.get("structured_report") or {}).get("counter_evidence_ids") or [],
                 "validator_result": validator,
-                "delta_clamped": run.get("delta_clamped"),
+                "counterfactual": result.get("counterfactual") or {},
                 "human_decision": "",
                 "data_note": "synthetic",
             },

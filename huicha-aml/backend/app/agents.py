@@ -414,7 +414,14 @@ def _run_investigation_v3(
             "alert": {k: alert.get(k) for k in ("id", "alert_type", "account_id", "created_at")},
             "judge": judge,
             "findings": findings,
-            "evidence_ids": allowed_evidence,
+            "evidence_ids": list(
+                dict.fromkeys(
+                    [
+                        *(judge.get("supporting_evidence_ids") or []),
+                        *(judge.get("contradicting_evidence_ids") or []),
+                    ]
+                )
+            )[:12],
             "regulation_ids": [h["id"] for h in kb_hits if h.get("kind") == "regulation"],
             "template": report["full_text"],
         }

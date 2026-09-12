@@ -44,40 +44,40 @@ def test_bounded_delta_accepted():
     assert total == -0.10
 
 
-def test_false_predicate_with_real_ids_rejected_in_pipeline(client, monkeypatch):
+def test_uncited_judge_rationale_rejected_in_pipeline(client, monkeypatch):
     def fake_enrich(**_kwargs):
         return (
-            [
-                {
-                    "claim": "金额递增（假）",
-                    "detail": "引用真编号但陈述为假",
-                    "evidence_ids": ["TX-L-01", "TX-L-02", "TX-L-03"],
-                    "predicate": "amount_monotonic_increasing",
-                    "args": {"tx_ids": ["TX-L-01", "TX-L-02", "TX-L-03"]},
-                    "delta": -0.10,
-                }
-            ],
+            {
+                "disposition": "suggest_report",
+                "confidence": 0.8,
+                "typologies": ["layering"],
+                "supporting_evidence_ids": ["TX-L-01"],
+                "contradicting_evidence_ids": [],
+                "missing_evidence": [],
+                "rationale": [{"text": "没有引用的理由", "evidence_ids": []}],
+                "next_actions": [],
+            },
             {},
         )
 
-    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     r = client.post("/api/alerts/ALT-L-20260910/investigate", params={"use_challenger": True})
     assert r.status_code == 200, r.text
     data = r.json()
-    reasons = " ".join((x.get("validation") or {}).get("reason") or "" for x in data["rejected_claims"])
-    assert "不成立" in reasons
-    assert data["scoring"]["llm_delta"] == 0.0
+    assert data["judge_validation"]["passed"] is False
+    assert any(x["kind"] == "uncited_rationale" for x in data["rejected_claims"])
+    assert data["can_sign"] is False
 
 
 def test_pipeline_records_rejected(client):
     r = client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
     data = r.json()
     assert "rejected_claims" in data
-    assert abs(data["scoring"]["llm_delta"]) <= 0.15
+    assert data["scoring"]["mode"] == "judge_not_additive"
     roles = [s["role"] for s in data["steps"]]
-    assert "Challenger" in roles
-    assert "Validator" in roles
-    assert any(e["evidence_id"].startswith("EV-ALT-A-20260910-") for e in data["evidence_graph"])
+    assert "Judge" in roles
+    assert "Skeptic" in roles
+    assert any(e["evidence_id"].startswith("EV-ALT-A-20260910-J") for e in data["evidence_graph"])
 
 
 def test_cross_case_tx_rejected_in_pipeline(client, monkeypatch):
@@ -86,17 +86,25 @@ def test_cross_case_tx_rejected_in_pipeline(client, monkeypatch):
 
     def fake_enrich(**_kwargs):
         return (
-            [{"claim": "跨案引用", "detail": "不应进分", "evidence_ids": ["TX-A-IN-01"], "delta": -0.10}],
+            {
+                "disposition": "exclude",
+                "confidence": 0.7,
+                "typologies": [],
+                "supporting_evidence_ids": ["TX-A-IN-01"],
+                "contradicting_evidence_ids": [],
+                "missing_evidence": [],
+                "rationale": [{"text": "跨案引用", "evidence_ids": ["TX-A-IN-01"]}],
+                "next_actions": [],
+            },
             {},
         )
 
-    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     r = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
     assert r.status_code == 200, r.text
     data = r.json()
-    reasons = " ".join((x.get("validation") or {}).get("reason") or "" for x in data["rejected_claims"])
-    assert "跨案件" in reasons
-    assert data["scoring"]["llm_delta"] == 0.0
+    assert data["judge_validation"]["passed"] is False
+    assert "TX-A-IN-01" in data["judge_validation"]["invalid_ids"]
 
 
 def test_two_cases_persist_distinct_evidence_pk(client):
@@ -134,7 +142,7 @@ def test_seed_tx_mapped_to_own_alert(client):
         db.close()
 
 
-def test_challenger_run_payload_on(client):
+def test_judge_run_payload_on(client):
     r = client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
     assert r.status_code == 200, r.text
     data = r.json()
@@ -143,11 +151,11 @@ def test_challenger_run_payload_on(client):
     run = data["challenger_run"]
     assert run["enabled"] is True
     assert run["ablation"] is False
-    assert abs(run["llm_delta"]) <= 0.15
-    assert abs(data["scoring"]["llm_delta"]) <= 0.15
-    assert run["delta_bound"] == 0.15
     assert run["initial_label"]
     assert run["final_label"]
+    assert data["scoring"]["llm_delta"] == 0.0
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert data["judge"]["rationale"]
     assert data["validator_result"]["passed"] is True
 
 
@@ -206,106 +214,53 @@ def test_audit_records_challenger_flags(client):
     assert "evidence_ids" in detail
     assert "counter_evidence_ids" in detail
     assert "prompt_versions" in detail
+    assert detail["judge_decision"]
+    assert detail["rule_baseline"]
 
 
-def test_invalid_challenger_evidence_zeroes_delta(client, monkeypatch):
+def test_invalid_judge_evidence_blocks_signing(client, monkeypatch):
     def fake_enrich(**_kwargs):
         return (
-            [{"claim": "不存在的流水", "detail": "应被拒绝", "evidence_ids": ["TX-NOPE-99"], "delta": -0.10}],
+            {
+                "disposition": "suggest_report",
+                "confidence": 0.9,
+                "typologies": ["structuring"],
+                "supporting_evidence_ids": ["TX-NOPE-99"],
+                "contradicting_evidence_ids": [],
+                "missing_evidence": [],
+                "rationale": [{"text": "引用不存在流水", "evidence_ids": ["TX-NOPE-99"]}],
+                "next_actions": [],
+            },
             {},
         )
 
-    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     r = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["scoring"]["llm_delta"] == 0.0
     assert data["validator_result"]["passed"] is False
-    assert "未通过证据校验" in data["validator_result"]["reason"]
+    assert "证据契约" in data["validator_result"]["reason"]
     assert data["rejected_claims"]
+    assert data["can_sign"] is False
     actions = [a["action"] for a in client.get("/api/alerts/ALT-B-20260910").json()["audit"]]
     assert "validator" in actions
 
 
-def test_exclude_case_does_not_stack_negative_llm(client, monkeypatch):
-    ids = ["TX-E-01", "TX-E-02", "TX-E-03", "TX-E-04", "TX-E-05"]
-
-    def fake_enrich(**_kwargs):
-        return (
-            [
-                {
-                    "claim": "金额按时间递增",
-                    "detail": "经营收款自然增长",
-                    "evidence_ids": ids,
-                    "predicate": "amount_monotonic_increasing",
-                    "args": {"tx_ids": ids},
-                    "delta": -0.15,
-                },
-                {
-                    "claim": "均在夜间",
-                    "detail": "符合夜结",
-                    "evidence_ids": ids[:4],
-                    "predicate": "night_transfer",
-                    "args": {"tx_ids": ids[:4]},
-                    "delta": -0.10,
-                },
-                {
-                    "claim": "POS 前缀",
-                    "detail": "收银通道",
-                    "evidence_ids": ids,
-                    "predicate": "counterparty_has_prefix",
-                    "args": {"tx_ids": ids, "prefix": "POS-", "side": "from"},
-                    "delta": -0.10,
-                },
-            ],
-            {},
-        )
-
-    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
-    r = client.post("/api/alerts/ALT-E-20260908/investigate", params={"use_challenger": True})
+def test_rule_baseline_and_judge_are_not_added(client):
+    r = client.post("/api/alerts/ALT-C-20260910/investigate", params={"use_challenger": True})
     assert r.status_code == 200, r.text
     data = r.json()
-    scoring = data["scoring"]
-    run = data["challenger_run"]
-    assert run["initial_label"] == "排除"
-    assert run["raw_delta"] == -0.35
-    assert run["clamped_delta"] == -0.15
-    assert run["delta_clamped"] is True
-    assert run["delta_suppressed"] is True
-    assert scoring["llm_delta"] == 0.0
-    expected_raw = round(scoring["base"] + scoring["rule_prior"], 4)
-    assert scoring["raw"] == expected_raw
-    assert scoring["final"] == max(0.05, min(0.95, expected_raw))
-    assert scoring["delta_suppressed"] is True
-    assert data["conclusion"] == "exclude"
+    assert data["rule_baseline"]["conclusion"] == "observe"
+    assert data["judge"]["disposition"] == "suggest_report"
+    assert data["conclusion"] == "suggest_report"
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert data["scoring"]["llm_delta"] == 0.0
 
 
-def test_report_case_still_applies_negative_llm(client, monkeypatch):
-    ids = ["TX-B-IN-01", "TX-B-IN-02", "TX-B-IN-03"]
-
-    def fake_enrich(**_kwargs):
-        return (
-            [
-                {
-                    "claim": "现金存入带 CASH 前缀",
-                    "detail": "对手类型可核验",
-                    "evidence_ids": ids,
-                    "predicate": "counterparty_has_prefix",
-                    "args": {"tx_ids": ids, "prefix": "CASH-", "side": "from"},
-                    "delta": -0.10,
-                }
-            ],
-            {},
-        )
-
-    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
-    r = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+def test_upstream_alert_label_does_not_directly_raise_rule_baseline(client):
+    r = client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": False})
     assert r.status_code == 200, r.text
     data = r.json()
-    run = data["challenger_run"]
-    assert run["initial_label"] == "建议上报"
-    assert run["delta_suppressed"] is False
-    assert data["scoring"]["llm_delta"] == -0.10
-    assert data["scoring"]["raw"] == round(
-        data["scoring"]["base"] + data["scoring"]["rule_prior"] - 0.10, 4
-    )
+    assert data["alert"]["alert_type"]
+    assert data["rule_baseline"]["score"] == 0.12
+    assert all(f["code"] != "upstream-alert" for f in data["rule_baseline"]["factors"])

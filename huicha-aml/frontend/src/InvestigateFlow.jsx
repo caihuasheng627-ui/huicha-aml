@@ -25,7 +25,7 @@ const PIPELINE = [
     id: "analyst",
     role: "Analyst",
     title: "分析",
-    caption: "规则因子打底风险",
+    caption: "事实指标 + 独立规则对照",
     dwell: 1100,
     linger: false,
     ticks: ["交易模式", "关联网络", "行为基线", "名单命中"],
@@ -33,33 +33,33 @@ const PIPELINE = [
   },
   {
     id: "challenger",
-    role: "Challenger",
-    title: "质询",
-    caption: "AI反向质询 · 有界反证",
+    role: "Judge",
+    title: "研判",
+    caption: "AI 输出完整建议与证据引用",
     dwell: 1600,
     linger: false,
-    ticks: ["寻找反证", "规则先验", "有界 delta ±0.15"],
-    logs: ["rule_prior", "enrich_challenger", "clamp_delta"],
+    ticks: ["区分支持与反向证据", "识别缺失材料", "输出三档建议"],
+    logs: ["enrich_judge", "structured_decision", "evidence_contract"],
   },
   {
     id: "validator",
-    role: "Validator",
+    role: "Skeptic",
     title: "核验",
-    caption: "谓词执行，拒绝无证据",
+    caption: "引用契约 + 关键证据反事实",
     dwell: 860,
     linger: false,
-    ticks: ["证据存在性", "谓词复核", "拒绝越界 Claim"],
-    logs: ["filter_challenger_items", "predicate_verified", "reject_unbound"],
+    ticks: ["证据存在性", "逐条引用复核", "最小证据扰动"],
+    logs: ["verify_judge", "citation_validity", "counterfactual_check"],
   },
   {
     id: "reporter",
     role: "Reporter",
     title: "草稿",
-    caption: "要素草稿 + 事实回查",
+    caption: "四段全文草稿 + 事实回查",
     dwell: 1200,
     linger: true,
     ticks: ["结构化报告", "事实回查", "禁止自动报送"],
-    logs: ["render_report", "enrich_report_reason", "fact_check"],
+    logs: ["enrich_full_report", "verify_and_repair", "fact_check"],
   },
 ];
 
@@ -225,7 +225,7 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
     <div className={`theater${failed ? " is-error" : ""}`} role="status" aria-live="polite">
       <div className="theater-hd">
         <strong>{failed ? "调查中断" : "正在生成调查草稿"}</strong>
-        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 规则打底 · 人做决策"}</span>
+        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 证据 Judge · 规则护栏 · 人做决策"}</span>
       </div>
 
       <div className="theater-path" aria-hidden="true">

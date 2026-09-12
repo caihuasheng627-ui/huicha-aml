@@ -201,6 +201,48 @@ def test_enrich_judge_uses_product_prompt_version_by_default(monkeypatch):
     llm_mod.enrich_judge(db=None, prompt_kind="judge_v2", **_judge_inputs())
     assert seen["system"] == PROMPTS["judge_v2"]
 
+    llm_mod.enrich_judge(db=None, prompt_kind="judge_v4", **_judge_inputs())
+    assert seen["system"] == PROMPTS["judge_v4"]
+    assert prompt_version("judge") == "judge_v3"
+
+
+def test_judge_v4_is_ablation_only_and_avoids_v3_exemplars():
+    from app.prompts import PROMPTS, prompt_version
+
+    assert prompt_version("judge") == "judge_v3"
+    assert "judge_v4" in PROMPTS
+    exemplars = (
+        "工资表",
+        "赔付书",
+        "财政",
+        "监管放款",
+        "监管账户",
+        "网签",
+        "合同",
+        "公证书",
+        "用途说明",
+        "发票",
+        "取现",
+        "回流",
+        "多层",
+        "递减",
+        "过桥",
+        "关联",
+        "对倒",
+        "闭环",
+        "现金",
+        "兑换商",
+        "归集",
+        "集中外转",
+        "阈值",
+        "存入",
+    )
+    body = PROMPTS["judge_v4"]
+    for token in exemplars:
+        assert token not in body, token
+    assert "口头陈述前后不一致" in body
+    assert "不得单独把结论从 observe 升为 suggest_report" in body
+
 
 def test_enrich_judge_rejects_unknown_prompt_kind(monkeypatch):
     import app.llm as llm_mod

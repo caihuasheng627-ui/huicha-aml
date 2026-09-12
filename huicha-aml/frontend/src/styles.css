@@ -473,7 +473,7 @@ body {
 .issue { color: var(--crimson); font-size: 13px; margin: 8px 0 0; }
 
 .graph {
-  height: 248px;
+  min-height: 318px;
   background:
     radial-gradient(circle at 50% 42%, rgba(29, 79, 134, 0.08), transparent 48%),
     linear-gradient(#f8fafc, #eef3f8);
@@ -482,17 +482,45 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  user-select: none;
 }
-.graph svg { width: 100%; flex: 1; display: block; }
+.graph svg { width: 100%; height: 210px; flex: 1; display: block; touch-action: none; }
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.graph-reset {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.graph-reset:hover { border-color: var(--ink); }
+.graph-focus {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 10px 8px;
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 20px;
+}
+.graph-focus code { font-size: 11px; color: var(--ink); }
+.graph-node { cursor: grab; }
+.graph-node:active { cursor: grabbing; }
 .graph-live line {
-  stroke-dasharray: 160;
-  stroke-dashoffset: 160;
+  stroke-dasharray: 180;
+  stroke-dashoffset: 180;
   animation: draw-edge 0.8s ease forwards;
-}
-.graph-live circle {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: node-in 0.45s ease both;
 }
 .graph-legend {
   display: flex;

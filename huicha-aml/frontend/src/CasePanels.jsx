@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 export function clickSource(e) {
   const raw = String(e?.raw_reference || "");
   const tx = raw
@@ -289,6 +291,94 @@ export function CounterfactualBox({ cf }) {
       <p className="hint">
         {cf.assumption}：{cf.original} → {cf.counterfactual}（差 {cf.difference}）
       </p>
+    </div>
+  );
+}
+
+const SLIP_PRI = { high: "高", medium: "中", low: "低" };
+const SLIP_ST = { missing: "待补", optional: "可选", satisfied: "已齐" };
+
+export function SupplementChecklist({ data, loading, writing, onWrite }) {
+  const items = data?.items || [];
+  const actionable = items.filter((it) => it.status !== "satisfied");
+  const [picked, setPicked] = useState(() => new Set());
+
+  const slipKey = items.map((it) => `${it.id}:${it.status}:${it.appended}`).join("|");
+  useEffect(() => {
+    setPicked(new Set(items.filter((it) => it.status === "missing").map((it) => it.id)));
+  }, [slipKey]);
+
+  if (!items.length && !loading) return null;
+
+  function toggle(id) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selected = actionable.filter((it) => picked.has(it.id));
+
+  return (
+    <div className="slip">
+      <div className="slip-hd">
+        <div>
+          <b>待补证</b>
+          <span>签发前材料缺口 · 规则清单，不自动报送</span>
+        </div>
+        <em>
+          缺 {data?.missing_count ?? "—"} · 要素 {data?.elements_filled ?? "—"}/{data?.elements_total ?? "—"}
+        </em>
+      </div>
+      {loading && !items.length ? <div className="hint">正在对照案件要素…</div> : null}
+      <ul className="slip-list">
+        {items.map((it) => {
+          const locked = it.status === "satisfied";
+          const on = picked.has(it.id);
+          return (
+            <li key={it.id} className={`slip-row is-${it.status} is-${it.priority}${on ? " is-on" : ""}`}>
+              <label className="slip-check">
+                <input
+                  type="checkbox"
+                  disabled={locked || writing}
+                  checked={on}
+                  onChange={() => toggle(it.id)}
+                />
+                <i />
+              </label>
+              <div className="slip-body">
+                <div className="slip-line">
+                  <abbr className="slip-seal">{it.category}</abbr>
+                  <strong>{it.title}</strong>
+                  <small className={`slip-pri is-${it.priority}`}>{SLIP_PRI[it.priority] || it.priority}</small>
+                  <small className={`slip-st is-${it.status}`}>
+                    {it.appended ? "已写入" : SLIP_ST[it.status] || it.status}
+                  </small>
+                </div>
+                <p title={`${it.reason} 怎么补：${it.suggested_action}`}>
+                  {it.reason} <span className="slip-how">怎么补：{it.suggested_action}</span>
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="slip-ft">
+        <button
+          type="button"
+          className="slip-write"
+          disabled={!selected.length || writing}
+          onClick={() => onWrite?.(selected.map((it) => it.id))}
+        >
+          {writing ? "写入中…" : `写入草稿备注${selected.length ? `（${selected.length}）` : ""}`}
+        </button>
+        <span>勾选后写入调查员意见，便于签发或「修改后采纳」时一并带上。</span>
+        {String(data?.human_note || "").includes("【补证清单】") ? (
+          <em className="slip-echo">已落入下方草稿备注，不自动报送。</em>
+        ) : null}
+      </div>
     </div>
   );
 }

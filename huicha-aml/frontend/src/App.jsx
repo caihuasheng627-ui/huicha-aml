@@ -14,11 +14,13 @@ import {
   message,
 } from "antd";
 import {
+  appendChecklist,
   clearSession,
   decide,
   downloadExport,
   fetchAlerts,
   fetchAuthAccounts,
+  fetchChecklist,
   fetchDetail,
   fetchFeedback,
   fetchHealth,
@@ -32,7 +34,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
@@ -63,6 +65,7 @@ const AUDIT_ACTION = {
   tool: "调取工具",
   tools: "调取工具",
   validator: "证据校验",
+  checklist: "补证清单",
 };
 
 const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
@@ -256,6 +259,9 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [demoAccounts, setDemoAccounts] = useState([]);
   const [loginForm] = Form.useForm();
+  const [checklist, setChecklist] = useState(null);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+  const [checklistWriting, setChecklistWriting] = useState(false);
   const openSeq = useRef(0);
   const inv = detail?.investigation;
   const playback = usePipelinePlayback({ running: loading, failed: invError });
@@ -304,6 +310,41 @@ export default function App() {
     if (seq !== openSeq.current) return;
     setDetail(d);
     setNote(d.human_note || "");
+    if (d.investigation) {
+      setChecklistLoading(true);
+      fetchChecklist(id)
+        .then((c) => {
+          if (seq !== openSeq.current) return;
+          setChecklist(c);
+        })
+        .catch(() => {
+          if (seq !== openSeq.current) return;
+          setChecklist(d.investigation.checklist || null);
+        })
+        .finally(() => {
+          if (seq === openSeq.current) setChecklistLoading(false);
+        });
+    } else {
+      setChecklist(null);
+    }
+  }
+
+  async function onWriteChecklist(itemIds) {
+    if (!current || !itemIds?.length) return;
+    setChecklistWriting(true);
+    try {
+      const data = await appendChecklist(current, itemIds);
+      setChecklist(data);
+      setNote(data.human_note || "");
+      message.success(`已将 ${data.appended?.length || itemIds.length} 条写入草稿备注`);
+      requestAnimationFrame(() => {
+        document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    } catch (e) {
+      message.error(e.message);
+    } finally {
+      setChecklistWriting(false);
+    }
   }
 
   useEffect(() => {
@@ -459,6 +500,7 @@ export default function App() {
           <BrandLogo />
           <div className="brand-text">
             <strong>循证慧查</strong>
+            <span>告警后调查工作台</span>
           </div>
         </div>
         <div className="staff">
@@ -915,8 +957,15 @@ export default function App() {
                     可疑交易报告草稿 · 非报送报文
                   </Divider>
                   <ReportText text={inv.report.full_text} issues={inv.fact_issues} onSelect={selectEvidence} />
+                  <SupplementChecklist
+                    data={checklist || inv.checklist}
+                    loading={checklistLoading}
+                    writing={checklistWriting}
+                    onWrite={onWriteChecklist}
+                  />
                   <Input.TextArea
-                    rows={2}
+                    id="investigator-note"
+                    rows={5}
                     style={{ marginTop: 10 }}
                     placeholder="调查员意见（修改说明 / 驳回原因）"
                     value={note}

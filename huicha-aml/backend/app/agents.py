@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from .analyst_rules import CONCLUSION_LABEL, analyze, rule_prior, score_to_conclusion
 from .case_store import evidence_case_index, persist_investigation
+from .checklist import attach_checklist, enrich_counterparties
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
 from .llm import enrich_challenger, enrich_report_reason, llm_model
@@ -703,6 +704,10 @@ def _run_investigation_inner(
             "note": "对比项均为当场可验证指标（工具次数/要素非空/证据可回溯），不再使用拍脑袋人工分钟数。",
         },
     }
+    attach_checklist(
+        payload,
+        counterparties=enrich_counterparties(db, alert["account_id"], txs, bundle.get("graph") or {}),
+    )
     try:
         persist_investigation(db, payload)
         audit(f"case persisted {alert['id']}")

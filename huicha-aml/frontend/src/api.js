@@ -179,6 +179,23 @@ export async function runInvestigate(id, { useChallenger = true, injectHallucina
   return r.json();
 }
 
+export async function fetchChecklist(id) {
+  const r = await request(`/api/alerts/${id}/checklist`);
+  if (!r.ok) throw new Error(await readError(r, "无法加载补证清单"));
+  return r.json();
+}
+
+export async function appendChecklist(id, itemIds) {
+  const r = await request(`/api/alerts/${id}/checklist/append`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item_ids: itemIds }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "写入补证备注失败");
+  return data;
+}
+
 export async function decide(id, decision, note) {
   const r = await request(`/api/alerts/${id}/decide`, {
     method: "POST",

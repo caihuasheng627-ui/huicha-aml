@@ -23,10 +23,10 @@ export function nodeHot(n, selected, hotEdges) {
 }
 
 function nodeFill(kind) {
-  if (kind === "watch") return "#c8161d";
-  if (kind === "center") return "#0a1628";
-  if (kind === "channel") return "#0f7b4a";
-  return "#1b4f8a";
+  if (kind === "watch") return "#b42318";
+  if (kind === "center") return "#2b3038";
+  if (kind === "channel") return "#2d6a4f";
+  return "#3a5a7c";
 }
 
 function nodeRadius(n, hot) {
@@ -130,16 +130,10 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
             <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#7b8ea6" />
           </marker>
           <marker id="arr-hot" markerWidth="7" markerHeight="7" refX="6" refY="3.2" orient="auto">
-            <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#c8161d" />
+            <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#b42318" />
           </marker>
-          <radialGradient id="orbit" cx="50%" cy="46%" r="48%">
-            <stop offset="0%" stopColor="#1d4f86" stopOpacity="0.10" />
-            <stop offset="100%" stopColor="#1d4f86" stopOpacity="0" />
-          </radialGradient>
         </defs>
-        <rect width={GRAPH_W} height={GRAPH_H} fill="url(#orbit)" />
-        <ellipse cx={GRAPH_W / 2} cy={GRAPH_H * 0.46} rx="118" ry="78" fill="none" stroke="#d5deea" strokeDasharray="3 5" />
-        <ellipse cx={GRAPH_W / 2} cy={GRAPH_H * 0.46} rx="72" ry="46" fill="none" stroke="#e4ebf3" strokeDasharray="2 6" />
+        <rect width={GRAPH_W} height={GRAPH_H} fill="#f4f5f7" />
         {edges.map((e) => {
           const a = layout[e.source];
           const b = layout[e.target];
@@ -163,7 +157,7 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
                 y1={s.y1}
                 x2={s.x2}
                 y2={s.y2}
-                stroke={hot ? "#c8161d" : "#94a3b8"}
+                stroke={hot ? "#b42318" : "#94a3b8"}
                 strokeWidth={hot ? thick + 0.8 : thick}
                 markerEnd={hot ? "url(#arr-hot)" : "url(#arr)"}
               />
@@ -200,7 +194,7 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
                 cy={n.y}
                 r={r}
                 fill={nodeFill(n.kind)}
-                stroke={hot ? "#c8161d" : "#fff"}
+                stroke={hot ? "#b42318" : "#fff"}
                 strokeWidth="2"
               />
               <text x={n.x} y={n.y + r + 12} textAnchor="middle" fill="#1c2838" fontSize="10" fontWeight="650">

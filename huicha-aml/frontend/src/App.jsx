@@ -500,6 +500,7 @@ export default function App() {
           <BrandLogo />
           <div className="brand-text">
             <strong>循证慧查</strong>
+            <span>告警后调查工作台</span>
           </div>
         </div>
         <div className="staff">

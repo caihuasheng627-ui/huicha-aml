@@ -15,6 +15,17 @@ def _prf(tp: int, fp: int, fn: int) -> tuple[float, float, float]:
     return p, r, f1
 
 
+def confusion_matrix(y_true: list[str], y_pred: list[str], labels: tuple[str, ...] = LABELS) -> dict:
+    matrix = {a: {b: 0 for b in labels} for a in labels}
+    other = 0
+    for a, b in zip(y_true, y_pred):
+        if a not in matrix or b not in matrix[a]:
+            other += 1
+            continue
+        matrix[a][b] += 1
+    return {"labels": list(labels), "matrix": matrix, "other": other}
+
+
 def classification_report(y_true: list[str], y_pred: list[str]) -> dict:
     n = len(y_true)
     acc = sum(a == b for a, b in zip(y_true, y_pred)) / n if n else 0.0
@@ -34,11 +45,12 @@ def classification_report(y_true: list[str], y_pred: list[str]) -> dict:
     return {
         "n": n,
         "accuracy": round(acc, 4),
-        "macro_f1": round(sum(f1s) / len(f1s), 4),
+        "macro_f1": round(sum(f1s) / len(f1s), 4) if f1s else 0.0,
         "false_positive_rate": round(fpr, 4),
         "per_class": per,
+        "confusion_matrix": confusion_matrix(y_true, y_pred),
         "label_dist": dict(Counter(y_true)),
-        "note": "对本输入列表有效；不是生产准确率。",
+        "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。",
     }
 
 
@@ -54,5 +66,5 @@ def evidence_prf(predicted: list[list[str]], gold: list[list[str]]) -> dict:
         "evidence_precision": round(p, 4),
         "evidence_recall": round(r, 4),
         "evidence_f1": round(f1, 4),
-        "note": "需要人工 gold evidence；当前仓库未提供独立标注。TODO",
+        "note": "在独立合成集候选证据上计算；不是生产证据召回率。",
     }

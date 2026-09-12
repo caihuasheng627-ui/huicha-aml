@@ -562,7 +562,14 @@ def enrich_judge(
     allowed_evidence: list[str],
     missing_evidence: list[str] | None = None,
     prior_issues: list[dict] | None = None,
+    prompt_kind: str | None = None,
 ) -> tuple[dict, dict]:
+    from .prompts import PROMPTS, prompt_version
+
+    # prompt_kind 仅供实验消融覆盖；产品路径始终用 prompt_version("judge")。
+    kind = prompt_kind or prompt_version("judge")
+    if kind not in PROMPTS or not kind.startswith("judge"):
+        raise ValueError(f"未知 judge prompt 版本：{kind}")
     context = {
         "alert_trigger": {
             "type": alert.get("alert_type"),
@@ -595,17 +602,15 @@ def enrich_judge(
     }
     if privacy:
         context = privacy.mask_obj(context)
-    key = None if prior_issues else _cache_key("judge_v2", context)
+    key = None if prior_issues else _cache_key(kind, context)
     cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
         data = _extract_json_object(text)
     else:
-        from .prompts import PROMPTS
-
         text, usage = chat(
             [
-                {"role": "system", "content": PROMPTS["judge_v2"]},
+                {"role": "system", "content": PROMPTS[kind]},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             temperature=0.0,
@@ -613,7 +618,7 @@ def enrich_judge(
         )
         data = _parse_model_json(text, usage, role="Judge")
         if key:
-            _cache_put(db, key, "judge_v2", text, usage)
+            _cache_put(db, key, kind, text, usage)
     return _unmask_value(data, privacy), usage
 
 

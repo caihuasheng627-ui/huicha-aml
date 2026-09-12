@@ -356,10 +356,15 @@ def _run_investigation_v3(
     }
     if use_challenger and judge_validation["passed"] and judge.get("supporting_evidence_ids"):
         key_id = judge["supporting_evidence_ids"][0]
+        key_finding = next(
+            (f for f in findings if key_id in (f.get("evidence_ids") or []) and f.get("polarity") == "support"),
+            None,
+        )
+        removed_ids = set((key_finding or {}).get("evidence_ids") or [key_id])
         cf_findings = [
-            {**f, "evidence_ids": [e for e in (f.get("evidence_ids") or []) if e != key_id]}
+            f
             for f in findings
-            if not (f.get("evidence_ids") == [key_id])
+            if f is not key_finding
         ]
         try:
             raw_cf, _ = enrich_judge(
@@ -368,18 +373,23 @@ def _run_investigation_v3(
                 alert=alert,
                 customer=customer,
                 findings=cf_findings,
-                transactions=[t for t in txs if t.get("id") != key_id],
+                transactions=[t for t in txs if t.get("id") not in removed_ids],
                 baseline=baseline,
                 kb_hits=kb_hits,
-                allowed_evidence=[e for e in allowed_evidence if e != key_id],
-                prior_issues=[{"kind": "counterfactual", "message": f"移除关键证据 {key_id} 后重新判断"}],
+                allowed_evidence=[e for e in allowed_evidence if e not in removed_ids],
+                prior_issues=[
+                    {
+                        "kind": "counterfactual",
+                        "message": f"移除指标「{(key_finding or {}).get('title') or key_id}」及其证据后重新判断",
+                    }
+                ],
             )
             cf_judge = normalize_judge(raw_cf)
-            cf_valid = verify_judge(cf_judge, allowed_evidence=set(allowed_evidence) - {key_id})
+            cf_valid = verify_judge(cf_judge, allowed_evidence=set(allowed_evidence) - removed_ids)
             counterfactual_result = {
                 "performed": True,
                 "faithful": bool(cf_valid["passed"] and cf_judge["disposition"] != judge["disposition"]),
-                "removed_evidence_ids": [key_id],
+                "removed_evidence_ids": sorted(removed_ids),
                 "original_conclusion": judge["disposition"],
                 "counterfactual_conclusion": cf_judge["disposition"] if cf_valid["passed"] else "",
                 "note": (

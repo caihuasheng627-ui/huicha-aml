@@ -264,3 +264,50 @@ def test_upstream_alert_label_does_not_directly_raise_rule_baseline(client):
     assert data["alert"]["alert_type"]
     assert data["rule_baseline"]["score"] == 0.12
     assert all(f["code"] != "upstream-alert" for f in data["rule_baseline"]["factors"])
+
+
+def test_watchlist_guardrail_prevents_direct_exclusion(client, monkeypatch):
+    def fake_enrich(**kwargs):
+        evidence_id = kwargs["allowed_evidence"][0]
+        return (
+            {
+                "disposition": "exclude",
+                "confidence": 0.8,
+                "typologies": [],
+                "supporting_evidence_ids": [],
+                "contradicting_evidence_ids": [evidence_id],
+                "missing_evidence": [],
+                "rationale": [{"text": "建议排除", "evidence_ids": [evidence_id]}],
+                "next_actions": [],
+            },
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-C-20260910/investigate").json()
+    assert data["watch_hits"]
+    assert data["judge"]["disposition"] == "exclude"
+    assert data["conclusion"] == "observe"
+    assert data["policy_guardrails"]["overridden"] is True
+
+
+def test_judge_missing_evidence_flows_into_checklist(client, monkeypatch):
+    original = __import__("app.agents", fromlist=["enrich_judge"]).enrich_judge
+
+    def with_gap(**kwargs):
+        decision, usage = original(**kwargs)
+        decision["missing_evidence"] = ["补充实际控制人关系证明"]
+        return decision, usage
+
+    monkeypatch.setattr("app.agents.enrich_judge", with_gap)
+    data = client.post("/api/alerts/ALT-A-20260910/investigate").json()
+    gaps = [i for i in data["checklist"]["items"] if i["id"].startswith("AI-GAP-")]
+    assert gaps
+    assert gaps[0]["status"] == "missing"
+
+
+def test_reporter_generates_all_four_sections(client):
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    text = data["report"]["full_text"]
+    for section in ("资金交易及客户行为", "疑点分析", "反证与缺失证据", "结论与理由"):
+        assert f"【{section}】" in text

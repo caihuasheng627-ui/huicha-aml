@@ -229,11 +229,6 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
   );
 }
 
-function fmtDelta(n) {
-  const v = Number(n || 0);
-  return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
-}
-
 const DECISION_LABEL = {
   exclude: "排除",
   observe: "继续观察",
@@ -288,124 +283,11 @@ export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }
   );
 }
 
-export function ChallengerPanel({ run, onSelect }) {
-  if (!run) return null;
-  const bound = Number(run.delta_bound ?? 0.15);
-  const applied = Number(run.llm_delta ?? 0);
-  const proposed = Number(run.raw_delta ?? applied);
-  const clampedDelta = Number(
-    run.clamped_delta ??
-      (Math.abs(proposed) > bound + 1e-9 ? Math.sign(proposed || 1) * bound : proposed)
-  );
-  const clamped = Boolean(run.delta_clamped) || Math.abs(proposed - clampedDelta) > 1e-9;
-  const suppressed = Boolean(run.delta_suppressed);
-  const initial = run.initial_label || "";
-  const pre = Number(run.initial_score ?? 0) + Number(run.rule_prior ?? 0);
-  const alreadyExclude = initial === "排除" || pre < 0.35;
-  const alreadyReport = initial === "建议上报";
-  const blurb = run.ablation
-    ? null
-    : alreadyExclude && (suppressed || applied >= 0)
-      ? "规则底分（加先验）已是排除。负向提案不再叠加，避免无意义砸到展示下限 0.05。"
-      : alreadyExclude
-        ? "规则底分已是排除。负向提案只巩固排除；合成低于 0.05 时按下限展示，档位不变。"
-        : alreadyReport
-          ? "规则已倾向上报。Challenger 找反证往下压，合计进分不超过 ±0.15，不是再叠一层可疑分。"
-          : "Challenger 提案可正可负。单条不超过 ±0.15，多条加总越界则只按 ±0.15 进分。";
-  return (
-    <div className="ch-panel">
-      <div className="v2-hd">AI反向质询（Challenger）</div>
-      {run.ablation ? (
-        <div className="ch-ablation">
-          本案为消融结果。生成时未启用 AI 反向质询。顶部开关只影响下一次「按当前策略重跑」。
-        </div>
-      ) : (
-        <div className="ch-on">{blurb}</div>
-      )}
-      <ol className="ch-flow">
-        <li>
-          <b>初始判断</b>
-          <span>
-            规则底分 {Number(run.initial_score ?? 0).toFixed(2)} · {initial || "—"}
-          </span>
-        </li>
-        <li>
-          <b>提案（未进分）</b>
-          <span>下面是模型给出的每条 Δ，不是已经加进最终分的数。</span>
-          {(run.claims || []).length > 0 && (
-            <ul>
-              {run.claims.slice(0, 4).map((c) => {
-                const proposed = Number(c.delta || 0);
-                return (
-                  <li key={c.claim}>
-                    <button type="button" className="token" onClick={() => c.evidence_ids?.[0] && onSelect(c.evidence_ids[0])}>
-                      {c.claim}
-                    </button>
-                    <em className={proposed < 0 ? "down" : proposed > 0 ? "up" : ""}>{fmtDelta(proposed)}</em>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </li>
-        <li>
-          <b>校验</b>
-          <span>
-            通过 {Number(run.validator?.kept ?? run.claims?.length ?? 0)} 条 · 拒绝{" "}
-            {Number(run.validator?.rejected ?? 0)} 条
-            {run.validator?.passed === false ? " · 未通过，Δ 置 0" : ""}
-          </span>
-        </li>
-        <li>
-          <b>进分</b>
-          <span>
-            规则先验 {fmtDelta(run.rule_prior)} · 提案合计 {fmtDelta(proposed)}
-            {clamped ? ` · 夹紧 ${fmtDelta(clampedDelta)}` : ""} · 实际进分 {fmtDelta(applied)}
-            {suppressed ? "（已排除，负向未叠）" : ""}
-          </span>
-        </li>
-        <li>
-          <b>最终判断</b>
-          <span>
-            展示分 {Number(run.final_score ?? 0).toFixed(2)} · {run.final_label || "—"} · 须人工签发
-          </span>
-        </li>
-      </ol>
-    </div>
-  );
-}
-
-export function VerifiedClaims({ rows, onSelect }) {
-  const kept = (rows || []).filter((r) => r.validation?.score_kind === "predicate_verified");
-  if (!kept.length) return null;
-  return (
-    <div className="v2-panel">
-      <div className="v2-hd">已核验谓词（数据复核为真，才进分）</div>
-      {kept.map((r, i) => (
-        <div
-          key={`${r.predicate || "p"}-${r.claim || r.title || i}`}
-          className="ev"
-          role="button"
-          tabIndex={0}
-          onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
-        >
-          <code>
-            {r.predicate} · Δ{Number(r.delta || 0) > 0 ? "+" : ""}
-            {Number(r.delta || 0).toFixed(2)}
-          </code>
-          <div>{r.claim || r.title}</div>
-          <div className="hint">{(r.validation?.reason || "") + " · " + (r.evidence_ids || []).join("、")}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function RejectedClaims({ rows, onSelect }) {
   if (!rows?.length) return null;
   return (
     <div className="v2-panel">
-      <div className="v2-hd">Validator 拒绝（未进分）</div>
+      <div className="v2-hd">Skeptic 拒绝（不可签发）</div>
       {rows.slice(0, 8).map((r, i) => (
         <div
           key={`${r.claim || r.title || i}`}

@@ -697,7 +697,7 @@ export default function App() {
           banner
           showIcon
           message="未配置 DASHSCOPE_API_KEY"
-          description="Challenger/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
+          description="Judge/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
         />
       )}
       {needsToken && (
@@ -846,7 +846,7 @@ export default function App() {
                     </div>
                   )}
                   <div className="hint" style={{ margin: "6px 0 0" }}>
-                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则打底，非校准置信度" : "非概率置信度"}
+                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则对照，非校准分数" : "AI 自评把握度，未校准"}
                   </div>
                 </div>
                 <div className="kpi-card">

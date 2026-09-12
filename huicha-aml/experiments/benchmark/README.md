@@ -31,5 +31,18 @@ python experiments/benchmark.py --real --prompt judge_v2
 `RESULTS.json` 中 `independent_real_model` 是最近一次；`independent_real_model_runs[<prompt>]` 按 prompt 版本各留一份，
 ≥2 个版本时自动生成 `independent_ablation` 并渲染到 `RESULTS.md`。
 
+```bash
+# 结构盲区 / 真实 hold-out 槽
+python experiments/benchmark/build_independent_set.py --variant blind_struct
+python experiments/benchmark.py --real --set blind_struct --prompt judge_v3
+python experiments/benchmark/export_boundary.py
+python experiments/benchmark/export_gold_review.py
+python experiments/benchmark/score_gold_review.py
+python experiments/benchmark/import_real_cases.py --placeholder
+python experiments/benchmark.py --real --set real --limit 5 --no-write
+```
+
+`judge_v4` 仅消融：`--prompt judge_v4`。默认产品仍是 `judge_v3`。
+
 禁止把本目录数字写成产品准确率。结论须人工签发。
 v1（Macro-F1≈0.69）与 v2 集（missing_evidence 泄漏、无规则层）结果均不得与 v3 混比，见 RESULTS.md / REAL_MODEL_REPORT.md。

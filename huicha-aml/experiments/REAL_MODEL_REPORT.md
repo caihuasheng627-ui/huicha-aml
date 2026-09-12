@@ -209,3 +209,59 @@ v3 几乎不依赖叙事项上的 support/counter 标签（差值 <0.001）；v2
 1. **API 与协议成立**；词面重合把主集 v3 从「真实泛化」抬到了 0.97，盲区把这个水分挤到 0.93，方向没变。  
 2. **v3 相对 v2 的贡献是真的**：两套集上排除召回都是 0→≈1，observe 率从 67–77% 降到 14–16%。  
 3. **不能对外说 93% 生产能力**；下一步仍是调查员标注的真实 hold-out，以及观察族偏严（继承/新户首笔）要不要改标准。
+
+---
+
+## 10. 边界可信与 hold-out 铺路（不改默认产品行为）
+
+默认 `prompt_version("judge")` 仍是 **`judge_v3`**。下面 5 步只扩实验面；`judge_v4` 仅消融。
+
+### 10.1 结构盲区集（`struct_set.json`，n=220）
+
+`--variant blind_struct`：禁词与盲区相同，但流水不触发 `structuring` / `funnel` / `night-out` / `layering`，规则层只留 `alert-trigger`。上报信号只在叙事项和对手关系（同一受益人空壳、出借账户、地下汇兑摊位、同址新设、重复收据号）。
+
+读数约定：同一集上 `judge_v3` Macro-F1 **< 0.70** 说明此前高分依赖规则层结构话术；**≥ 0.85** 才谈得上跨结构泛化。keyword 基线预期很低。
+
+真实百炼 v2/v3 全量数字见跑完后的 §10.6；未跑完前不得把本集写成已测准。
+
+### 10.2 观察 / 上报边界裁定（不改 gold）
+
+主集 + 盲区 `judge_v3` 观察族判错 **16** 条，全部是 observe→`suggest_report`：
+
+| 族 | 条数 | 裁定 |
+| --- | ---: | --- |
+| `inheritance_partial` | 6 | 金标不偏松。口述用途变更 + 缺公证书，流水无异常节奏，实务应先补证 |
+| `docs_pending` | 6 | 同上 |
+| `first_large` | 4 | 新户首笔大额、对手可查；部分 raw 还编造「快进快出/拆分」 |
+| `purpose_docs_gap` | 0 | 本批无错 |
+
+**不改 gold，不重算主表。** 该边界写进 `judge_v4`：口头陈述不一致不得单独升上报档。逐条对照见 `benchmark/boundary_review.md`。
+
+### 10.3 金标复核（22 族）
+
+`gold_review_sheet.md` 不带 gold/prompt。`gold_review_labels.json` 是**实验作者首轮**（不是独立调查员），档位与 gold 22/22 一致，主动把 4 个观察族标成 boundary。
+
+按族切已有跑分（`macro_f1_present` = 只对 support>0 的档位取宏平均）：
+
+| 跑次 | 全体 | clear 族 | boundary 观察族 |
+| --- | ---: | ---: | ---: |
+| 主集 judge_v3 | 0.9662 | **1.0000**（n=191，acc=1.0） | 0.9268（n=44，acc=0.8636） |
+| 盲区 judge_v3 | 0.9286 | **0.9969**（n=178，acc=0.9944） | 0.8529（n=39，acc=0.7436） |
+| 主集 judge_v2 | 0.3867 | 0.3824（acc=0.3368） | 0.9885（acc=0.9773） |
+| 盲区 judge_v2 | 0.4259 | 0.4226（acc=0.4034） | 1.0000（acc=1.0） |
+
+v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v2 在观察族「全对」只因为它几乎永远输出 observe。作者自洽率 1.0 **不能**写成外部一致率。
+
+### 10.4 `judge_v4` 草案（仅消融）
+
+抽象判据：凭证勾稽、观察窗 T 小时内 N 账户余额归零、对手可核、材料缺口是否阻碍闭合。删除 v3 例举类型学名词。新增：口头陈述不一致只记疑点，不自动升档。
+
+`prompt_version("judge")` **保持 judge_v3**。切默认的条件：主集、盲区、结构盲区三套上 v4 均不低于 v3，且观察族偏严减少。在此之前 PR 不得把「影响线上行为」勾成已确认。
+
+### 10.5 真实 hold-out 接口
+
+`import_real_cases.py`：脱敏 CSV → `real_holdout.json`；`benchmark.py --set real`。占位 5 条 `data_note=placeholder`，**不写 RESULTS 主表**。字段校验与去标识见 `backend/tests/test_real_holdout.py`。
+
+### 10.6 结构盲区 / v4 真实跑（待写入）
+
+待 `struct_set` × judge_v2/v3 与三套集 × judge_v4 跑完后补表。口径仍是合成对照，须人工签发。

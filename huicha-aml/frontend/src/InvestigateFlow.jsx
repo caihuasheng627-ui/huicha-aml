@@ -61,17 +61,16 @@ const PIPELINE = [
     ticks: ["结构化报告", "事实回查", "禁止自动报送"],
     logs: ["render_report", "enrich_report_reason", "fact_check"],
   },
-  {
-    id: "human",
-    role: "Human",
-    title: "人签",
-    caption: "调查员做最终决策",
-    dwell: 420,
-    linger: false,
-    ticks: ["草稿待签发", "核对补证清单", "Agent 不得报送"],
-    logs: ["handoff_human_approval"],
-  },
 ];
+
+const SIGN_STAGE = {
+  id: "human",
+  role: "Human",
+  title: "人签",
+  caption: "调查员做最终决策",
+};
+
+const RAIL = [...PIPELINE, SIGN_STAGE];
 
 export function usePipelinePlayback({ running, failed }) {
   const [session, setSession] = useState(0);
@@ -141,7 +140,8 @@ export function usePipelinePlayback({ running, failed }) {
   }
 
   const stage = index >= 0 ? PIPELINE[index] : null;
-  const progress = index < 0 ? 0 : Math.min(1, index / (PIPELINE.length - 1));
+  const last = Math.max(PIPELINE.length - 1, 1);
+  const progress = index < 0 ? 0 : phase === "holding" || phase === "done" ? 1 : Math.min(0.96, (index + 0.45) / last);
 
   return { index, phase, subTick, stage, progress, reset };
 }
@@ -180,14 +180,14 @@ export function PipelineRail({ playback, hasDraft, signed, useChallenger }) {
   if (!live) {
     if (signed) {
       complete = true;
-      index = PIPELINE.length - 1;
+      index = RAIL.length - 1;
       phase = "done";
     } else if (hasDraft) {
-      index = PIPELINE.length - 1;
+      index = RAIL.length - 1;
       phase = "pending";
     }
   }
-  const fill = complete ? 1 : index < 0 ? 0 : Math.min(0.92, Math.max(0, index / (PIPELINE.length - 1)));
+  const fill = complete ? 1 : index < 0 ? 0 : Math.min(0.92, Math.max(0, index / (RAIL.length - 1)));
   return (
     <div className={`pipeline-rail is-${phase}${complete ? " is-complete" : ""}`} aria-label="调查流水线">
       <div className="pipeline-track">
@@ -195,7 +195,7 @@ export function PipelineRail({ playback, hasDraft, signed, useChallenger }) {
         {phase === "playing" || phase === "holding" ? <i className="pipeline-scan" /> : null}
       </div>
       <ol className="pipeline-nodes">
-        {PIPELINE.map((stage, i) => {
+        {RAIL.map((stage, i) => {
           const muted = !useChallenger && stage.id === "challenger";
           return (
             <li key={stage.id} className={muted ? "is-muted" : undefined}>
@@ -209,7 +209,7 @@ export function PipelineRail({ playback, hasDraft, signed, useChallenger }) {
 }
 
 export function InvestigateTheater({ playback, useChallenger, injectHallucination, onRetry, onBack }) {
-  const { index, phase, subTick, stage } = playback;
+  const { index, phase, progress, stage } = playback;
   const current = stage || PIPELINE[0];
   const ticks = current.ticks || [];
   const logs = current.logs || [];
@@ -219,6 +219,7 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
   ];
   const failed = phase === "error";
   const rolling = !failed && phase !== "done";
+  const pathFill = failed ? 100 : Math.max(0, Math.min(100, progress * 100));
 
   return (
     <div className={`theater${failed ? " is-error" : ""}`} role="status" aria-live="polite">
@@ -229,13 +230,13 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
 
       <div className="theater-path" aria-hidden="true">
         <i className="theater-path-line" />
-        <i className="theater-path-fill" style={{ width: `${Math.max(0, (index / Math.max(PIPELINE.length - 1, 1)) * 100)}%` }} />
+        <i className="theater-path-fill" style={{ width: `${pathFill}%` }} />
         {PIPELINE.map((s, i) => (
           <StageNode
             key={s.id}
             stage={s}
             state={nodeState(i, index, phase, false)}
-            compact={false}
+            compact
           />
         ))}
       </div>
@@ -244,13 +245,6 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
         <div className="theater-role">
           <b>{current.role}</b>
           <em>{!useChallenger && current.id === "challenger" ? "本轮已关闭（消融）" : current.caption}</em>
-        </div>
-        <div className="theater-bar" aria-hidden="true">
-          <i
-            style={{
-              width: failed ? "100%" : phase === "holding" ? "92%" : `${28 + (subTick % 8) * 8}%`,
-            }}
-          />
         </div>
         <div className="theater-feed" aria-hidden="true">
           <div key={current.id} className={`theater-feed-track${rolling ? " is-rolling" : ""}`}>

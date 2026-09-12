@@ -34,9 +34,92 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { ChallengerPanel, CounterfactualBox, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { ChallengerPanel, CounterfactualBox, CustomerCard, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
+
+const EMPTY_KEYS = [
+  ["打开案例 A 排除", "1"],
+  ["打开案例 B 拆分", "2"],
+  ["打开案例 C 归集", "3"],
+  ["打开案例 F 观察", "4"],
+  ["打开案例 L 多层", "5"],
+  ["按当前策略重跑", "选中案件后点按钮"],
+];
+
+function WelcomeBrief() {
+  return (
+    <div className="welcome">
+      <div className="welcome-mark" aria-hidden="true">
+        循证慧查
+      </div>
+      <table className="welcome-keys">
+        <tbody>
+          {EMPTY_KEYS.map(([action, key]) => (
+            <tr key={action}>
+              <td>{action}</td>
+              <td>{key.length === 1 ? <kbd>{key}</kbd> : <span>{key}</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport }) {
+  const hasDraft = Boolean(inv?.report);
+  const canSign = Boolean(hasDraft && inv.can_sign);
+  const status = !current
+    ? "先选左侧告警"
+    : !hasDraft
+      ? "尚无草稿"
+      : signed?.human_decision
+        ? `${HUMAN[signed.human_decision]}${signed.signed_by_name ? ` · ${signed.signed_by_name}` : ""}`
+        : canSign
+          ? "待签发"
+          : "事实回查未通过，不能签发";
+  return (
+    <div className="sign-dock">
+      <Input.TextArea
+        id="investigator-note"
+        rows={4}
+        placeholder="调查员意见（修改说明 / 驳回原因）"
+        value={note}
+        onChange={(e) => onNote(e.target.value)}
+        disabled={!current}
+      />
+      <div className="sign-dock-row">
+        <div className="sign-dock-actions">
+          <Button type="primary" disabled={!canSign} onClick={() => onDecide("confirm")}>
+            签发结论
+          </Button>
+          <Button disabled={!hasDraft} onClick={() => onDecide("modify")}>
+            修改后采纳
+          </Button>
+          <Button danger disabled={!hasDraft} onClick={() => onDecide("reject")}>
+            驳回重查
+          </Button>
+          <Button disabled={!hasDraft} onClick={onExport}>
+            导出底稿
+          </Button>
+        </div>
+        <span className="sign-dock-status">
+          {!user ? (
+            <>
+              <button type="button" className="sign-dock-link" onClick={onLogin}>
+                登录
+              </button>
+              后才能签发
+            </>
+          ) : (
+            status
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const HUMAN = {
   confirm: "已记录签发",
@@ -152,17 +235,22 @@ function ScoreBreakdown({ scoring, label, ablation }) {
   const base = Number(scoring.base ?? 0);
   const prior = Number(scoring.rule_prior ?? 0);
   const delta = Number(scoring.llm_delta ?? 0);
+  const raw = Number(scoring.raw ?? base + prior + delta);
   const final = Number(scoring.final ?? 0);
+  const floored = Math.abs(raw - final) > 1e-9;
+  const suppressed = Boolean(scoring.delta_suppressed);
   const rows = ablation
     ? [
-        { k: "规则基础分", v: final },
+        { k: "规则底分", v: final, abs: true },
         { k: "Challenger", v: 0 },
-        { k: "最终风险", v: final },
+        { k: "展示分", v: final, abs: true },
       ]
     : [
-        { k: "规则基础分", v: base + prior },
+        { k: "规则底分", v: base, abs: true },
+        { k: "规则先验", v: prior },
         { k: "Challenger", v: delta },
-        { k: "最终风险", v: final },
+        { k: "合成", v: raw },
+        { k: "展示分", v: final, abs: true },
       ];
   const pin = Math.max(2, Math.min(98, final * 100));
   return (
@@ -177,15 +265,18 @@ function ScoreBreakdown({ scoring, label, ablation }) {
           return (
             <li key={r.k}>
               <span>{r.k}</span>
-              <em className={n < 0 ? "down" : n > 0 && r.k !== "最终风险" && r.k !== "规则基础分" ? "up" : ""}>
-                {r.k === "最终风险" ? n.toFixed(2) : `${n > 0 ? "+" : ""}${n.toFixed(2)}`}
+              <em className={n < 0 ? "down" : n > 0 && !r.abs ? "up" : ""}>
+                {r.abs ? n.toFixed(2) : `${n > 0 ? "+" : ""}${n.toFixed(2)}`}
               </em>
             </li>
           );
         })}
       </ul>
       <div className="hint" style={{ margin: "6px 0 0" }}>
-        Challenger 最大影响范围 ±0.15{ablation ? " · 本案为 Challenger OFF 消融结果" : ""}
+        {suppressed ? "底分加先验已是排除，负向 Challenger 未再叠加。" : ""}
+        {floored ? `${suppressed ? " " : ""}合成 ${raw.toFixed(2)} 已夹到展示区间 0.05–0.95。` : ""}
+        {!floored && !suppressed ? "Challenger 进分不超过 ±0.15。" : ""}
+        {ablation ? " 本案为 Challenger OFF 消融结果。" : ""}
       </div>
       <div className="score-track" title="0.35 排除 / 0.55 上报">
         <i className="tick" style={{ left: "35%" }} />
@@ -757,24 +848,15 @@ export default function App() {
           })}
         </aside>
 
-        <main className="col">
-          <div className="col-title">
-            <h3>调查作业</h3>
-            {detail?.alert && <span className="hint">{detail.alert.id}</span>}
-          </div>
-          {!current && (
-            <div className="empty">
-              <h4>领取告警，走完调查流水线</h4>
-              <p className="hint">本台接在监测系统之后，只生成调查草稿，不上报、不记账。</p>
-              <ol>
-                <li>案例 A：批发企业。AI反向质询 ON → 排除；实验模式关掉质询再重跑 → 建议上报（消融）</li>
-                <li>案例 B / C：拆分与多账户归集 → 建议进入上报复核</li>
-                <li>案例 L：A→B→C→D 短时多层转移（合成 Demo）</li>
-                <li>实验模式打开「幻觉演示」：签发将被事实回查拦住</li>
-                <li>左侧点开历史案不会因顶部开关改写结果；只有「按当前策略重跑」才会重算</li>
-              </ol>
+        <main className={`col is-stage${!current ? " is-welcome" : ""}`}>
+          <div className="stage-body">
+          {current && (
+            <div className="col-title">
+              <h3>调查作业</h3>
+              {detail?.alert && <span className="hint">{detail.alert.id}</span>}
             </div>
           )}
+          {!current && <WelcomeBrief />}
           {current && showTheater && (
             <InvestigateTheater
               playback={playback}
@@ -963,45 +1045,22 @@ export default function App() {
                     writing={checklistWriting}
                     onWrite={onWriteChecklist}
                   />
-                  <Input.TextArea
-                    id="investigator-note"
-                    rows={5}
-                    style={{ marginTop: 10 }}
-                    placeholder="调查员意见（修改说明 / 驳回原因）"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  <div className="actions">
-                    <Button type="primary" disabled={!inv.can_sign} onClick={() => onDecide("confirm")}>
-                      签发结论
-                    </Button>
-                    <Button onClick={() => onDecide("modify")}>修改后采纳</Button>
-                    <Button danger onClick={() => onDecide("reject")}>
-                      驳回重查
-                    </Button>
-                    <Button
-                      onClick={() => downloadExport(current).catch((e) => message.error(e.message))}
-                    >
-                      导出底稿
-                    </Button>
-                  </div>
-                  {!user && (
-                    <div className="hint">
-                      请先
-                      <Button type="link" size="small" style={{ padding: "0 4px" }} onClick={() => setLoginOpen(true)}>
-                        登录
-                      </Button>
-                      ，签发结论将绑定当前用户。
-                    </div>
-                  )}
-                  {!inv.can_sign && (
-                    <div className="hint">事实回查未通过：不能「签发结论」。可填写修改说明后「修改后采纳」，或驳回重查。</div>
-                  )}
-                  <div className="hint">签发只记录人工处置，系统不会向监测中心自动报送。</div>
                 </>
               )}
             </div>
           )}
+          </div>
+          <SignDock
+            current={current}
+            inv={inv}
+            user={user}
+            note={note}
+            signed={detail}
+            onNote={setNote}
+            onDecide={onDecide}
+            onLogin={() => setLoginOpen(true)}
+            onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
+          />
         </main>
 
         <aside className={`col${showTheater ? " is-waiting" : ""}`}>
@@ -1017,6 +1076,12 @@ export default function App() {
           </div>
           {inv ? (
             <>
+              <CustomerCard
+                customer={inv.customer}
+                accountId={detail?.alert?.account_id}
+                selected={selected}
+                onSelect={selectEvidence}
+              />
               <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} formatYuan={yuan} />
               <EvidenceLists
                 graph={inv.evidence_graph}

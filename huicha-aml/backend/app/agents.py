@@ -357,6 +357,17 @@ def _run_investigation_inner(
     rejected_claims = ch["rejected"]
     challenger_usage = ch["usage"]
     raw_delta = float(ch.get("raw_delta") or 0)
+    clamped_delta = float(llm_delta)
+    delta_clamped = abs(raw_delta - clamped_delta) > 1e-9
+    delta_suppressed = False
+    pre_llm = base_score + rule_prior_v
+    # 底分+先验已是排除时，再叠负 Δ 只会砸到 0.05 展示下限，不改档。
+    if score_to_conclusion(max(0.0, pre_llm)) == "exclude" and llm_delta < 0:
+        delta_suppressed = True
+        llm_delta = 0.0
+        for f in risk_factors:
+            if f.get("code") == "challenger-llm":
+                f["delta"] = 0.0
 
     if use_challenger:
         for i, c in enumerate(challenger, start=1):
@@ -423,9 +434,11 @@ def _run_investigation_inner(
         )
 
     risk = aggregate(risk_factors, challenger_delta=0.0)
-    score = max(0.05, min(0.95, score))
+    raw_score = base_score + rule_prior_v + llm_delta
+    score = max(0.05, min(0.95, raw_score))
     conclusion = score_to_conclusion(score)
     risk["final"] = round(score, 4)
+    risk["raw"] = round(raw_score, 4)
     risk["conclusion"] = conclusion
     risk["recommendation"] = CONCLUSION_TO_RECO[conclusion]
     risk["recommendation_label"] = RECO_LABEL[risk["recommendation"]]
@@ -518,7 +531,6 @@ def _run_investigation_inner(
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     elements_ok = sum(1 for e in report["elements"] if (e.get("value") or "").strip())
     initial_conclusion = score_to_conclusion(base_score)
-    delta_clamped = abs(raw_delta - llm_delta) > 1e-9
     overbound = [
         r
         for r in rejected_claims
@@ -574,7 +586,9 @@ def _run_investigation_inner(
         "rule_prior": rule_prior_v,
         "llm_delta": llm_delta,
         "raw_delta": raw_delta,
+        "clamped_delta": clamped_delta,
         "delta_clamped": delta_clamped,
+        "delta_suppressed": delta_suppressed,
         "final_score": round(score, 4),
         "final_conclusion": conclusion,
         "final_label": CONCLUSION_LABEL[conclusion],
@@ -612,7 +626,10 @@ def _run_investigation_inner(
             "base": round(base_score, 4),
             "rule_prior": rule_prior_v,
             "llm_delta": llm_delta,
+            "llm_clamped": clamped_delta,
+            "raw": round(raw_score, 4),
             "final": round(score, 4),
+            "delta_suppressed": delta_suppressed,
         },
         "llm": {
             "challenger": use_challenger,

@@ -82,8 +82,67 @@ function uniqueBy(items, keyFn) {
   return out;
 }
 
+const KIND = { enterprise: "对公", individual: "个人" };
+
+export function CustomerCard({ customer, accountId, selected, onSelect }) {
+  if (!customer?.id) return null;
+  const active = selected === customer.id || selected === accountId;
+  const accounts = customer.accounts?.length ? customer.accounts.join("、") : accountId || "—";
+  return (
+    <div
+      id={`ev-${customer.id}`}
+      className={`kyc-card${active ? " is-on" : ""}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(customer.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onSelect(customer.id);
+      }}
+    >
+      <div className="kyc-hd">
+        <b>{customer.name || customer.id}</b>
+        <code>{customer.id}</code>
+      </div>
+      <dl className="kyc-dl">
+        <div>
+          <dt>类型</dt>
+          <dd>{KIND[customer.kind] || customer.kind || "—"}</dd>
+        </div>
+        <div>
+          <dt>行业</dt>
+          <dd>{customer.industry || "—"}</dd>
+        </div>
+        <div>
+          <dt>KYC</dt>
+          <dd>{customer.kyc_level || "—"}</dd>
+        </div>
+        <div>
+          <dt>开户</dt>
+          <dd>{customer.opened_at || "—"}</dd>
+        </div>
+        <div>
+          <dt>城市</dt>
+          <dd>{customer.city || "—"}</dd>
+        </div>
+        <div>
+          <dt>账号</dt>
+          <dd>
+            <code>{accounts}</code>
+          </dd>
+        </div>
+      </dl>
+      {customer.summary ? <p className="kyc-sum">{customer.summary}</p> : null}
+      <p className="kyc-note">合成档案摘要，不是尽调原件。开户申请、受益所有人、回访记录未入库。</p>
+    </div>
+  );
+}
+
 export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSelect }) {
   const items = graph || [];
+  const profiles = uniqueBy(
+    items.filter((e) => e.evidence_type === "CUSTOMER" || e.evidence_type === "ACCOUNT"),
+    (e) => e.source_id || e.evidence_id,
+  );
   const support = uniqueBy(
     items.filter((e) => e.evidence_type === "TRANSACTION"),
     (e) => e.source_id || e.raw_reference || e.evidence_id,
@@ -128,6 +187,11 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
   return (
     <div className="v2-panel">
       <div className="v2-hd">证据分组（synthetic）</div>
+      <div className="v2-hd sub">客户与账户</div>
+      {profiles.slice(0, 6).map((e) => (
+        <Row key={e.evidence_id} e={e} kind="profile" />
+      ))}
+      {!profiles.length && <div className="hint">无</div>}
       <div className="v2-hd sub">支持风险</div>
       {support.slice(0, 10).map((e) => (
         <Row key={e.evidence_id} e={e} kind="support" />
@@ -165,69 +229,91 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
   );
 }
 
+function fmtDelta(n) {
+  const v = Number(n || 0);
+  return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
+}
+
 export function ChallengerPanel({ run, onSelect }) {
   if (!run) return null;
   const bound = Number(run.delta_bound ?? 0.15);
-  const delta = Number(run.llm_delta ?? 0);
-  const sign = delta > 0 ? "+" : "";
+  const applied = Number(run.llm_delta ?? 0);
+  const proposed = Number(run.raw_delta ?? applied);
+  const clampedDelta = Number(
+    run.clamped_delta ??
+      (Math.abs(proposed) > bound + 1e-9 ? Math.sign(proposed || 1) * bound : proposed)
+  );
+  const clamped = Boolean(run.delta_clamped) || Math.abs(proposed - clampedDelta) > 1e-9;
+  const suppressed = Boolean(run.delta_suppressed);
+  const initial = run.initial_label || "";
+  const pre = Number(run.initial_score ?? 0) + Number(run.rule_prior ?? 0);
+  const alreadyExclude = initial === "排除" || pre < 0.35;
+  const alreadyReport = initial === "建议上报";
+  const blurb = run.ablation
+    ? null
+    : alreadyExclude && (suppressed || applied >= 0)
+      ? "规则底分（加先验）已是排除。负向提案不再叠加，避免无意义砸到展示下限 0.05。"
+      : alreadyExclude
+        ? "规则底分已是排除。负向提案只巩固排除；合成低于 0.05 时按下限展示，档位不变。"
+        : alreadyReport
+          ? "规则已倾向上报。Challenger 找反证往下压，合计进分不超过 ±0.15，不是再叠一层可疑分。"
+          : "Challenger 提案可正可负。单条不超过 ±0.15，多条加总越界则只按 ±0.15 进分。";
   return (
     <div className="ch-panel">
       <div className="v2-hd">AI反向质询（Challenger）</div>
       {run.ablation ? (
         <div className="ch-ablation">
-          本案为消融结果。生成时未启用 AI 反向质询，当前展示的是 Challenger OFF 的历史调查结果。顶部开关只影响下一次「按当前策略重跑」。
+          本案为消融结果。生成时未启用 AI 反向质询。顶部开关只影响下一次「按当前策略重跑」。
         </div>
       ) : (
-        <div className="ch-on">
-          AI反向质询已参与本次调查。可提出反向证据，但不能绕过规则直接改最终决策；最终仍须人工签发。
-        </div>
+        <div className="ch-on">{blurb}</div>
       )}
       <ol className="ch-flow">
         <li>
           <b>初始判断</b>
           <span>
-            规则风险 {Number(run.initial_score ?? 0).toFixed(2)} · {run.initial_label || "—"}
+            规则底分 {Number(run.initial_score ?? 0).toFixed(2)} · {initial || "—"}
           </span>
         </li>
         <li>
-          <b>反向质询</b>
-          <span>Challenger 主动寻找：支持当前判断的证据、能够削弱当前判断的反向证据、以及可解释当前交易的正常业务原因。</span>
+          <b>提案（未进分）</b>
+          <span>下面是模型给出的每条 Δ，不是已经加进最终分的数。</span>
           {(run.claims || []).length > 0 && (
             <ul>
-              {run.claims.slice(0, 4).map((c) => (
-                <li key={c.claim}>
-                  <button type="button" className="token" onClick={() => c.evidence_ids?.[0] && onSelect(c.evidence_ids[0])}>
-                    {c.claim}
-                  </button>
-                  <em className={Number(c.delta) < 0 ? "down" : Number(c.delta) > 0 ? "up" : ""}>
-                    {Number(c.delta) > 0 ? "+" : ""}
-                    {Number(c.delta).toFixed(2)}
-                  </em>
-                </li>
-              ))}
+              {run.claims.slice(0, 4).map((c) => {
+                const proposed = Number(c.delta || 0);
+                return (
+                  <li key={c.claim}>
+                    <button type="button" className="token" onClick={() => c.evidence_ids?.[0] && onSelect(c.evidence_ids[0])}>
+                      {c.claim}
+                    </button>
+                    <em className={proposed < 0 ? "down" : proposed > 0 ? "up" : ""}>{fmtDelta(proposed)}</em>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </li>
         <li>
-          <b>证据验证</b>
+          <b>校验</b>
           <span>
-            有效证据 {(run.support_ids || []).length} 条 · 反向证据 {(run.counter_ids || []).length} 条 · 无效证据 {(run.invalid_ids || []).length} 条
-            {run.validator?.passed === false ? " · Challenger 输出未通过证据校验，Δ 已置 0" : ""}
-            {run.delta_clamped ? " · 合计 Δ 已夹紧到 ±0.15" : ""}
+            通过 {Number(run.validator?.kept ?? run.claims?.length ?? 0)} 条 · 拒绝{" "}
+            {Number(run.validator?.rejected ?? 0)} 条
+            {run.validator?.passed === false ? " · 未通过，Δ 置 0" : ""}
           </span>
         </li>
         <li>
-          <b>风险调整</b>
+          <b>进分</b>
           <span>
-            规则先验 {Number(run.rule_prior ?? 0) > 0 ? "+" : ""}
-            {Number(run.rule_prior ?? 0).toFixed(2)} · Challenger Δ {sign}
-            {delta.toFixed(2)} · 允许范围 [{-bound.toFixed(2)}, +{bound.toFixed(2)}]
+            规则先验 {fmtDelta(run.rule_prior)} · 提案合计 {fmtDelta(proposed)}
+            {clamped ? ` · 夹紧 ${fmtDelta(clampedDelta)}` : ""} · 实际进分 {fmtDelta(applied)}
+            {suppressed ? "（已排除，负向未叠）" : ""}
           </span>
         </li>
         <li>
           <b>最终判断</b>
           <span>
-            最终风险 {Number(run.final_score ?? 0).toFixed(2)} · {run.final_label || "—"} · 须人工签发
+            展示分 {Number(run.final_score ?? 0).toFixed(2)} · {run.final_label || "—"} · 须人工签发
           </span>
         </li>
       </ol>

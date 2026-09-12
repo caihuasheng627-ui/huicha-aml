@@ -225,3 +225,87 @@ def test_invalid_challenger_evidence_zeroes_delta(client, monkeypatch):
     assert data["rejected_claims"]
     actions = [a["action"] for a in client.get("/api/alerts/ALT-B-20260910").json()["audit"]]
     assert "validator" in actions
+
+
+def test_exclude_case_does_not_stack_negative_llm(client, monkeypatch):
+    ids = ["TX-E-01", "TX-E-02", "TX-E-03", "TX-E-04", "TX-E-05"]
+
+    def fake_enrich(**_kwargs):
+        return (
+            [
+                {
+                    "claim": "金额按时间递增",
+                    "detail": "经营收款自然增长",
+                    "evidence_ids": ids,
+                    "predicate": "amount_monotonic_increasing",
+                    "args": {"tx_ids": ids},
+                    "delta": -0.15,
+                },
+                {
+                    "claim": "均在夜间",
+                    "detail": "符合夜结",
+                    "evidence_ids": ids[:4],
+                    "predicate": "night_transfer",
+                    "args": {"tx_ids": ids[:4]},
+                    "delta": -0.10,
+                },
+                {
+                    "claim": "POS 前缀",
+                    "detail": "收银通道",
+                    "evidence_ids": ids,
+                    "predicate": "counterparty_has_prefix",
+                    "args": {"tx_ids": ids, "prefix": "POS-", "side": "from"},
+                    "delta": -0.10,
+                },
+            ],
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    r = client.post("/api/alerts/ALT-E-20260908/investigate", params={"use_challenger": True})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    scoring = data["scoring"]
+    run = data["challenger_run"]
+    assert run["initial_label"] == "排除"
+    assert run["raw_delta"] == -0.35
+    assert run["clamped_delta"] == -0.15
+    assert run["delta_clamped"] is True
+    assert run["delta_suppressed"] is True
+    assert scoring["llm_delta"] == 0.0
+    expected_raw = round(scoring["base"] + scoring["rule_prior"], 4)
+    assert scoring["raw"] == expected_raw
+    assert scoring["final"] == max(0.05, min(0.95, expected_raw))
+    assert scoring["delta_suppressed"] is True
+    assert data["conclusion"] == "exclude"
+
+
+def test_report_case_still_applies_negative_llm(client, monkeypatch):
+    ids = ["TX-B-IN-01", "TX-B-IN-02", "TX-B-IN-03"]
+
+    def fake_enrich(**_kwargs):
+        return (
+            [
+                {
+                    "claim": "现金存入带 CASH 前缀",
+                    "detail": "对手类型可核验",
+                    "evidence_ids": ids,
+                    "predicate": "counterparty_has_prefix",
+                    "args": {"tx_ids": ids, "prefix": "CASH-", "side": "from"},
+                    "delta": -0.10,
+                }
+            ],
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_challenger", fake_enrich)
+    r = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    run = data["challenger_run"]
+    assert run["initial_label"] == "建议上报"
+    assert run["delta_suppressed"] is False
+    assert data["scoring"]["llm_delta"] == -0.10
+    assert data["scoring"]["raw"] == round(
+        data["scoring"]["base"] + data["scoring"]["rule_prior"] - 0.10, 4
+    )

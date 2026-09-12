@@ -84,9 +84,10 @@ Case → Planner → Evidence Collector → Indicator Analyst
 ## 9. Benchmark
 
 - 机制验证：`cd backend && python -m app.experiments`（模板精标 + stub，**不是准确率**）。
-- 能力指标框架：`python experiments/benchmark.py` → **Not evaluated yet**。
+- 能力指标框架：`python experiments/benchmark.py`（框架状态与离线基线）；`--real` 在独立合成集上真实调用产品 Judge，`--prompt judge_v2` 做消融。
 - 当前库约 80 条模板精标（`ALT-EXT-01`…）+ 路演案 A/B/C/D/F/L；`gold_label` 与规则模板同源。
-- 独立测试集约 300–1000 条：TODO。
+- 独立合成集 v3：240 条唯一输入、11 个叙事族、规则层同构、无标签泄漏（`experiments/benchmark/independent_set.json`）。真实模型消融（同一集，唯一变量 prompt）：`judge_v2` Macro-F1 0.39 → `judge_v3` 0.97；**合成集实验对照，不是生产准确率**，读数与限制见 `experiments/REAL_MODEL_REPORT.md`。
+- 人工标注的真实脱敏 hold-out：TODO。
 
 ## 10. Demo
 

@@ -40,6 +40,51 @@ def test_fact_check_allows_llm_threshold_and_approx_phrasing():
     assert any("20" in i["token"] for i in issues20)
 
 
+def test_fact_check_treats_alert_and_evidence_ids_as_whole_tokens():
+    facts = {
+        "amounts": [],
+        "tx_ids": ["TX-B-IN-01"],
+        "accounts": [],
+        "dates": ["2026-09-10"],
+        "names": [],
+        "ref_ids": ["ALT-B-20260910", "EV-ALT-B-20260910-001"],
+    }
+    assert fact_check("告警编号ALT-B-20260910，证据EV-ALT-B-20260910-001，日期20260910。", facts) == []
+    issues = fact_check("证据 EV-ALT-B-20260910-999 与告警 ALT-Z-20260910。", facts)
+    assert {i["token"] for i in issues} == {"EV-ALT-B-20260910-999", "ALT-Z-20260910"}
+
+
+def test_sanitize_missing_evidence_drops_ids_and_ranges():
+    from app.decision import normalize_judge, sanitize_missing_evidence
+
+    kept, dropped = sanitize_missing_evidence(
+        ["EV-ALT-B-20260910-001", "TX-B-IN-02", "C-B", "KB-REG-01", "EV-X-1至EV-X-9", "贸易合同", "贸易合同", ""],
+        known_ids={"KB-REG-01"},
+    )
+    assert kept == ["贸易合同"]
+    assert len(dropped) == 5
+    decision = normalize_judge(
+        {
+            "disposition": "observe",
+            "confidence": 0.5,
+            "missing_evidence": ["ACCOUNT_002", "受益所有人信息"],
+            "rationale": [{"text": "x", "evidence_ids": ["TX-1"]}],
+        }
+    )
+    assert decision["missing_evidence"] == ["受益所有人信息"]
+    assert decision["sanitized_missing_evidence"] == ["ACCOUNT_002"]
+
+
+def test_parse_model_json_reports_truncation():
+    from app.llm import _parse_model_json
+
+    with pytest.raises(RuntimeError, match="截断"):
+        _parse_model_json('{"disposition": "observe", "rationale": [', {"finish_reason": "length", "completion_tokens": 1000}, role="Judge")
+    with pytest.raises(RuntimeError, match="非 JSON"):
+        _parse_model_json("不是 JSON", {"finish_reason": "stop"}, role="Judge")
+    assert _parse_model_json('```json\n{"a": 1}\n```', {"finish_reason": "stop"}, role="Judge") == {"a": 1}
+
+
 def test_amount_known_forms_include_wan():
     forms = amount_known_forms(188000)
     assert any("万元" in f for f in forms)

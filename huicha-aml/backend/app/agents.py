@@ -96,6 +96,7 @@ def _collect_stage(db: Session, alert_id: str) -> dict:
                 {account_id, *[t["from_account"] for t in txs], *[t["to_account"] for t in txs]}
             )
             facts["amounts"] = sorted(set(facts.get("amounts") or []) | {t["amount"] for t in txs})
+            facts["dates"] = sorted(set(facts.get("dates") or []) | {(t.get("occurred_at") or "")[:10] for t in txs})
             bundle["facts"] = facts
             if "get_timeline" in planned:
                 timeline = get_timeline(db, account_id, txs=txs)
@@ -257,41 +258,42 @@ def _run_investigation_v3(
         | {customer["id"], alert["account_id"]}
         | {e for f in findings for e in f.get("evidence_ids", [])}
     )
+    # 报告回查时，告警号与证据号是本案已知引用，不应被拆成数字片段误报。
+    bundle["facts"]["ref_ids"] = sorted(set(bundle["facts"].get("ref_ids") or []) | {alert["id"]} | set(allowed_evidence))
 
     judge_usage: dict = {}
     judge_repaired = False
     fallback_reason = ""
+    allowed_set = set(allowed_evidence)
+
+    def _judge_once(prior_issues: list[dict] | None) -> tuple[dict, dict, dict]:
+        raw, usage = enrich_judge(
+            db=db,
+            privacy=privacy,
+            alert=alert,
+            customer=customer,
+            findings=findings,
+            transactions=txs,
+            baseline=baseline,
+            kb_hits=kb_hits,
+            allowed_evidence=allowed_evidence,
+            prior_issues=prior_issues,
+        )
+        decision = normalize_judge(raw, known_ids=allowed_set)
+        return decision, verify_judge(decision, allowed_evidence=allowed_set), usage
+
     if use_challenger:
         try:
-            raw_judge, judge_usage = enrich_judge(
-                db=db,
-                privacy=privacy,
-                alert=alert,
-                customer=customer,
-                findings=findings,
-                transactions=txs,
-                baseline=baseline,
-                kb_hits=kb_hits,
-                allowed_evidence=allowed_evidence,
-            )
-            judge = normalize_judge(raw_judge)
-            judge_validation = verify_judge(judge, allowed_evidence=set(allowed_evidence))
-            if not judge_validation["passed"]:
+            try:
+                judge, judge_validation, judge_usage = _judge_once(None)
+                repair_issues = judge_validation["issues"] if not judge_validation["passed"] else []
+            except (RuntimeError, ValueError) as exc:
+                # 截断/非 JSON/字段非法都给一次带针对性提示的修复机会，而不是直接降级。
+                judge = None
+                repair_issues = [{"kind": "invalid_output", "message": str(exc)[:300]}]
+            if repair_issues:
                 judge_repaired = True
-                raw_judge, judge_usage = enrich_judge(
-                    db=db,
-                    privacy=privacy,
-                    alert=alert,
-                    customer=customer,
-                    findings=findings,
-                    transactions=txs,
-                    baseline=baseline,
-                    kb_hits=kb_hits,
-                    allowed_evidence=allowed_evidence,
-                    prior_issues=judge_validation["issues"],
-                )
-                judge = normalize_judge(raw_judge)
-                judge_validation = verify_judge(judge, allowed_evidence=set(allowed_evidence))
+                judge, judge_validation, judge_usage = _judge_once(repair_issues)
         except (RuntimeError, ValueError) as exc:
             fallback_reason = str(exc)
             judge = {
@@ -361,11 +363,16 @@ def _run_investigation_v3(
             None,
         )
         removed_ids = set((key_finding or {}).get("evidence_ids") or [key_id])
-        cf_findings = [
-            f
-            for f in findings
-            if f is not key_finding
-        ]
+        cf_allowed = allowed_set - removed_ids
+        # 其余指标里也可能引用被移除的流水；不擦掉的话模型会照抄，导致反事实轮次因「伪造引用」失效。
+        cf_findings = []
+        for f in findings:
+            if f is key_finding:
+                continue
+            kept_ids = [e for e in (f.get("evidence_ids") or []) if e not in removed_ids]
+            if f.get("evidence_ids") and not kept_ids and f.get("polarity") != "context":
+                continue
+            cf_findings.append({**f, "evidence_ids": kept_ids})
         try:
             raw_cf, _ = enrich_judge(
                 db=db,
@@ -384,19 +391,27 @@ def _run_investigation_v3(
                     }
                 ],
             )
-            cf_judge = normalize_judge(raw_cf)
-            cf_valid = verify_judge(cf_judge, allowed_evidence=set(allowed_evidence) - removed_ids)
+            cf_judge = normalize_judge(raw_cf, known_ids=cf_allowed)
+            cf_valid = verify_judge(cf_judge, allowed_evidence=cf_allowed)
+            changed = cf_judge["disposition"] != judge["disposition"]
+            if not cf_valid["passed"]:
+                note = "反事实轮次输出未通过引用校验，无法判断建议是否依赖该证据，已标记供人工复核"
+                faithful = None
+            elif changed:
+                note = "移除模型声明的关键证据后建议随之变化"
+                faithful = True
+            else:
+                note = "移除关键证据后建议未变化，已标记供人工复核"
+                faithful = False
             counterfactual_result = {
                 "performed": True,
-                "faithful": bool(cf_valid["passed"] and cf_judge["disposition"] != judge["disposition"]),
+                "faithful": faithful,
+                "validated": cf_valid["passed"],
+                "validation_issues": cf_valid["issues"],
                 "removed_evidence_ids": sorted(removed_ids),
                 "original_conclusion": judge["disposition"],
-                "counterfactual_conclusion": cf_judge["disposition"] if cf_valid["passed"] else "",
-                "note": (
-                    "移除模型声明的关键证据后建议随之变化"
-                    if cf_valid["passed"] and cf_judge["disposition"] != judge["disposition"]
-                    else "移除关键证据后建议未变化，已标记供人工复核"
-                ),
+                "counterfactual_conclusion": cf_judge["disposition"],
+                "note": note,
             }
         except (RuntimeError, ValueError) as exc:
             counterfactual_result["note"] = f"反事实执行失败：{exc}"
@@ -422,7 +437,7 @@ def _run_investigation_v3(
             "conclusion_label": CONCLUSION_LABEL[conclusion],
             "customer": {k: customer.get(k) for k in ("id", "name", "industry", "opened_at")},
             "alert": {k: alert.get(k) for k in ("id", "alert_type", "account_id", "created_at")},
-            "judge": judge,
+            "judge": {k: v for k, v in judge.items() if k != "sanitized_missing_evidence"},
             "findings": findings,
             "evidence_ids": list(
                 dict.fromkeys(

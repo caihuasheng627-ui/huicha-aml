@@ -2,11 +2,47 @@
 
 from __future__ import annotations
 
+import re
+
 from .analyst_rules import score_to_conclusion
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
 from .schema import JudgeDecision
 
 DISPOSITIONS = {"exclude", "observe", "suggest_report"}
+
+# missing_evidence 应是「尚未取得的材料」的自然语言描述；模型偶尔会把证据编号塞进去。
+ID_LIKE_RE = re.compile(
+    r"^(?:EV|TX|KB|ALT|ACC|ACCOUNT|CASH|POS|UNK|RELATIVE|CLIENT)[-_][A-Z0-9\-_]+$|^C-[A-Z0-9]+$",
+    re.I,
+)
+MAX_MISSING_EVIDENCE = 8
+
+
+def _is_id_like(text: str, known_ids: set[str]) -> bool:
+    token = text.strip()
+    if not token:
+        return True
+    if token in known_ids:
+        return True
+    if ID_LIKE_RE.match(token):
+        return True
+    # 「EV-…-001至030」这类编号区间同样不是材料描述。
+    return bool(re.fullmatch(r"[A-Z]{2,7}-[A-Z0-9\-]+\s*(?:至|到|~|-)\s*[A-Z0-9\-]+", token, re.I))
+
+
+def sanitize_missing_evidence(items: list, *, known_ids: set[str] | None = None) -> tuple[list[str], list[str]]:
+    known = known_ids or set()
+    kept: list[str] = []
+    dropped: list[str] = []
+    for item in items or []:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if _is_id_like(text, known):
+            dropped.append(text)
+        elif text not in kept:
+            kept.append(text)
+    return kept[:MAX_MISSING_EVIDENCE], dropped
 
 
 def rule_baseline(analyst: dict) -> dict:
@@ -23,7 +59,7 @@ def rule_baseline(analyst: dict) -> dict:
     }
 
 
-def normalize_judge(raw: dict) -> dict:
+def normalize_judge(raw: dict, *, known_ids: set[str] | None = None) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("Judge 输出不是 JSON 对象")
     data = dict(raw)
@@ -45,7 +81,11 @@ def normalize_judge(raw: dict) -> dict:
     if isinstance(rationale, str):
         rationale = [{"text": rationale, "evidence_ids": data["supporting_evidence_ids"]}]
     data["rationale"] = rationale if isinstance(rationale, list) else []
-    return JudgeDecision.model_validate(data).model_dump()
+    data["missing_evidence"], dropped = sanitize_missing_evidence(data["missing_evidence"], known_ids=known_ids)
+    result = JudgeDecision.model_validate(data).model_dump()
+    if dropped:
+        result["sanitized_missing_evidence"] = dropped
+    return result
 
 
 def verify_judge(decision: dict, *, allowed_evidence: set[str]) -> dict:

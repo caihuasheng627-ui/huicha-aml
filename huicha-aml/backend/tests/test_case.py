@@ -51,7 +51,7 @@ def test_investigate_returns_case_v2(client):
     assert data["evidence_graph"]
     assert data["risk"]["factors"]
     assert data["structured_report"]["human_review"]
-    assert data["prompt_versions"]["judge"] == "judge_v1"
+    assert data["prompt_versions"]["judge"] == "judge_v2"
     assert data["judge_validation"]["passed"] is True
     assert data["scoring"]["mode"] == "judge_not_additive"
     assert data["prompt_versions"]["skeptic"] == "skeptic_v1"

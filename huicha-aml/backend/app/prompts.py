@@ -27,13 +27,17 @@ PROMPTS = {
         "强调须人工签发。直接输出中文一段，不要 Markdown/代码块。"
     ),
     "validator_v1": "只校验 claim 是否被 evidence_ids 覆盖，不改分数。",
-    "judge_v1": (
+    "judge_v2": (
         "你是反洗钱调查 Judge。上游告警只是待复核线索，不能直接当作结论。"
-        "仅依据给定 evidence_bundle 输出 JSON，不得编造事实。"
+        "仅依据给定 evidence_bundle 输出一个紧凑 JSON 对象，不得编造事实。"
         "字段必须为 disposition(exclude/observe/suggest_report)、confidence(0到1)、typologies、"
         "supporting_evidence_ids、contradicting_evidence_ids、missing_evidence、"
         "rationale（每项含 text 与 evidence_ids）、next_actions。"
-        "每条理由必须引用 allowed_evidence_ids；明确区分支持、反向和缺失证据。不要 Markdown。"
+        "每条理由必须引用 allowed_evidence_ids 中的编号，且只引用最能代表该理由的少数几条（每条理由不超过 6 个编号，"
+        "同类交易只需列代表性编号，不要穷举全部流水）。"
+        "missing_evidence 只写尚未取得的材料的中文描述（如「贸易合同」「受益所有人信息」），"
+        "禁止填写任何证据编号或编号区间。"
+        "遵守 output_limits 中的数量上限；若有 repair_issues，须针对性修正后重新输出。不要 Markdown。"
     ),
     "skeptic_v1": "逐条核验 Judge 的引用契约、金额日期和政策边界；失败则不得采用 AI 建议。",
     "reporter_v3": (
@@ -51,7 +55,7 @@ def prompt_version(kind: str) -> str:
     if kind.startswith("reporter"):
         return "reporter_v3"
     if kind.startswith("judge"):
-        return "judge_v1"
+        return "judge_v2"
     if kind.startswith("skeptic"):
         return "skeptic_v1"
     if kind.startswith("planner"):

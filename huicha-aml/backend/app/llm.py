@@ -258,6 +258,7 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),
             "total_tokens": usage.get("total_tokens"),
+            "finish_reason": data["choices"][0].get("finish_reason"),
             "cached": False,
             "model": model,
         }
@@ -316,6 +317,23 @@ def _extract_json_object(text: str) -> dict:
         except json.JSONDecodeError:
             continue
     raise RuntimeError(f"模型返回非 JSON 对象：{text[:400]}")
+
+
+JUDGE_MAX_TOKENS = 2400
+REPORTER_MAX_TOKENS = 1800
+
+
+def _parse_model_json(text: str, usage: dict, *, role: str) -> dict:
+    """截断（finish_reason=length）与非 JSON 分开报错，便于修复轮次给出针对性提示。"""
+    try:
+        return _extract_json_object(text)
+    except RuntimeError as exc:
+        if (usage or {}).get("finish_reason") == "length":
+            raise RuntimeError(
+                f"{role} 输出超过 max_tokens 被截断（completion_tokens={usage.get('completion_tokens')}），"
+                "请压缩证据引用数量"
+            ) from exc
+        raise
 
 
 def _unmask_value(value, privacy: PrivacyMap | None):
@@ -562,30 +580,40 @@ def enrich_judge(
             {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}
             for h in kb_hits[:8]
         ],
-        "allowed_evidence_ids": allowed_evidence[:120],
+        # 只把模型在上下文里能看到内容的编号列出来；EV- 内部编号没有对应描述，列出只会诱导误引。
+        "allowed_evidence_ids": [e for e in allowed_evidence if not str(e).startswith("EV-")][:120],
         "missing_evidence": missing_evidence or [],
         "repair_issues": prior_issues or [],
+        "output_limits": {
+            "supporting_evidence_ids": 10,
+            "contradicting_evidence_ids": 10,
+            "rationale": 5,
+            "evidence_ids_per_rationale": 6,
+            "missing_evidence": 5,
+            "next_actions": 5,
+        },
     }
     if privacy:
         context = privacy.mask_obj(context)
-    key = None if prior_issues else _cache_key("judge_v1", context)
+    key = None if prior_issues else _cache_key("judge_v2", context)
     cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
+        data = _extract_json_object(text)
     else:
         from .prompts import PROMPTS
 
         text, usage = chat(
             [
-                {"role": "system", "content": PROMPTS["judge_v1"]},
+                {"role": "system", "content": PROMPTS["judge_v2"]},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             temperature=0.0,
-            max_tokens=1000,
+            max_tokens=JUDGE_MAX_TOKENS,
         )
+        data = _parse_model_json(text, usage, role="Judge")
         if key:
-            _cache_put(db, key, "judge_v1", text, usage)
-    data = _extract_json_object(text)
+            _cache_put(db, key, "judge_v2", text, usage)
     return _unmask_value(data, privacy), usage
 
 
@@ -612,9 +640,13 @@ def enrich_full_report(
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
             temperature=0.0,
-            max_tokens=1200,
+            max_tokens=REPORTER_MAX_TOKENS,
         )
-        if key:
+        if usage.get("finish_reason") == "length":
+            raise RuntimeError(
+                f"Reporter 输出超过 max_tokens 被截断（completion_tokens={usage.get('completion_tokens')}）"
+            )
+        if key and _strip_fence(text):
             _cache_put(db, key, "reporter_v3", text, usage)
     text = _strip_fence(text)
     if privacy:

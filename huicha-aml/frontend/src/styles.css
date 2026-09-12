@@ -57,8 +57,8 @@ body {
   padding-left: 12px;
 }
 .brand-logo {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   flex: none;
   display: block;
   overflow: visible;
@@ -78,12 +78,20 @@ body {
 .brand-text strong {
   display: block;
   font-family: var(--font-brand);
-  font-size: 26px;
-  letter-spacing: 0.18em;
+  font-size: 29px;
+  letter-spacing: 0.06em;
   font-weight: 400;
   line-height: 1;
+  padding-top: 3px;
   color: #fff8ee;
+  white-space: nowrap;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  -webkit-font-smoothing: antialiased;
+}
+@media (max-width: 720px) {
+  .top-clock { display: none; }
+  .brand-logo { width: 34px; height: 34px; }
+  .brand-text strong { font-size: 24px; letter-spacing: 0.04em; }
 }
 
 .staff {

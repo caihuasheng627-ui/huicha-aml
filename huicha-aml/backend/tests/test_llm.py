@@ -167,3 +167,46 @@ def test_chat_parses_usage(monkeypatch):
     text, usage = chat([{"role": "user", "content": "hi"}])
     assert text == "ok"
     assert usage["total_tokens"] == 3
+
+
+def _judge_inputs() -> dict:
+    return {
+        "alert": {"alert_type": "大额转账", "upstream": "monitoring"},
+        "customer": {"id": "C-1", "name": "客户", "kind": "individual", "industry": "个人-受雇"},
+        "findings": [{"code": "thin", "title": "t", "detail": "d", "evidence_ids": ["TX-1"], "polarity": "counter"}],
+        "transactions": [],
+        "baseline": {},
+        "kb_hits": [],
+        "allowed_evidence": ["TX-1"],
+    }
+
+
+def test_enrich_judge_uses_product_prompt_version_by_default(monkeypatch):
+    import app.llm as llm_mod
+    from app.prompts import PROMPTS, prompt_version
+
+    seen: dict = {}
+
+    def fake_chat(messages, **kwargs):
+        seen["system"] = messages[0]["content"]
+        return json.dumps({"disposition": "exclude", "confidence": 0.9}), {"finish_reason": "stop"}
+
+    monkeypatch.setattr(llm_mod, "chat", fake_chat)
+    data, _ = llm_mod.enrich_judge(db=None, **_judge_inputs())
+    assert data["disposition"] == "exclude"
+    assert prompt_version("judge") == "judge_v3"
+    assert seen["system"] == PROMPTS["judge_v3"]
+    assert "三档判定标准" in seen["system"]
+
+    llm_mod.enrich_judge(db=None, prompt_kind="judge_v2", **_judge_inputs())
+    assert seen["system"] == PROMPTS["judge_v2"]
+
+
+def test_enrich_judge_rejects_unknown_prompt_kind(monkeypatch):
+    import app.llm as llm_mod
+
+    monkeypatch.setattr(llm_mod, "chat", lambda *a, **k: ("{}", {}))
+    with pytest.raises(ValueError):
+        llm_mod.enrich_judge(db=None, prompt_kind="reporter_v3", **_judge_inputs())
+    with pytest.raises(ValueError):
+        llm_mod.enrich_judge(db=None, prompt_kind="judge_v99", **_judge_inputs())

@@ -69,7 +69,7 @@ py experiments\benchmark.py --real
 ## 6. 不要做的事
 
 - 不要把 v1（0.69）与 v2 混比  
-- 不要在 SYSTEM/judge_v2 里列举测试集叙事族  
+- 不要在 SYSTEM/judge_v3 里列举测试集叙事族（判定标准只写可操作边界，不写族名）  
 - 不要开 stub 却写入「真实模型」  
 - 不要把 keyword 基线 0.87 当成「模型该打到的分」——它只说明合成文本仍有表面线索
 

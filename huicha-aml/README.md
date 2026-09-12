@@ -64,7 +64,9 @@ Case → Planner → Evidence Collector → Indicator Analyst
 
 每条 `rationale` 必须引用本轮工具返回的证据编号。未知编号、无引用理由、建议上报但无支持证据 → 整份建议校验失败并阻断签发。`confidence` 只是模型自评把握度，不是校准概率。
 
-真实百炼调用中已处理的模型行为（prompt `judge_v2`）：
+当前 Judge prompt 为 `judge_v3`：在 `judge_v2` 的引用契约之上写明三档可操作判定标准——来源与去向均有完整合理解释且干扰点已解释 → `exclude`；无清晰异常节奏但缺关键材料 → `observe`（必须列 `missing_evidence`）；异常节奏（短时多点取现回流、当日多层递减过桥、关联对倒闭环、现金→兑换商、分散归集→集中外转）且无经营/生活解释 → `suggest_report`（不因材料不全降档）。另要求 `missing_evidence` 为空时不得给 `observe`、每条理由写明推向哪一档、`confidence` 随证据强弱变化。消融对比见 `experiments/REAL_MODEL_REPORT.md`。
+
+真实百炼调用中已处理的模型行为（`judge_v2` 起沿用）：
 
 - 输出被 `max_tokens` 截断或非 JSON：先带针对性提示重试一次，再降级到规则对照；截断输出不写缓存。
 - `missing_evidence` 被填成证据编号/编号区间：自动剔除并记录到 `sanitized_missing_evidence`，只保留材料描述。

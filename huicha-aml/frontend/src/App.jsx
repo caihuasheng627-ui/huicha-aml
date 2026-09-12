@@ -575,7 +575,7 @@ export default function App() {
             <b>查</b>
           </div>
           <div className="brand-text">
-            <strong>慧查 AML</strong>
+            <strong>循证慧查</strong>
           </div>
         </div>
         <div className="staff">

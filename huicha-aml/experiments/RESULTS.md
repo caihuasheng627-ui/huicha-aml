@@ -1,4 +1,4 @@
-# 慧查 AML 机制验证（stub，可复现）
+# 循证慧查 机制验证（stub，可复现）
 
 生成命令：`py -m app.experiments`
 

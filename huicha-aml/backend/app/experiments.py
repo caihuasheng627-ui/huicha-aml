@@ -191,7 +191,7 @@ def run_all(out_dir: Path | None = None) -> dict:
     }
     (out_dir / "RESULTS.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     md = [
-        "# 慧查 AML 机制验证（stub，可复现）",
+        "# 循证慧查 机制验证（stub，可复现）",
         "",
         "生成命令：`py -m app.experiments`",
         "",

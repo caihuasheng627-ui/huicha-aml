@@ -84,7 +84,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="慧查 AML", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title="循证慧查", version="2.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
@@ -126,7 +126,7 @@ def write_audit(db: Session, alert_id: str, actor: str, action: str, detail: str
 def health():
     return {
         "ok": True,
-        "name": "慧查 AML",
+        "name": "循证慧查",
         "llm": llm_mode(),
         "model": llm_model() if llm_mode() != "off" else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
@@ -552,7 +552,7 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         if (c.get("validation") or {}).get("score_kind") == "predicate_verified"
     ]
     lines = [
-        "# 慧查 AML 可疑交易调查草稿（非报送报文）",
+        "# 循证慧查 可疑交易调查草稿（非报送报文）",
         "",
         f"- 告警：{alert_id}",
         f"- 建议结论：{payload.get('conclusion_label')}",

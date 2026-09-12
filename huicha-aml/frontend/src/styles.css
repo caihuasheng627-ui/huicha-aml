@@ -17,6 +17,7 @@
   --bg: var(--paper);
   --font-ui: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-display: "Noto Serif SC", "Songti SC", serif;
+  --font-brand: "Ma Shan Zheng", "STKaiti", "KaiTi", "Noto Serif SC", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -33,7 +34,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: 52px auto 1fr 34px;
+  grid-template-rows: 58px auto 1fr 34px;
   height: 100%;
 }
 
@@ -51,32 +52,38 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   height: 100%;
-  padding-left: 14px;
+  padding-left: 12px;
 }
-.brand-mark {
-  width: 30px;
-  height: 30px;
+.brand-logo {
+  width: 38px;
+  height: 38px;
   flex: none;
-  color: #fff;
-  background: var(--crimson);
-  display: grid;
-  place-items: center;
-  clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%, 18% 100%, 0 82%, 0 18%);
+  display: block;
+  overflow: visible;
 }
-.brand-mark b {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
+.brand-logo-arc {
+  transform-origin: 20px 20px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .brand-logo-arc {
+    animation: brand-scan 4.8s ease-in-out infinite;
+  }
+}
+@keyframes brand-scan {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 .brand-text strong {
   display: block;
-  font-family: var(--font-display);
-  font-size: 18px;
-  letter-spacing: 0.06em;
-  font-weight: 700;
+  font-family: var(--font-brand);
+  font-size: 26px;
+  letter-spacing: 0.18em;
+  font-weight: 400;
+  line-height: 1;
+  color: #fff8ee;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
 .staff {

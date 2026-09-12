@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .analyst_rules import score_to_conclusion
+from .checklist import material_gap_titles
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
 from .schema import JudgeDecision
 
@@ -41,6 +42,7 @@ def normalize_judge(raw: dict) -> dict:
     ):
         value = data.get(key)
         data[key] = value if isinstance(value, list) else []
+    data["missing_evidence"] = material_gap_titles(data.get("missing_evidence"))
     rationale = data.get("rationale")
     if isinstance(rationale, str):
         rationale = [{"text": rationale, "evidence_ids": data["supporting_evidence_ids"]}]

@@ -33,7 +33,9 @@ PROMPTS = {
         "字段必须为 disposition(exclude/observe/suggest_report)、confidence(0到1)、typologies、"
         "supporting_evidence_ids、contradicting_evidence_ids、missing_evidence、"
         "rationale（每项含 text 与 evidence_ids）、next_actions。"
-        "每条理由必须引用 allowed_evidence_ids；明确区分支持、反向和缺失证据。不要 Markdown。"
+        "已调取证据编号只能进 supporting/contradicting，禁止写入 missing_evidence。"
+        "missing_evidence 只写尚未调取的中文材料名，最多 3 条，例如「受益所有人证明」。"
+        "每条理由必须引用 allowed_evidence_ids。不要 Markdown。"
     ),
     "skeptic_v1": "逐条核验 Judge 的引用契约、金额日期和政策边界；失败则不得采用 AI 建议。",
     "reporter_v3": (

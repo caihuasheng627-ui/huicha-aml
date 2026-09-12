@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 GENERIC_REMARKS = frozenset({"", "存入", "转出", "转账", "汇款", "备注", "无", "其他"})
@@ -18,6 +19,38 @@ LARGE_AMT = 50_000.0
 NOTE_MARK = "【补证清单】"
 
 CATEGORIES = ("KYC", "资金用途", "关系证明", "交易凭证", "其他")
+MAX_AI_GAPS = 3
+_ID_LIKE = re.compile(r"^(?:EV|TX|KB|ALT|C|P|ACC)[-_][A-Z0-9][A-Z0-9._-]*$", re.I)
+_BARE_CODE = re.compile(r"^[A-Z0-9._-]{6,}$", re.I)
+
+
+def is_material_title(title: str) -> bool:
+    text = str(title or "").strip()
+    if len(text) < 4:
+        return False
+    if _ID_LIKE.match(text) or _BARE_CODE.match(text):
+        return False
+    if re.search(r"(?:EV|TX|KB)-[A-Z0-9-]{3,}", text, re.I) and not re.search(r"[\u4e00-\u9fff]", text):
+        return False
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
+def material_gap_titles(raw) -> list[str]:
+    """missing_evidence 只保留中文材料名；EV/TX 编号是已调取证据，不是待补材料。"""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw or []:
+        title = str(item or "").strip()
+        if not is_material_title(title):
+            continue
+        key = re.sub(r"\s+", "", title)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(title)
+        if len(out) >= MAX_AI_GAPS:
+            break
+    return out
 
 
 def _item(
@@ -495,9 +528,11 @@ def attach_checklist(payload: dict, *, counterparties: list[dict] | None = None,
     ctx = context_from_payload(payload, counterparties=counterparties, human_note=human_note)
     items = generate_checklist(ctx)
     known_titles = {str(i.get("title") or "") for i in items}
-    for index, gap in enumerate((payload.get("judge") or {}).get("missing_evidence") or [], start=1):
-        title = str(gap or "").strip()
-        if not title or title in known_titles:
+    gaps = material_gap_titles((payload.get("judge") or {}).get("missing_evidence"))
+    if isinstance(payload.get("judge"), dict):
+        payload["judge"]["missing_evidence"] = gaps
+    for index, title in enumerate(gaps, start=1):
+        if title in known_titles:
             continue
         items.append(
             _item(

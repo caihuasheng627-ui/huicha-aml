@@ -68,7 +68,7 @@ const PIPELINE = [
     caption: "调查员做最终决策",
     dwell: 420,
     linger: false,
-    ticks: ["草稿待签发", "Agent 不得报送"],
+    ticks: ["草稿待签发", "核对补证清单", "Agent 不得报送"],
     logs: ["handoff_human_approval"],
   },
 ];

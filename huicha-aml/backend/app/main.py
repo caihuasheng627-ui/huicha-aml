@@ -10,6 +10,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .agents import run_investigation
+from .checklist import (
+    apply_remarks_to_report,
+    attach_checklist,
+    enrich_counterparties,
+    generate_checklist,
+    merge_note,
+)
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .knowledge import corpus_size, list_knowledge, search_knowledge
 from .llm import llm_mode, llm_model
@@ -387,6 +394,109 @@ class DecideBody(BaseModel):
     note: str = ""
 
 
+class ChecklistAppendBody(BaseModel):
+    item_ids: list[str] = []
+
+
+def _checklist_payload(db: Session, alert_id: str) -> tuple[Alert, Investigation, dict]:
+    alert = db.get(Alert, alert_id)
+    inv = get_investigation(db, alert_id)
+    if not alert:
+        raise HTTPException(404, "告警不存在")
+    if not inv:
+        raise HTTPException(400, "请先生成调查草稿")
+    payload = json.loads(inv.payload_json)
+    txs = payload.get("transactions") or []
+    account_id = (payload.get("alert") or {}).get("account_id") or alert.account_id
+    peers = enrich_counterparties(db, account_id, txs, payload.get("graph") or {})
+    attach_checklist(payload, counterparties=peers, human_note=inv.human_note or "")
+    return alert, inv, payload
+
+
+@app.get("/api/alerts/{alert_id}/checklist")
+def get_checklist(alert_id: str, db: Session = Depends(get_db)):
+    alert, inv, payload = _checklist_payload(db, alert_id)
+    blob = payload.get("checklist") or {}
+    return {
+        "alert_id": alert_id,
+        "recommendation": blob.get("recommendation") or (payload.get("case_v2") or {}).get("recommendation") or "",
+        "can_sign": payload.get("can_sign"),
+        "human_note": inv.human_note or "",
+        "human_decision": inv.human_decision or "",
+        **blob,
+    }
+
+
+@app.get("/api/cases/{case_id}/checklist")
+def get_case_checklist(case_id: str, db: Session = Depends(get_db)):
+    return get_checklist(case_id, db)
+
+
+@app.post("/api/alerts/{alert_id}/checklist/append")
+def append_checklist(alert_id: str, body: ChecklistAppendBody, request: Request, db: Session = Depends(get_db)):
+    ids = [x.strip() for x in (body.item_ids or []) if str(x).strip()]
+    if not ids:
+        raise HTTPException(400, "请至少选择一条待补证项")
+    alert, inv, payload = _checklist_payload(db, alert_id)
+    items = (payload.get("checklist") or {}).get("items") or generate_checklist({})
+    by_id = {it["id"]: it for it in items}
+    picked = [by_id[i] for i in ids if i in by_id]
+    if not picked:
+        raise HTTPException(400, "所选条目不在本清单中")
+    note = merge_note(inv.human_note or "", picked)
+    inv.human_note = note
+    already = list((payload.get("checklist_appended") or {}).get("item_ids") or [])
+    for i in ids:
+        if i not in already:
+            already.append(i)
+    payload["checklist_appended"] = {
+        "item_ids": already,
+        "at": format_cn(utcnow()),
+        "text": note,
+    }
+    report = payload.setdefault("report", {})
+    apply_remarks_to_report(report, note)
+    review = payload.setdefault("human_review", {})
+    review["note"] = note
+    peers = enrich_counterparties(
+        db,
+        (payload.get("alert") or {}).get("account_id") or alert.account_id,
+        payload.get("transactions") or [],
+        payload.get("graph") or {},
+    )
+    attach_checklist(payload, counterparties=peers, human_note=note)
+    inv.payload_json = json.dumps(payload, ensure_ascii=False)
+    user = resolve_session(request.headers.get("x-huicha-session"))
+    actor = user.label() if user else "investigator"
+    write_audit(
+        db,
+        alert_id,
+        actor,
+        "checklist",
+        json.dumps(
+            {
+                "summary": f"将 {len(picked)} 条补证项写入草稿备注",
+                "item_ids": [p["id"] for p in picked],
+                "case_id": alert_id,
+                "human_decision": inv.human_decision or "",
+                "data_note": "synthetic",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.commit()
+    blob = payload.get("checklist") or {}
+    return {
+        "ok": True,
+        "alert_id": alert_id,
+        "human_note": note,
+        "appended": [p["id"] for p in picked],
+        "final_action": "draft_only",
+        "note": "已写入调查员草稿备注，系统不会自动报送。",
+        **blob,
+    }
+
+
 @app.post("/api/alerts/{alert_id}/decide")
 def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depends(get_db)):
     user = require_user(request)
@@ -563,6 +673,7 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         f"- 人工签发：{signed_line}",
         f"- 签发人：{signer}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
+        f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
         f"- 数据：{payload.get('data_note') or 'synthetic'}",
         "",

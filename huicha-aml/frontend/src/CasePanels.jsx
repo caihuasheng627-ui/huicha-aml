@@ -18,7 +18,7 @@ export function RiskFactors({ risk, onSelect }) {
   return (
     <div className="v2-panel">
       <div className="v2-hd">
-        风险因子 · {risk.risk_level} · {risk.recommendation_label}
+        规则指标对照 · 不决定最终建议
       </div>
       <ul className="v2-factors">
         {factors.map((f) => (
@@ -33,7 +33,7 @@ export function RiskFactors({ risk, onSelect }) {
           </li>
         ))}
       </ul>
-      <div className="hint">每项可点证据编号。AI 建议不是监管结论，须人签。</div>
+      <div className="hint">每项可点回证据。规则对照与 AI 建议不做加权合成。</div>
     </div>
   );
 }
@@ -229,120 +229,56 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
   );
 }
 
-function fmtDelta(n) {
-  const v = Number(n || 0);
-  return `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
-}
+const DECISION_LABEL = {
+  exclude: "排除",
+  observe: "继续观察",
+  suggest_report: "建议上报",
+};
 
-export function ChallengerPanel({ run, onSelect }) {
-  if (!run) return null;
-  const bound = Number(run.delta_bound ?? 0.15);
-  const applied = Number(run.llm_delta ?? 0);
-  const proposed = Number(run.raw_delta ?? applied);
-  const clampedDelta = Number(
-    run.clamped_delta ??
-      (Math.abs(proposed) > bound + 1e-9 ? Math.sign(proposed || 1) * bound : proposed)
-  );
-  const clamped = Boolean(run.delta_clamped) || Math.abs(proposed - clampedDelta) > 1e-9;
-  const suppressed = Boolean(run.delta_suppressed);
-  const initial = run.initial_label || "";
-  const pre = Number(run.initial_score ?? 0) + Number(run.rule_prior ?? 0);
-  const alreadyExclude = initial === "排除" || pre < 0.35;
-  const alreadyReport = initial === "建议上报";
-  const blurb = run.ablation
-    ? null
-    : alreadyExclude && (suppressed || applied >= 0)
-      ? "规则底分（加先验）已是排除。负向提案不再叠加，避免无意义砸到展示下限 0.05。"
-      : alreadyExclude
-        ? "规则底分已是排除。负向提案只巩固排除；合成低于 0.05 时按下限展示，档位不变。"
-        : alreadyReport
-          ? "规则已倾向上报。Challenger 找反证往下压，合计进分不超过 ±0.15，不是再叠一层可疑分。"
-          : "Challenger 提案可正可负。单条不超过 ±0.15，多条加总越界则只按 ±0.15 进分。";
+export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }) {
+  if (!judge || !baseline) return null;
+  const support = judge.supporting_evidence_ids || [];
+  const counter = judge.contradicting_evidence_ids || [];
   return (
     <div className="ch-panel">
-      <div className="v2-hd">AI反向质询（Challenger）</div>
-      {run.ablation ? (
-        <div className="ch-ablation">
-          本案为消融结果。生成时未启用 AI 反向质询。顶部开关只影响下一次「按当前策略重跑」。
-        </div>
-      ) : (
-        <div className="ch-on">{blurb}</div>
-      )}
+      <div className="v2-hd">证据约束的 AI Judge</div>
+      <div className={validation?.passed ? "ch-on" : "ch-ablation"}>
+        {validation?.reason || "等待证据契约校验"}；把握度为模型自评，未经概率校准。
+      </div>
       <ol className="ch-flow">
         <li>
-          <b>初始判断</b>
-          <span>
-            规则底分 {Number(run.initial_score ?? 0).toFixed(2)} · {initial || "—"}
-          </span>
+          <b>规则对照</b>
+          <span>{DECISION_LABEL[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score || 0).toFixed(2)}</span>
         </li>
         <li>
-          <b>提案（未进分）</b>
-          <span>下面是模型给出的每条 Δ，不是已经加进最终分的数。</span>
-          {(run.claims || []).length > 0 && (
-            <ul>
-              {run.claims.slice(0, 4).map((c) => {
-                const proposed = Number(c.delta || 0);
-                return (
-                  <li key={c.claim}>
-                    <button type="button" className="token" onClick={() => c.evidence_ids?.[0] && onSelect(c.evidence_ids[0])}>
-                      {c.claim}
-                    </button>
-                    <em className={proposed < 0 ? "down" : proposed > 0 ? "up" : ""}>{fmtDelta(proposed)}</em>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <b>AI 完整建议</b>
+          <span>{DECISION_LABEL[judge.disposition] || judge.disposition} · 自评 {Number(judge.confidence || 0).toFixed(2)}</span>
         </li>
         <li>
-          <b>校验</b>
-          <span>
-            通过 {Number(run.validator?.kept ?? run.claims?.length ?? 0)} 条 · 拒绝{" "}
-            {Number(run.validator?.rejected ?? 0)} 条
-            {run.validator?.passed === false ? " · 未通过，Δ 置 0" : ""}
-          </span>
+          <b>支持 / 反向 / 缺失</b>
+          <span>{support.length} / {counter.length} / {(judge.missing_evidence || []).length}</span>
+          <ul>
+            {(judge.rationale || []).slice(0, 4).map((row, i) => (
+              <li key={`${row.text}-${i}`}>
+                <button type="button" className="token" onClick={() => row.evidence_ids?.[0] && onSelect(row.evidence_ids[0])}>
+                  {row.text}
+                </button>
+                <em>{(row.evidence_ids || []).join("、")}</em>
+              </li>
+            ))}
+          </ul>
         </li>
         <li>
-          <b>进分</b>
+          <b>政策护栏后</b>
           <span>
-            规则先验 {fmtDelta(run.rule_prior)} · 提案合计 {fmtDelta(proposed)}
-            {clamped ? ` · 夹紧 ${fmtDelta(clampedDelta)}` : ""} · 实际进分 {fmtDelta(applied)}
-            {suppressed ? "（已排除，负向未叠）" : ""}
-          </span>
-        </li>
-        <li>
-          <b>最终判断</b>
-          <span>
-            展示分 {Number(run.final_score ?? 0).toFixed(2)} · {run.final_label || "—"} · 须人工签发
+            {DECISION_LABEL[guardrails?.final_conclusion] || guardrails?.final_conclusion}
+            {guardrails?.overridden ? " · 已覆盖模型建议" : " · 未触发结论覆盖"} · 须人工签发
           </span>
         </li>
       </ol>
-    </div>
-  );
-}
-
-export function VerifiedClaims({ rows, onSelect }) {
-  const kept = (rows || []).filter((r) => r.validation?.score_kind === "predicate_verified");
-  if (!kept.length) return null;
-  return (
-    <div className="v2-panel">
-      <div className="v2-hd">已核验谓词（数据复核为真，才进分）</div>
-      {kept.map((r, i) => (
-        <div
-          key={`${r.predicate || "p"}-${r.claim || r.title || i}`}
-          className="ev"
-          role="button"
-          tabIndex={0}
-          onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
-        >
-          <code>
-            {r.predicate} · Δ{Number(r.delta || 0) > 0 ? "+" : ""}
-            {Number(r.delta || 0).toFixed(2)}
-          </code>
-          <div>{r.claim || r.title}</div>
-          <div className="hint">{(r.validation?.reason || "") + " · " + (r.evidence_ids || []).join("、")}</div>
-        </div>
-      ))}
+      {(judge.missing_evidence || []).length > 0 && (
+        <div className="hint">待补：{judge.missing_evidence.join("；")}</div>
+      )}
     </div>
   );
 }
@@ -351,7 +287,7 @@ export function RejectedClaims({ rows, onSelect }) {
   if (!rows?.length) return null;
   return (
     <div className="v2-panel">
-      <div className="v2-hd">Validator 拒绝（未进分）</div>
+      <div className="v2-hd">Skeptic 拒绝（不可签发）</div>
       {rows.slice(0, 8).map((r, i) => (
         <div
           key={`${r.claim || r.title || i}`}
@@ -360,8 +296,8 @@ export function RejectedClaims({ rows, onSelect }) {
           tabIndex={0}
           onClick={() => r.evidence_ids?.[0] && onSelect(r.evidence_ids[0])}
         >
-          <code>{r.validation?.reason || "已拒绝"}</code>
-          <div>{r.claim || r.title}</div>
+          <code>{r.validation?.reason || r.message || r.kind || "已拒绝"}</code>
+          <div>{r.claim || r.title || "Judge 输出未通过证据契约"}</div>
           {r.predicate ? <div className="hint">谓词 {r.predicate}</div> : null}
         </div>
       ))}
@@ -373,9 +309,11 @@ export function CounterfactualBox({ cf }) {
   if (!cf) return null;
   return (
     <div className="v2-panel">
-      <div className="v2-hd">反事实（规则重算）</div>
+      <div className="v2-hd">关键证据反事实</div>
       <p className="hint">
-        {cf.assumption}：{cf.original} → {cf.counterfactual}（差 {cf.difference}）
+        {cf.performed
+          ? `移除 ${(cf.removed_evidence_ids || []).join("、")}：${DECISION_LABEL[cf.original_conclusion] || cf.original_conclusion} → ${DECISION_LABEL[cf.counterfactual_conclusion] || cf.counterfactual_conclusion || "校验失败"}。${cf.note}`
+          : cf.note || `${cf.assumption}：${cf.original} → ${cf.counterfactual}`}
       </p>
     </div>
   );

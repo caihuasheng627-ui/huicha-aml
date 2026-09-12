@@ -49,7 +49,7 @@ def test_amount_known_forms_include_wan():
     "alert_id,use_challenger,expected",
     [
         ("ALT-A-20260910", True, "exclude"),
-        ("ALT-A-20260910", False, "suggest_report"),
+        ("ALT-A-20260910", False, "exclude"),
         ("ALT-B-20260910", True, "suggest_report"),
         ("ALT-C-20260910", True, "suggest_report"),
         ("ALT-D-20260909", True, "exclude"),
@@ -64,16 +64,18 @@ def test_demo_conclusions(client, alert_id, use_challenger, expected):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["conclusion"] == expected
-    assert data["confidence_kind"] == "rule_score_not_calibrated"
+    assert data["confidence_kind"] == (
+        "llm_self_assessed_not_calibrated" if use_challenger else "rule_score_not_calibrated"
+    )
     assert data["llm"]["model"] == "deepseek-v4-flash-0731"
     assert data["llm"]["masked"] is True
-    assert data["scoring"]["llm_delta"] <= 0.15
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert data["scoring"]["llm_delta"] == 0.0
     assert data["tool_trace"], "tool_trace 应来自真实 @tool 调用"
     assert any(t["tool"] == "get_alert" for t in data["tool_trace"])
     if use_challenger:
-        assert data["challenger"]
-        assert data["challenger"][0].get("claim") == "测试反证" or data["challenger"][0].get("title") == "测试反证"
-        assert data["challenger"][0].get("validation", {}).get("score_kind") == "predicate_verified"
+        assert data["judge"]["rationale"]
+        assert data["judge_validation"]["passed"] is True
     assert "须人工签发" in data["report"]["reason"]
     assert "manual_minutes" not in data["comparison"]
 

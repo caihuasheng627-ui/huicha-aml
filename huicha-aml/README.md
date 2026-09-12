@@ -1,4 +1,4 @@
-# 循证慧查 V2.1
+# 循证慧查 V3.0
 
 **AI 负责推理，规则负责边界，证据负责事实，人负责最终决策。**
 
@@ -10,7 +10,9 @@
 
 ## 1. Project Overview
 
-上游检测已经产生告警。本系统不替代监测引擎，只把告警升级为**案件（Case）**：规划调查 → 收集证据 → 规则打底风险 → 有界质疑 → 校验 Claim → 结构化报告 → **人工签发**。
+上游检测已经产生告警。本系统不替代监测引擎，只把告警升级为**案件（Case）**：规划调查 → 收集证据 → 事实指标 → AI Judge 完整建议 → Skeptic 核验/反事实 → 政策护栏 → 全文报告 → **人工签发**。
+
+V3 不再把上游告警类型重复计入规则分，也不再用“规则分 + LLM delta”合成结论。AI Judge 在证据约束下直接输出三档调查建议；规则只做独立对照和不可绕过的政策边界。
 
 数据标记为 `synthetic`。不连接真实银行，不代表生产系统。
 
@@ -21,20 +23,21 @@
 ## 3. Core Innovation
 
 1. **Evidence Graph**：Claim → Evidence → Source，禁止无证据结论。
-2. **Bounded Challenger**：主动找反证；`delta` 必须 ∈ [−0.15, +0.15]，否则 Reject。
-3. **Evidence Validator**：无证据 / 假证据 / 跨案证据不得进分。调分 Claim 必须带封闭谓词，由后端在本案交易快照上重新执行，不成立则 Reject。
-4. **Human-in-the-loop**：`REPORT` 不能由 Agent 执行，只能 `REPORT_REVIEW` + 人签。
+2. **Evidence Judge**：直接输出 `exclude / observe / suggest_report`、支持证据、反向证据、缺失材料、逐条理由和下一步动作。
+3. **Skeptic + Counterfactual**：伪造引用、无引用理由会使整份建议失效；移除模型声称的关键证据后重跑，检查结论是否连贯变化。
+4. **Policy Guardrail**：名单命中不得直接排除、事实回查失败不得签发；护栏只否决或升级，不与模型加权。
+5. **Full-report Reporter**：生成完整四段调查底稿，事实不一致时定向修复一次。
+6. **Human-in-the-loop**：Agent 只能建议进入 `REPORT_REVIEW`，不能执行报送。
 
 ## 4. System Architecture
 
 ```
 Transaction / Customer / Account / Relationship
         ↓
-Rule / 基线风险
-        ↓
-Case → Planner → Evidence Collector → Risk Analyst
-        → Challenger → Evidence Validator → Risk Aggregator
-        → Reporter → Human Approval → Audit Trail
+Case → Planner → Evidence Collector → Indicator Analyst
+        → Evidence Judge → Skeptic / Counterfactual
+        → Policy Guardrail → Full-report Reporter
+        → Human Approval → Audit Trail
 ```
 
 ## 5. Agent Architecture
@@ -43,10 +46,11 @@ Case → Planner → Evidence Collector → Risk Analyst
 | --- | --- | --- |
 | Planner | 只规划白名单只读工具 | 不打分、不报送 |
 | Collector | 只读取数，写入 Evidence | 不编造事实 |
-| Analyst | 规则因子 + evidence_ids | 不写最终监管结论 |
-| Challenger | 反证 / 正常解释 / 数据不足 | 不直接改最终分 |
-| Validator | 校验 Claim 与 delta | 失败项不得进分 |
-| Reporter | 结构化草稿 + 法规引用 | 不自动上报 |
+| Analyst | 从流水/KYC/图谱计算事实指标和规则对照 | 不读取告警标签给结论加分 |
+| Judge | 输出完整建议、支持/反向/缺失证据及行动 | 不得引用工具范围外事实 |
+| Skeptic | 校验逐条引用并做关键证据反事实 | 失败建议不得签发 |
+| Policy Guardrail | 执行名单、事实完整性等硬边界 | 不与 AI 评分合成 |
+| Reporter | 基于已校验建议生成完整四段草稿 | 不自动上报 |
 
 ## 6. Evidence Graph
 
@@ -54,11 +58,11 @@ Case → Planner → Evidence Collector → Risk Analyst
 
 前端点击 Evidence 可回到原始交易、账户或法规摘录。
 
-## 7. Bounded Challenger
+## 7. Evidence Judge Contract
 
-输出结构化 JSON：`claim` / `predicate` / `args` / `evidence_ids` / `delta`。
+输出结构化 JSON：`disposition` / `confidence` / `typologies` / `supporting_evidence_ids` / `contradicting_evidence_ids` / `missing_evidence` / `rationale[]` / `next_actions`。
 
-越界、无证据、未知编号、跨案、未知谓词、谓词经数据核验不成立 → **Reject**。最终分 = 规则因子合计 + **通过校验**的 delta，夹紧到 [0, 1]。
+每条 `rationale` 必须引用本轮工具返回的证据编号。未知编号、无引用理由、建议上报但无支持证据 → 整份建议校验失败并阻断签发。`confidence` 只是模型自评把握度，不是校准概率。
 
 ## 8. Privacy & Security
 
@@ -90,7 +94,7 @@ cd ../frontend
 npm install
 ```
 
-复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Challenger/Reporter 走内置 stub（不是百炼）。
+复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Judge/Reporter 走内置 stub（不是百炼）。
 
 ## 12. Usage
 
@@ -116,9 +120,9 @@ huicha-aml/
   experiments/     benchmark / ablation / hallucination 等框架
 ```
 
-调查流水线拆分：`agents.py` 只编排；取数在 `tools.py`；规则打底在 `analyst_rules.py`；Challenger 校验只走 `validator.py`；报告模板在 `report_draft.py`；落库在 `case_store.py`。
+调查流水线拆分：`agents.py` 编排；`tools.py` 取数；`analyst_rules.py` 提取指标；`decision.py` 负责 Judge 契约、规则对照与政策护栏；`llm.py` 调用 Judge/Reporter；`report_draft.py` 提供降级模板；`case_store.py` 落库。
 
-工作台「规则分」来自规则因子合计 + 通过校验的 delta，字段 `confidence_kind=rule_score_not_calibrated`。调分 Claim 的 `support_score` 在 `score_kind=predicate_verified` 时表示封闭谓词已在本案快照上执行为真，**不是语义置信度或校准概率**。无谓词的中性说明（delta=0）仍可为 `id_membership`。
+工作台并排展示“规则对照 / AI Judge / 护栏后建议”。两者**不相加**。字段 `confidence_kind=llm_self_assessed_not_calibrated` 明确模型把握度未经校准。
 
 ## 14. Limitations
 

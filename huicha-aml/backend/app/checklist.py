@@ -494,6 +494,22 @@ def generate_checklist(ctx: dict) -> list[dict]:
 def attach_checklist(payload: dict, *, counterparties: list[dict] | None = None, human_note: str = "") -> dict:
     ctx = context_from_payload(payload, counterparties=counterparties, human_note=human_note)
     items = generate_checklist(ctx)
+    known_titles = {str(i.get("title") or "") for i in items}
+    for index, gap in enumerate((payload.get("judge") or {}).get("missing_evidence") or [], start=1):
+        title = str(gap or "").strip()
+        if not title or title in known_titles:
+            continue
+        items.append(
+            _item(
+                id=f"AI-GAP-{index:02d}",
+                title=title,
+                category="其他",
+                reason="AI Judge 在支持/反向证据对照中标记该材料缺失。",
+                suggested_action="由调查员核实并上传对应原始材料；不得仅凭模型描述视为已补齐。",
+                status="missing",
+                priority=_band_priority(ctx.get("recommendation") or "", missing=True),
+            )
+        )
     payload["checklist"] = summarize(items, ctx)
     return payload["checklist"]
 

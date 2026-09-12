@@ -34,7 +34,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { ChallengerPanel, CounterfactualBox, CustomerCard, EvidenceLists, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
+import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 
@@ -230,63 +230,27 @@ function ReportText({ text, issues, onSelect }) {
   );
 }
 
-function ScoreBreakdown({ scoring, label, ablation }) {
-  if (!scoring) return null;
-  const base = Number(scoring.base ?? 0);
-  const prior = Number(scoring.rule_prior ?? 0);
-  const delta = Number(scoring.llm_delta ?? 0);
-  const raw = Number(scoring.raw ?? base + prior + delta);
-  const final = Number(scoring.final ?? 0);
-  const floored = Math.abs(raw - final) > 1e-9;
-  const suppressed = Boolean(scoring.delta_suppressed);
-  const rows = ablation
-    ? [
-        { k: "规则底分", v: final, abs: true },
-        { k: "Challenger", v: 0 },
-        { k: "展示分", v: final, abs: true },
-      ]
-    : [
-        { k: "规则底分", v: base, abs: true },
-        { k: "规则先验", v: prior },
-        { k: "Challenger", v: delta },
-        { k: "合成", v: raw },
-        { k: "展示分", v: final, abs: true },
-      ];
-  const pin = Math.max(2, Math.min(98, final * 100));
+function DecisionComparison({ judge, baseline, guardrails, label, ablation }) {
+  if (!baseline) return null;
+  const same = baseline.conclusion === guardrails?.final_conclusion;
   return (
     <div className="score-break">
       <div className="score-break-hd">
-        可解释风险评分
+        判断来源对照
         <b className={conclusionTone(label)}>{label}</b>
       </div>
       <ul>
-        {rows.map((r) => {
-          const n = Number(r.v ?? 0);
-          return (
-            <li key={r.k}>
-              <span>{r.k}</span>
-              <em className={n < 0 ? "down" : n > 0 && !r.abs ? "up" : ""}>
-                {r.abs ? n.toFixed(2) : `${n > 0 ? "+" : ""}${n.toFixed(2)}`}
-              </em>
-            </li>
-          );
-        })}
+        <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion}</em></li>
+        <li><span>AI Judge</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>政策护栏后</span><em>{label}</em></li>
+        <li><span>AI 自评把握度</span><em>{ablation ? "—" : Number(judge?.confidence ?? 0).toFixed(2)}</em></li>
       </ul>
       <div className="hint" style={{ margin: "6px 0 0" }}>
-        {suppressed ? "底分加先验已是排除，负向 Challenger 未再叠加。" : ""}
-        {floored ? `${suppressed ? " " : ""}合成 ${raw.toFixed(2)} 已夹到展示区间 0.05–0.95。` : ""}
-        {!floored && !suppressed ? "Challenger 进分不超过 ±0.15。" : ""}
-        {ablation ? " 本案为 Challenger OFF 消融结果。" : ""}
-      </div>
-      <div className="score-track" title="0.35 排除 / 0.55 上报">
-        <i className="tick" style={{ left: "35%" }} />
-        <i className="tick" style={{ left: "55%" }} />
-        <i className="pin" style={{ left: `${pin}%` }} />
-      </div>
-      <div className="score-track-cap">
-        <span>排除</span>
-        <span>观察</span>
-        <span>上报</span>
+        {ablation
+          ? "本案为 Judge OFF 消融结果，仅展示规则对照。"
+          : same
+            ? "AI 与规则对照一致；两者没有做加权合成。"
+            : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。"}
       </div>
     </div>
   );
@@ -618,10 +582,10 @@ export default function App() {
 
       <div className="toolbar">
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
-          {experimentMode ? "实验模式：用于 Challenger 消融实验" : "AI反向质询 · 已启用"}
+          {experimentMode ? "实验模式：用于 AI Judge 消融实验" : "证据 Judge · 已启用"}
         </span>
         <label title="仅影响下一次重跑，不会改写已打开的历史草稿">
-          AI反向质询（Challenger）
+          AI 调查 Judge
           <Switch
             size="small"
             checked={nextChallengerEnabled}
@@ -733,7 +697,7 @@ export default function App() {
           banner
           showIcon
           message="未配置 DASHSCOPE_API_KEY"
-          description="Challenger/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
+          description="Judge/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
         />
       )}
       {needsToken && (
@@ -882,7 +846,7 @@ export default function App() {
                     </div>
                   )}
                   <div className="hint" style={{ margin: "6px 0 0" }}>
-                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则打底，非校准置信度" : "非概率置信度"}
+                    {inv?.confidence_kind === "rule_score_not_calibrated" ? "规则对照，非校准分数" : "AI 自评把握度，未校准"}
                   </div>
                 </div>
                 <div className="kpi-card">
@@ -912,20 +876,15 @@ export default function App() {
                 {!user && <Tag color="default">未登录 · 不可签发</Tag>}
                 {inv && caseChallengerEnabled && (
                   <>
-                    <Tag color="green">AI反向质询已参与本次调查</Tag>
-                    {inv.scoring?.llm_delta != null && (
-                      <Tag>
-                        模型调整 Δ = {Number(inv.scoring.llm_delta) > 0 ? "+" : ""}
-                        {Number(inv.scoring.llm_delta).toFixed(2)}
-                      </Tag>
-                    )}
+                    <Tag color="green">证据 Judge 已参与本次调查</Tag>
+                    <Tag>自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Tag>
                   </>
                 )}
                 {inv && caseChallengerEnabled === false && (
                   <Tag color="orange">本案为消融结果</Tag>
                 )}
                 {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
-                {inv?.llm?.reporter || inv?.llm?.challenger ? (
+                {inv?.llm?.reporter || inv?.llm?.judge ? (
                   <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
                 ) : null}
               </Space>
@@ -940,14 +899,14 @@ export default function App() {
                 <span>
                   当前运行策略：
                   {experimentMode
-                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} AI反向质询`
-                    : "正常模式 · 下次重跑默认启用 AI反向质询"}
+                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} AI Judge`
+                    : "正常模式 · 下次重跑默认启用 AI Judge"}
                 </span>
                 {inv && (
                   <span>
                     本案历史结果：
                     {caseChallengerEnabled
-                      ? "生成时已启用 AI反向质询"
+                      ? "生成时已启用 AI Judge"
                       : "生成时未启用（消融结果，不是当前系统关闭）"}
                   </span>
                 )}
@@ -958,12 +917,12 @@ export default function App() {
                   showIcon
                   style={{ marginBottom: 12 }}
                   message="本案为消融结果"
-                  description="本案生成时未启用 AI 反向质询，当前展示的是 Challenger OFF 的历史调查结果。顶部开关只代表下一次重跑策略，不会改写这份草稿。可点「按当前策略重跑」。"
+                  description="本案生成时未启用 AI Judge，当前只展示规则对照的历史调查结果。顶部开关只代表下一次重跑策略，不会改写这份草稿。"
                 />
               )}
               {inv && (
                 <div className="viz-row">
-                  <ScoreBreakdown scoring={inv.scoring} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} />
+                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} />
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
@@ -973,9 +932,8 @@ export default function App() {
                   数据 {inv.data_note || "synthetic"} · Agent 不得自动报送
                 </div>
               )}
-              {inv && <ChallengerPanel run={inv.challenger_run} onSelect={selectEvidence} />}
+              {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
-              {inv && <VerifiedClaims rows={inv.challenger} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
@@ -997,10 +955,10 @@ export default function App() {
                   </Divider>
                   <Timeline
                     items={inv.steps.map((s) => {
-                      const defaultOpen = ["Analyst", "Challenger", "Reporter"].includes(s.role);
+                      const defaultOpen = ["Analyst", "Judge", "Skeptic", "Reporter"].includes(s.role);
                       const opened = openSteps[s.role] ?? defaultOpen;
                       return {
-                        color: s.role === "Challenger" && inv.use_challenger === false ? "gray" : "blue",
+                        color: s.role === "Judge" && inv.use_challenger === false ? "gray" : "blue",
                         children: (
                           <div className="step" style={{ border: "none", paddingLeft: 0, margin: 0 }}>
                             <button

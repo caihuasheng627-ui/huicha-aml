@@ -27,6 +27,21 @@ PROMPTS = {
         "强调须人工签发。直接输出中文一段，不要 Markdown/代码块。"
     ),
     "validator_v1": "只校验 claim 是否被 evidence_ids 覆盖，不改分数。",
+    "judge_v1": (
+        "你是反洗钱调查 Judge。上游告警只是待复核线索，不能直接当作结论。"
+        "仅依据给定 evidence_bundle 输出 JSON，不得编造事实。"
+        "字段必须为 disposition(exclude/observe/suggest_report)、confidence(0到1)、typologies、"
+        "supporting_evidence_ids、contradicting_evidence_ids、missing_evidence、"
+        "rationale（每项含 text 与 evidence_ids）、next_actions。"
+        "每条理由必须引用 allowed_evidence_ids；明确区分支持、反向和缺失证据。不要 Markdown。"
+    ),
+    "skeptic_v1": "逐条核验 Judge 的引用契约、金额日期和政策边界；失败则不得采用 AI 建议。",
+    "reporter_v3": (
+        "你是反洗钱 Reporter。依据已校验 Judge 建议生成完整四段调查底稿："
+        "资金交易及客户行为、疑点分析、反证与缺失证据、结论与理由。"
+        "每段保留给定证据编号；不得新增账号、金额、日期、交易号或法规编号。"
+        "必须写明须人工签发、不可自动报送。直接输出正文，不要代码块。"
+    ),
 }
 
 
@@ -34,7 +49,11 @@ def prompt_version(kind: str) -> str:
     if kind.startswith("challenger"):
         return "challenger_v3"
     if kind.startswith("reporter"):
-        return "reporter_v2"
+        return "reporter_v3"
+    if kind.startswith("judge"):
+        return "judge_v1"
+    if kind.startswith("skeptic"):
+        return "skeptic_v1"
     if kind.startswith("planner"):
         return "planner_v2"
     if kind.startswith("validator"):

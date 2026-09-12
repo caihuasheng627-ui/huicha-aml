@@ -35,7 +35,7 @@ def render_report(
             f"{c.get('claim') or c['title']}(Δ{c.get('delta', 0):+.2f}): {c['detail']}" for c in challenger
         )
     else:
-        challenge = "本轮未启用 Challenger。"
+        challenge = "本轮未启用 AI Judge，仅保留规则对照。"
     cite_reg = "、".join(h["id"] for h in kb_hits if h["kind"] == "regulation") or "KB-REG-03"
     cite_all = "、".join(h["id"] for h in kb_hits[:5]) or "（无）"
     if conclusion == "exclude":
@@ -55,6 +55,8 @@ def render_report(
             f"依据 {cite_reg}，本草稿覆盖资金行为、疑点与理由，须人工签发后才能报送。"
             f"关键交易编号：{sample_ids}。"
         )
+    if "须人工签发" not in reason:
+        reason += " 本草稿须人工签发，不可自动报送。"
     full = "\n".join(
         [
             f"【资金交易及客户行为】{behavior}",
@@ -93,3 +95,18 @@ def apply_reason(report: dict, polished: str, conclusion: str) -> None:
         else:
             rebuilt.append(line)
     report["full_text"] = "\n".join(rebuilt)
+
+
+def apply_full_text(report: dict, full_text: str, conclusion: str) -> None:
+    """用 AI 全文替换模板正文；模板字段保留作缺失要素与降级检查。"""
+    text = (full_text or "").strip()
+    report["full_text"] = text
+    report["reason"] = text
+    report["ai_generated_full_text"] = True
+    report["elements"] = [
+        {"key": "报告触发点", "value": report["elements"][0]["value"]},
+        {"key": "资金交易及客户行为", "value": text if "资金交易及客户行为" in text else ""},
+        {"key": "疑点分析", "value": text if "疑点分析" in text else ""},
+        {"key": "反证与缺失证据", "value": text if ("反证" in text or "缺失证据" in text) else ""},
+        {"key": "结论与理由", "value": text if CONCLUSION_LABEL[conclusion] in text else ""},
+    ]

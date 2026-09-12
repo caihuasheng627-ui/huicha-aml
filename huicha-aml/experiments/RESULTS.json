@@ -8,55 +8,67 @@
     "note": "毒化草稿含虚构账号/金额/编号；干净句含阈值与概数措辞。"
   },
   "ablation_consistency": {
-    "name": "机制验证：Challenger 开/关（模板精标 + stub delta）",
-    "n_labeled": 31,
-    "consistency_rate_challenger_on": 1.0,
-    "gold_exclude_n": 13,
-    "false_suggest_report_rate_on": 0.0,
-    "false_suggest_report_rate_off": 0.5385,
-    "false_report_lift": 0.5385,
-    "mean_rule_prior": -0.1148,
-    "mean_llm_delta": -0.12,
-    "observe_present": true,
+    "name": "机制验证：证据 Judge vs 独立规则对照（固定 stub）",
+    "n_labeled": 87,
+    "judge_template_match_rate": 1.0,
+    "rule_template_match_rate": 0.5977,
+    "judge_rule_disagreement_rate": 0.4023,
+    "citation_contract_pass_rate": 1.0,
+    "counterfactual_coverage": 0.5977,
+    "counterfactual_change_rate": 0.3462,
     "sample": [
       {
         "id": "ALT-A-20260910",
         "gold": "exclude",
-        "on": "exclude",
-        "off": "suggest_report",
+        "judge": "exclude",
+        "rule_baseline": "exclude",
         "demo_tag": "A",
-        "rule_prior": -0.3,
-        "llm_delta": -0.12
+        "citation_contract": true,
+        "counterfactual_performed": false,
+        "counterfactual_faithful": null
       },
       {
         "id": "ALT-B-20260910",
         "gold": "suggest_report",
-        "on": "suggest_report",
-        "off": "suggest_report",
+        "judge": "suggest_report",
+        "rule_baseline": "suggest_report",
         "demo_tag": "B",
-        "rule_prior": 0.0,
-        "llm_delta": -0.12
+        "citation_contract": true,
+        "counterfactual_performed": true,
+        "counterfactual_faithful": false
       },
       {
         "id": "ALT-C-20260910",
         "gold": "suggest_report",
-        "on": "suggest_report",
-        "off": "suggest_report",
+        "judge": "suggest_report",
+        "rule_baseline": "observe",
         "demo_tag": "C",
-        "rule_prior": 0.0,
-        "llm_delta": -0.12
+        "citation_contract": true,
+        "counterfactual_performed": true,
+        "counterfactual_faithful": false
       },
       {
         "id": "ALT-F-20260910",
         "gold": "observe",
-        "on": "observe",
-        "off": "suggest_report",
+        "judge": "observe",
+        "rule_baseline": "exclude",
         "demo_tag": "F",
-        "rule_prior": -0.08,
-        "llm_delta": -0.12
+        "citation_contract": true,
+        "counterfactual_performed": true,
+        "counterfactual_faithful": true
+      },
+      {
+        "id": "ALT-L-20260910",
+        "gold": "suggest_report",
+        "judge": "suggest_report",
+        "rule_baseline": "exclude",
+        "demo_tag": "L",
+        "citation_contract": true,
+        "counterfactual_performed": true,
+        "counterfactual_faithful": true
       }
     ],
-    "caveat": "gold_label 由生成模板写入，与规则分支同源；LLM 为固定 stub delta（默认 -0.12），不是真实百炼。数字证明流水线可复现，不代表调查准确率。"
+    "caveat": "gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。"
   },
   "hallucination_demo_intercepted": true
 }

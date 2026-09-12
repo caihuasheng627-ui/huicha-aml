@@ -51,8 +51,10 @@ def test_investigate_returns_case_v2(client):
     assert data["evidence_graph"]
     assert data["risk"]["factors"]
     assert data["structured_report"]["human_review"]
-    assert data["prompt_versions"]["challenger"] == "challenger_v3"
-    assert data["prompt_versions"]["validator"] == "validator_v2"
+    assert data["prompt_versions"]["judge"] == "judge_v1"
+    assert data["judge_validation"]["passed"] is True
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert data["prompt_versions"]["skeptic"] == "skeptic_v1"
 
 
 def test_layering_demo_chain(client):
@@ -62,9 +64,9 @@ def test_layering_demo_chain(client):
     tx_ids = {t["id"] for t in data["transactions"]}
     assert {"TX-L-01", "TX-L-02", "TX-L-03"} <= tx_ids
     assert data["conclusion"] == "suggest_report"
-    verified = [c for c in data["challenger"] if (c.get("validation") or {}).get("score_kind") == "predicate_verified"]
-    assert verified
-    assert verified[0]["predicate"]
+    assert data["judge"]["supporting_evidence_ids"]
+    assert data["rule_baseline"]["conclusion"] == "exclude"
+    assert data["judge"]["disposition"] == "suggest_report"
     assert data["case_v2"]["recommendation"] == "REPORT_REVIEW"
     assert "layering" in data["case_v2"]["suspicious_types"]
     rel = [e for e in data["evidence_graph"] if e["evidence_type"] == "RELATIONSHIP"]

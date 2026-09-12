@@ -17,7 +17,7 @@
   --bg: var(--paper);
   --font-ui: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-display: var(--font-ui);
-  --font-brand: var(--font-ui);
+  --font-brand: "Ma Shan Zheng", "STKaiti", "KaiTi", "Noto Serif SC", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "Noto Sans SC", monospace;
 }
 
@@ -32,7 +32,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: 48px auto 1fr 28px;
+  grid-template-rows: 56px auto 1fr 28px;
   height: 100%;
 }
 
@@ -62,12 +62,15 @@ body {
 }
 .brand-text strong {
   display: block;
-  font-size: 15px;
-  letter-spacing: 0;
-  font-weight: 600;
-  line-height: 1.2;
+  font-family: var(--font-brand);
+  font-size: 29px;
+  letter-spacing: 0.06em;
+  font-weight: 400;
+  line-height: 1;
+  padding-top: 3px;
   color: var(--ink);
   white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
 }
 .brand-text span {
   display: block;
@@ -78,7 +81,7 @@ body {
 @media (max-width: 720px) {
   .top-clock { display: none; }
   .brand-logo { width: 24px; height: 24px; }
-  .brand-text strong { font-size: 14px; }
+  .brand-text strong { font-size: 24px; letter-spacing: 0.04em; }
 }
 
 .staff {

@@ -77,3 +77,64 @@ v1（Macro-F1≈0.69）已因泄漏假集合降级，**不得与本节混比**�
 ## C. 规则同源 stub 占位
 
 - `golden_set` / `test_set` 仍为框架槽位；勿与 B 节混写为产品准确率。
+
+## 独立集 / 真实模型（v3 协议 · prompt=judge_v2）
+
+- 协议：`enrich_judge(db=None) → normalize_judge → verify_judge → apply_guardrails` · prompt=`judge_v2`
+- 标注集：`independent_set.json`（n=240，n_unique=240，source=narrative_vignette_v3_rules_layer）
+- 模型：`deepseek-v4-flash-0731`（真实调用）
+- 计分条数：237（parse_failures=3，call_errors=3）
+- verify 通过率：1.0
+- Macro-F1：**0.3867**
+- Evidence 支持侧 P/R：**0.7023 / 0.6113**（仅叙事项 IX- 编号参与 P/R；TX-/KB- 引用不计入）
+- Evidence 反证侧 P/R：**0.087 / 0.3077**
+- 引用过 TX- 编号的样本比例：0.9958
+- 基线 Macro-F1：always_report=0.2069 · keyword=0.8031
+- 原始输出：`/workspace/huicha-aml/experiments/benchmark/runs/20260912T144147Z_judge_v2.jsonl`
+- 口径：不是生产准确率；须人工签发。本协议已去除标签泄漏并走产品 Judge 契约（enrich_judge 直调）；仍为合成 vignette。
+- 旧版说明：v1 结果（Macro-F1≈0.69）因 n_unique≈10、标签泄漏、自写 prompt 已降级，不得与本协议数字混比。
+
+### 混淆矩阵（行=gold，列=pred；仅 parse 成功样本）
+
+| gold \ pred | exclude | observe | suggest_report |
+| --- | --- | --- | --- |
+| exclude | 0 | 88 | 0 |
+| observe | 0 | 43 | 1 |
+| suggest_report | 0 | 40 | 65 |
+
+### confidence 分布
+
+| 区间 | [0.0,0.2) | [0.2,0.4) | [0.4,0.6) | [0.6,0.8) | [0.8,1.0] |
+| --- | --- | --- | --- | --- | --- |
+| 条数 | 0 | 0 | 71 | 146 | 20 |
+
+- 去重取值数=9 · mean=0.6741 · stdev=0.0949 · min/max=0.55/0.82
+- 按 gold 均值：`{"exclude": 0.7036, "observe": 0.5539, "suggest_report": 0.6998}` · 按 pred 均值：`{"observe": 0.6367, "suggest_report": 0.7712}`
+- 最常见取值：`{"0.55": 71, "0.72": 47, "0.75": 35, "0.65": 27, "0.78": 23, "0.82": 20}`
+
+### missing_evidence 契约
+
+- observe 预测中带非空 missing_evidence 的比例：**1.0**
+- 按 pred：`{"exclude": {"n": 0, "with_missing_n": 0, "with_missing_ratio": null, "avg_missing_len": null}, "observe": {"n": 171, "with_missing_n": 171, "with_missing_ratio": 1.0, "avg_missing_len": 2.959}, "suggest_report": {"n": 66, "with_missing_n": 66, "with_missing_ratio": 1.0, "avg_missing_len": 3.0}}`
+- 被 sanitize 掉的编号样条目数：0
+
+### 按 tag 分组 Macro-F1
+
+- `atm_smurf` (gold=suggest_report, n=22): macro_f1=0.2906, acc=0.7727
+- `crowdfund_layering` (gold=suggest_report, n=20): macro_f1=0.2745, acc=0.7
+- `crypto_onramp` (gold=suggest_report, n=22): macro_f1=0.3333, acc=1.0
+- `escrow_release` (gold=exclude, n=22): macro_f1=0.0, acc=0.0
+- `gov_subsidy` (gold=exclude, n=22): macro_f1=0.0, acc=0.0
+- `inheritance_partial` (gold=observe, n=22): macro_f1=0.3256, acc=0.9545
+- `insurance_claim` (gold=exclude, n=22): macro_f1=0.0, acc=0.0
+- `invoice_circular` (gold=suggest_report, n=22): macro_f1=0.1609, acc=0.3182
+- `nested_shell_loan` (gold=suggest_report, n=19): macro_f1=0.1389, acc=0.2632
+- `payroll_batch` (gold=exclude, n=22): macro_f1=0.0, acc=0.0
+- `purpose_docs_gap` (gold=observe, n=22): macro_f1=0.3333, acc=1.0
+
+- per_class：`{"exclude": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 88}, "observe": {"precision": 0.2515, "recall": 0.9773, "f1": 0.4, "support": 44}, "suggest_report": {"precision": 0.9848, "recall": 0.619, "f1": 0.7602, "support": 105}}`
+- caveat：与 seed_extended 规则模板不同源的组合采样合成集；流水按叙事族真实结构生成并经产品 analyst_rules.analyze() 产出规则层 findings；叙事项带 support/counter/context 极性；不向 Judge 传 missing_evidence；输入已去除家族名/关键干扰前缀/合成占位字样；annotation_reason 仅元数据；不是人工专家标注；禁止写成生产准确率。
+
+## 能力指标占位（规则同源 stub）
+- golden_set / test_set 仍保留框架槽位；test_set 为空时能力指标 Not evaluated yet。
+- 上节为独立 vignette × 产品 Judge 的实验数字，禁止与 stub 机制验证混写成产品准确率。

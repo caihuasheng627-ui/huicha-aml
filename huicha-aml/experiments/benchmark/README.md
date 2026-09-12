@@ -1,20 +1,23 @@
-# Benchmark 数据说明
+# Benchmark 数据说明（v2）
 
-当前仓库只有**合成**案件。
-
-- `golden_set.json`：路演 + 模板精标 ID（与规则分支同源，不是独立人工标注）
-- `test_set.json`：预留 hold-out 槽位（TODO）
-- `independent_set.json`：与规则模板**不同源**的 vignette 合成标注集（含 `annotation_reason`）
-- `build_independent_set.py`：生成独立集
-
-能力评估：
+- `golden_set.json`：路演 + 模板精标（与规则同源，非独立人工标注）
+- `test_set.json`：预留 hold-out
+- `independent_set.json`：组合采样独立合成集（**n_unique 必须 ≥ 200**，无标签泄漏）
+- `build_independent_set.py`：生成器
+- `runs/`：真实调用原始 jsonl（默认不入库）
 
 ```bash
-# 仅查看框架状态
-python experiments/benchmark.py
+# 重生独立集
+python experiments/benchmark/build_independent_set.py
 
-# 独立集 + 真实百炼（须配置 backend/.env 的 DASHSCOPE_API_KEY）
-python experiments/benchmark.py --real
+# 框架状态 + 离线基线
+python experiments/benchmark.py
+python experiments/benchmark.py --baselines-only
+
+# 产品 Judge 真实评估（须 DASHSCOPE_API_KEY）
+python experiments/benchmark.py --real --limit 5   # 冒烟
+python experiments/benchmark.py --real            # 全量
 ```
 
-禁止把本目录数字写成「准确率 98%」。结论须人工签发。
+禁止把本目录数字写成产品准确率。结论须人工签发。
+v1（Macro-F1≈0.69）已因实验硬伤降级，见 RESULTS.md。

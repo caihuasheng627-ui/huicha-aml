@@ -24,26 +24,21 @@
 
 说明：gold_label 仍由生成模板写入；Judge 为确定性 stub，不是真实百炼。这些数字只验证规则不再决定最终建议、引用契约与反事实流程可运行，不代表调查准确率。
 
-## 独立集 / 真实模型
+## 独立集 / 真实模型（v2 协议 · 待重跑）
 
-- 标注集：`independent_set.json`（n=220，source=narrative_vignette_v1）
-- 模型：`deepseek-v4-flash-0731`（真实百炼调用，非 stub）
-- Macro-F1：**0.6921**
-- Evidence P：**0.8062** / R：**0.7247**
-- 调用失败条数：0
-- 口径：不是生产准确率；须人工签发后才是处置。
+- 协议：`judge_v2` → `normalize_judge` → `verify_judge` → `apply_guardrails`
+- 标注集：`independent_set.json`（n=240，**n_unique=240**，source=`narrative_vignette_v2_combinatorial`）
+- 离线基线（无需密钥）：always_suggest_report Macro-F1 **0.2082**；keyword_match Macro-F1 **0.867**
+- 真实模型数字：**待你在本机执行** `python experiments/benchmark.py --real` 后写入
+- 原始输出将落盘 `experiments/benchmark/runs/<timestamp>.jsonl`
+- 口径：不是生产准确率；须人工签发。已去除标签泄漏；仍为合成 vignette。
 
-### 混淆矩阵（行=gold，列=pred）
+### v1 结果已降级（勿再引用为模型能力）
 
-| gold \ pred | exclude | observe | suggest_report |
-| --- | --- | --- | --- |
-| exclude | 53 | 35 | 0 |
-| observe | 0 | 22 | 22 |
-| suggest_report | 0 | 0 | 88 |
-
-- per_class：`{"exclude": {"precision": 1.0, "recall": 0.6023, "f1": 0.7518, "support": 88}, "observe": {"precision": 0.386, "recall": 0.5, "f1": 0.4356, "support": 44}, "suggest_report": {"precision": 0.8, "recall": 1.0, "f1": 0.8889, "support": 88}}`
-- caveat：与 seed_extended 规则模板不同源的合成 vignette 标注集；annotation_reason 为脚本写入的标注理由，不是人工专家标注；禁止写成生产准确率。
+- 原 Macro-F1≈0.69 等数字仅作「API 能打通」记录
+- 已知硬伤：n_unique≈10、标签泄漏、SYSTEM 贴合测试集叙事、未走产品 Judge、解析失败并入 observe、Evidence gold 含空 KYC
+- 详见 `RESULTS.json` → `independent_real_model_v1_deprecated`
 
 ## 能力指标占位（规则同源 stub）
 - golden_set / test_set 仍保留框架槽位；test_set 为空时能力指标 Not evaluated yet。
-- 上节为独立 vignette 集上的真实模型实验数字，禁止与 stub 机制验证混写成产品准确率。
+- 上节为独立 vignette × 产品 Judge 的实验数字，禁止与 stub 机制验证混写成产品准确率。

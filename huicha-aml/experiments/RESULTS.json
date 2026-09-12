@@ -72,6 +72,20 @@
   },
   "hallucination_demo_intercepted": true,
   "independent_real_model": {
+    "label": "独立集 / 真实模型 / 产品 Judge 流水线",
+    "status": "pending_real_rerun",
+    "protocol": "judge_v2 → normalize_judge → verify_judge → apply_guardrails",
+    "n": 240,
+    "n_unique_dataset": 240,
+    "source": "narrative_vignette_v2_combinatorial",
+    "baselines": {
+      "always_suggest_report_macro_f1": 0.2082,
+      "keyword_match_macro_f1": 0.867
+    },
+    "honesty": "不是生产准确率；须人工签发。等待 --real 重跑。",
+    "legacy_note": "v1 已降级，见 independent_real_model_v1_deprecated"
+  },
+  "independent_real_model_v1_deprecated": {
     "label": "独立集 / 真实模型",
     "split": "independent",
     "model": "deepseek-v4-flash-0731",
@@ -170,6 +184,8 @@
       "evidence_recall": 0.7247,
       "evidence_f1": 0.7633,
       "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
-    }
+    },
+    "deprecated": true,
+    "deprecation_reason": "v1：n_unique≈10、标签泄漏、自写 SYSTEM、未走产品 Judge；仅流水线打通。"
   }
 }

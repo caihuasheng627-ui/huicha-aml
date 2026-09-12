@@ -229,8 +229,9 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
       </div>
 
       <div className="theater-path" aria-hidden="true">
-        <i className="theater-path-line" />
-        <i className="theater-path-fill" style={{ width: `${pathFill}%` }} />
+        <i className="theater-path-line">
+          <i className="theater-path-fill" style={{ width: `${pathFill}%` }} />
+        </i>
         {PIPELINE.map((s, i) => (
           <StageNode
             key={s.id}

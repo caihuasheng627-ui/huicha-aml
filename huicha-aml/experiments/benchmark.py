@@ -348,7 +348,7 @@ def evaluate_independent(*, limit: int | None = None, sleep_s: float = 0.0, prom
         else 0.0,
         "source": payload.get("source"),
         "caveat": payload.get("caveat"),
-        "run_log": str(run_path.as_posix()),
+        "run_log": run_path.relative_to(ROOT).as_posix(),
         "baselines": baselines,
         "classification": clf,
         "by_tag": per_tag_report(rows),
@@ -652,7 +652,19 @@ def main() -> dict:
         help="覆盖 judge prompt 版本（如 judge_v2 / judge_v3）；默认用产品 prompt_version('judge')。仅作消融，不改产品默认值。",
     )
     parser.add_argument("--no-write", action="store_true", help="不写 RESULTS.json / RESULTS.md（试跑用）")
+    parser.add_argument("--rerender", action="store_true", help="不调模型，用 RESULTS.json 现有结果重渲染 RESULTS.md")
     args = parser.parse_args()
+    if args.rerender:
+        data = json.loads((Path(__file__).parent / "RESULTS.json").read_text(encoding="utf-8"))
+        latest = data.get("independent_real_model") or {}
+        runs = data.get("independent_real_model_runs") or {}
+        ablation = build_ablation(runs)
+        if ablation:
+            data["independent_ablation"] = ablation
+            (Path(__file__).parent / "RESULTS.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        update_results_md(latest, ablation)
+        print(json.dumps({"rerendered": True, "prompts": list(runs.keys())}, ensure_ascii=False))
+        return latest
     if args.baselines_only:
         payload = load_split("independent_set.json")
         out = {

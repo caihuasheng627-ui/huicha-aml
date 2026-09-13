@@ -588,7 +588,7 @@ def render_validity_md(comparison: dict) -> list[str]:
     cells = comparison.get("cells") or {}
     if not cells:
         return []
-    lines = ["## 有效性消融（主集 / 去极性 / 盲区）", "", f"- {comparison.get('note')}", ""]
+    lines = ["## 有效性消融（主集 / 去极性 / 盲区 / 结构盲区）", "", f"- {comparison.get('note')}", ""]
     keys = [
         ("macro_f1", "Macro-F1"),
         ("exclude_recall", "exclude 召回"),

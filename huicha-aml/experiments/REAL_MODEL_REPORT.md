@@ -170,7 +170,10 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/runs/20260912T144147Z_judge_v2.jsonl` · `benchmark/runs/20260912T151253Z_judge_v3.jsonl` | 主集逐条 raw |
 | `benchmark/blind_set.json` · `runs/20260912T161440Z_blind_judge_v3.jsonl` · `runs/20260912T165213Z_blind_judge_v2.jsonl` | 盲区 hold-out |
 | `benchmark/independent_set_nopolarity.json` · `runs/20260912T173531Z_nopolarity_judge_v2.jsonl` · `runs/20260912T183509Z_nopolarity_judge_v3.jsonl` | 去极性消融 |
-| `RESULTS.json` → `runs_by_source` · `validity_comparison` | 三集 × 两 prompt |
+| `RESULTS.json` → `runs_by_source` · `validity_comparison` | 主集 / 去极性 / 盲区 / 结构盲区 |
+| `benchmark/struct_set.json` · `runs/20260912T235835Z_blind_struct_judge_v{2,3}.jsonl` | 结构盲区 hold-out |
+| `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
+| `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
 
 ---
@@ -262,6 +265,22 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 
 `import_real_cases.py`：脱敏 CSV → `real_holdout.json`；`benchmark.py --set real`。占位 5 条 `data_note=placeholder`，**不写 RESULTS 主表**。字段校验与去标识见 `backend/tests/test_real_holdout.py`。
 
-### 10.6 结构盲区 / v4 真实跑（待写入）
+### 10.6 结构盲区真实跑（`struct_set.json` × v2/v3）
 
-待 `struct_set` × judge_v2/v3 与三套集 × judge_v4 跑完后补表。口径仍是合成对照，须人工签发。
+模型 `deepseek-v4-flash-0731`，`cached=False`。日志：`runs/20260912T235835Z_blind_struct_judge_v3.jsonl` · `...judge_v2.jsonl`。
+
+| 方法 | Macro-F1 | exclude 召回 | report 召回 | observe 预测率 | keyword 基线 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| keyword_match | 0.1673 | 0 | 0.10 | ≈0.95 | — |
+| judge_v2 | 0.4027 | 0.0256 | 0.60 | 0.7156 | 0.17 |
+| judge_v3 | **0.9630** | 1.00 | 0.9898 | 0.1613 | 0.17 |
+
+混淆（v3，n_scored=217，parse_failures=3）：exclude 80/80；observe 34/39（`kin_gift_gap` 5 条偏严上报）；report 97/98（`reused_voucher` 1 条降观察）。无 exclude↔report 对角。
+
+**读数**：0.963 ≥ 0.85，且 keyword 只有 0.17。去掉规则层结构话术后，v3 相对 v2 的贡献仍然在（排除 0.03→1.0，observe 率 72%→16%）。此前主集/盲区高分**不是**靠 `structuring/funnel/night-out/layering` 的规则层措辞撑起来的。剩余误差仍是观察族偏严（亲友赠与缺证明），与 §10.2 同构。
+
+仍是合成对照，11 个族级金标，禁止写成生产能力。
+
+### 10.7 `judge_v4` 三套集对比（待写入）
+
+主集 / 盲区 / 结构盲区的 v4 全量数字跑完后补表。切默认的条件未变：三套都不低于 v3，且观察偏严减少。目前**不提议**切换线上默认。

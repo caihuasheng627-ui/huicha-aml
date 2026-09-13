@@ -678,6 +678,18 @@ RESULT_KEEP_KEYS = [
 ]
 
 
+DEEPSEEK_RESULT_MODEL = "deepseek-v4-flash-0731"
+
+
+def _result_source_key(result: dict) -> str:
+    """非 DeepSeek 跑分单独分槽，避免覆盖已有百炼 deepseek 数字。"""
+    src = str(result.get("source") or "unknown")
+    model = str(result.get("model") or "")
+    if model and model != DEEPSEEK_RESULT_MODEL:
+        return f"{src}__{model}"
+    return src
+
+
 def update_results_json(result: dict) -> dict | None:
     """按 source×prompt 分槽保存，换集不覆盖旧消融。返回当前 source 的 prompt 消融（若有）。"""
     path = Path(__file__).parent / "RESULTS.json"
@@ -691,7 +703,7 @@ def update_results_json(result: dict) -> dict | None:
         )
         data["independent_real_model_v1_deprecated"] = old
     slim = {k: result[k] for k in RESULT_KEEP_KEYS if k in result}
-    src = str(result.get("source") or "unknown")
+    src = _result_source_key(result)
     by_source = data.get("runs_by_source") or {}
     if not by_source and data.get("independent_real_model_runs"):
         by_source = {"narrative_vignette_v3_rules_layer": dict(data["independent_real_model_runs"])}
@@ -699,23 +711,29 @@ def update_results_json(result: dict) -> dict | None:
     src_runs[str(result.get("prompt"))] = slim
     by_source[src] = src_runs
     data["runs_by_source"] = by_source
-    data["independent_real_model"] = slim
     if src == "narrative_vignette_v3_rules_layer":
+        data["independent_real_model"] = slim
         data["independent_real_model_runs"] = src_runs
         ablation = build_ablation(src_runs)
         if ablation:
             data["independent_ablation"] = ablation
     else:
+        if "__" not in src:
+            data["independent_real_model"] = slim
         ablation = build_ablation(src_runs)
+        base_src = src.split("__", 1)[0]
         slot = {
             "narrative_vignette_v3_rules_layer_nopolarity": "nopolarity_ablation",
             "narrative_vignette_blind_holdout": "blind_ablation",
             "narrative_vignette_blind_struct": "blind_struct_ablation",
-        }.get(src)
-        if slot and ablation:
-            data[slot] = ablation
+        }.get(base_src)
+        if slot:
+            if src != base_src:
+                slot = f"{slot}__{src.split('__', 1)[1]}"
+            if ablation:
+                data[slot] = ablation
     data["validity_comparison"] = {
-        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；同一模型与后处理。",
+        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；按模型分槽，禁止跨模型混比。",
         "cells": {
             source: {p: _flatten_for_ablation(run) for p, run in runs.items()}
             for source, runs in sorted(by_source.items())

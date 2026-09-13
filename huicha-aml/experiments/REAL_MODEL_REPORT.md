@@ -295,3 +295,27 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 切默认条件是「三套都不低于 v3，且观察偏严减少」。主集未达标，结构盲区缺失，主集观察族偏严没有变好。**不提议切换线上默认。**
 
 盲区上的 0.99 说明「口头陈述不一致不得单独升档」这条约束在 *docs_pending / first_large* 上有效，但还不能外推到主集继承族，更不能在欠费中断后写成全面胜利。默认继续 `judge_v3`。
+
+---
+
+## 11. 换 `glm-5.2` 续跑（未完成）
+
+意图：用智谱 GLM-5.2 补结构盲区 × `judge_v4`，并做同模型 v3/v4 对照。产品默认模型**仍是** `deepseek-v4-flash-0731`。
+
+已做：
+
+- `ZHIPU_API_KEY` / `BIGMODEL_API_KEY` 走 `https://open.bigmodel.cn/api/paas/v4`，默认模型 `glm-5.2`，`enable_thinking=false`。
+- `RESULTS.json` 按 `source__{model}` 分槽，GLM 数字不会覆盖 DeepSeek 主表。
+- 百炼同账号直接改 `DASHSCOPE_MODEL=glm-5.2` 仍返回 HTTP 400 `Arrearage`（2026-09-13 复测）。
+
+**没有 GLM-5.2 有效跑分。** 环境里没有 `ZHIPU_API_KEY`。恢复百炼账单或提供智谱密钥后，再跑：
+
+```bash
+export ZHIPU_API_KEY=...
+unset HUICHA_LLM_STUB
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v3 --limit 5 --no-write
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v3
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v4
+```
+
+跨模型不得与 DeepSeek 的 0.96 / 0.99 混比。

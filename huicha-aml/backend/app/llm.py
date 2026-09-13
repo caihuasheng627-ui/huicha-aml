@@ -16,6 +16,9 @@ from .validator import DELTA_BOUND, filter_challenger_items
 
 _ENV_LOADED = False
 DEFAULT_MODEL = "deepseek-v4-flash-0731"
+DEFAULT_DASHSCOPE_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DEFAULT_ZHIPU_BASE = "https://open.bigmodel.cn/api/paas/v4"
+DEFAULT_ZHIPU_MODEL = "glm-5.2"
 
 
 def _load_env() -> None:
@@ -36,17 +39,39 @@ def _load_env() -> None:
             os.environ[key] = val
 
 
+def _zhipu_key() -> str:
+    _load_env()
+    return (os.getenv("ZHIPU_API_KEY") or os.getenv("BIGMODEL_API_KEY") or "").strip()
+
+
 def require_api_key() -> str:
     _load_env()
+    if _zhipu_key():
+        return _zhipu_key()
     api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("未配置 DASHSCOPE_API_KEY，请在 backend/.env 填写百炼密钥")
+        raise RuntimeError("未配置 DASHSCOPE_API_KEY 或 ZHIPU_API_KEY")
     return api_key
 
 
 def llm_model() -> str:
     _load_env()
-    return os.getenv("DASHSCOPE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    explicit = (os.getenv("DASHSCOPE_MODEL") or os.getenv("ZHIPU_MODEL") or "").strip()
+    if explicit:
+        return explicit
+    if _zhipu_key():
+        return DEFAULT_ZHIPU_MODEL
+    return DEFAULT_MODEL
+
+
+def llm_base_url() -> str:
+    _load_env()
+    explicit = os.getenv("DASHSCOPE_BASE_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    if _zhipu_key():
+        return DEFAULT_ZHIPU_BASE
+    return DEFAULT_DASHSCOPE_BASE
 
 
 def llm_stub_enabled() -> bool:
@@ -69,9 +94,9 @@ def llm_mode() -> str:
         return "stub"
     try:
         require_api_key()
-        return "bailian"
     except RuntimeError:
         return "off"
+    return "zhipu" if "bigmodel.cn" in llm_base_url() else "bailian"
 
 
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
@@ -220,8 +245,9 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
     if llm_stub_enabled():
         return _offline_stub_chat(messages)
     api_key = require_api_key()
-    base = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+    base = llm_base_url()
     model = llm_model()
+    timeout_s = 90 if model.startswith("glm") else 45
     payload = {
         "model": model,
         "messages": messages,
@@ -238,21 +264,22 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
         },
         method="POST",
     )
+    vendor = "智谱" if "bigmodel.cn" in base else "百炼"
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"百炼调用失败 model={model} HTTP {e.code}: {detail[:400]}") from e
+        raise RuntimeError(f"{vendor}调用失败 model={model} HTTP {e.code}: {detail[:400]}") from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise RuntimeError(f"百炼网络错误 model={model}: {e}") from e
+        raise RuntimeError(f"{vendor}网络错误 model={model}: {e}") from e
     try:
         msg = data["choices"][0]["message"]
         content = (msg.get("content") or "").strip()
         if not content:
             content = (msg.get("reasoning_content") or "").strip()
         if not content:
-            raise RuntimeError(f"百炼返回空 content model={model}")
+            raise RuntimeError(f"{vendor}返回空 content model={model}")
         usage = data.get("usage") or {}
         return content, {
             "prompt_tokens": usage.get("prompt_tokens"),
@@ -263,7 +290,7 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
             "model": model,
         }
     except (KeyError, IndexError, TypeError, AttributeError) as e:
-        raise RuntimeError(f"百炼返回无法解析 model={model}: {data!r}"[:500]) from e
+        raise RuntimeError(f"{vendor}返回无法解析 model={model}: {data!r}"[:500]) from e
 
 
 def _strip_fence(text: str) -> str:

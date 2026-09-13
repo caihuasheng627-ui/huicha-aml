@@ -206,6 +206,34 @@ def test_enrich_judge_uses_product_prompt_version_by_default(monkeypatch):
     assert prompt_version("judge") == "judge_v3"
 
 
+def test_result_source_key_namespaces_non_deepseek_models():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "experiments"))
+    import benchmark as bench
+
+    deepseek = {"source": "narrative_vignette_blind_struct", "model": "deepseek-v4-flash-0731"}
+    glm = {"source": "narrative_vignette_blind_struct", "model": "glm-5.2"}
+    assert bench._result_source_key(deepseek) == "narrative_vignette_blind_struct"
+    assert bench._result_source_key(glm) == "narrative_vignette_blind_struct__glm-5.2"
+
+
+def test_zhipu_key_routes_to_glm52(monkeypatch):
+    import app.llm as llm_mod
+
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("DASHSCOPE_MODEL", raising=False)
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    monkeypatch.setenv("ZHIPU_API_KEY", "sk-zhipu-test")
+    llm_mod._ENV_LOADED = False
+    assert llm_mod.require_api_key() == "sk-zhipu-test"
+    assert llm_mod.llm_model() == "glm-5.2"
+    assert "bigmodel.cn" in llm_mod.llm_base_url()
+    assert llm_mod.llm_mode() == "zhipu"
+
+
 def test_judge_v4_is_ablation_only_and_avoids_v3_exemplars():
     from app.prompts import PROMPTS, prompt_version
 

@@ -35,7 +35,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
+import { ApproachComparison, CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 import SystemManual from "./SystemManual.jsx";
@@ -290,6 +290,43 @@ function conclusionTone(label) {
   if (label === "排除") return "ok";
   if (label === "继续观察") return "warn";
   return "risk";
+}
+
+function MetricBoard({ metrics, feedback }) {
+  const quality = metrics?.quality || {};
+  const decided = feedback?.decisions
+    ? feedback.decisions.confirm + feedback.decisions.modify + feedback.decisions.reject
+    : 0;
+  const cards = [
+    ["证据契约", quality.evidence_contract_pass_rate == null ? "—" : `${Math.round(quality.evidence_contract_pass_rate * 100)}%`, `${quality.evidence_contract_checked || 0} 次校验`],
+    ["拦截无效 Claim", quality.rejected_claims ?? "—", "伪造/跨案/谓词失败"],
+    ["事实回查阻断", quality.fact_check_blocked ?? "—", "阻止直接签发"],
+    ["平均调查耗时", quality.avg_investigation_ms == null ? "—" : `${quality.avg_investigation_ms} ms`, "从调查开始到草稿"],
+    ["人工采纳率", decided ? `${Math.round((feedback.decisions.confirm / decided) * 100)}%` : "—", decided ? `${decided} 次已处置` : "尚无人工样本"],
+  ];
+  return (
+    <section className="metric-board" aria-label="系统成效指标">
+      <div className="metric-board-hd">
+        <div>
+          <b>系统成效</b>
+          <span>把防错机制变成可核验指标</span>
+        </div>
+        <em>synthetic · 非生产准确率</em>
+      </div>
+      <div className="metric-grid">
+        {cards.map(([label, value, note]) => (
+          <div className="metric-card" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{note}</small>
+          </div>
+        ))}
+      </div>
+      <div className="metric-foot">
+        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
+      </div>
+    </section>
+  );
 }
 
 export default function App() {
@@ -769,6 +806,7 @@ export default function App() {
               {metrics?.labeled ? ` · 模板精标 ${metrics.labeled}` : ""}
             </div>
           )}
+          <MetricBoard metrics={metrics} feedback={feedback} />
           <Input
             size="small"
             allowClear
@@ -914,6 +952,13 @@ export default function App() {
                   </span>
                 )}
               </div>
+              {inv && (
+                <ApproachComparison
+                  validation={inv.judge_validation}
+                  guardrails={inv.policy_guardrails}
+                  factIssues={inv.fact_issues}
+                />
+              )}
               {inv && caseChallengerEnabled === false && (
                 <Alert
                   type="warning"
@@ -1043,7 +1088,14 @@ export default function App() {
                 selected={selected}
                 onSelect={selectEvidence}
               />
-              <Graph key={showTheater ? "pending" : current} graph={inv.graph} selected={selected} onSelect={selectEvidence} formatYuan={yuan} />
+              <Graph
+                key={showTheater ? "pending" : current}
+                graph={inv.graph}
+                selected={selected}
+                riskFactors={inv.risk?.factors}
+                onSelect={selectEvidence}
+                formatYuan={yuan}
+              />
               <EvidenceLists
                 graph={inv.evidence_graph}
                 claims={inv.claims}

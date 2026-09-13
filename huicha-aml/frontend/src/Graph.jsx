@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Modal } from "antd";
 import { GRAPH_H, GRAPH_W, initialLayout, nodeCaption } from "./graphLayout.js";
 
 function isChannelToken(id, prefix) {
@@ -56,7 +57,7 @@ function clientToSvg(svg, ev) {
   return { x: p.x, y: p.y };
 }
 
-export default function Graph({ graph, selected, onSelect, formatYuan = (n) => String(n) }) {
+export default function Graph({ graph, selected, onSelect, riskFactors = [], formatYuan = (n) => String(n) }) {
   const nodes = graph?.nodes || [];
   const edges = graph?.edges || [];
   const nodeKey = nodes.map((n) => n.id).join("|");
@@ -64,6 +65,7 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
   const seed = useMemo(() => initialLayout(nodes, edges), [nodeKey, edgeKey]);
   const [pos, setPos] = useState(seed);
   const [hover, setHover] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const drag = useRef(null);
   const svgRef = useRef(null);
 
@@ -110,14 +112,22 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
     if (!d?.moved) onSelect?.(id);
   }
 
-  return (
-    <div className="graph">
-      <div className="graph-toolbar">
-        <span>拖动节点展开路径，点击回溯流水</span>
-        <button type="button" className="graph-reset" onClick={() => setPos(seed)}>
-          复位
-        </button>
-      </div>
+  function renderGraph() {
+    return (
+      <div className={`graph${expanded ? " graph-expanded" : ""}`}>
+        <div className="graph-toolbar">
+          <span>拖动节点展开路径，点击回溯流水</span>
+          <div className="graph-actions">
+            <button type="button" className="graph-reset" onClick={() => setPos(seed)}>
+              复位
+            </button>
+            {!expanded && (
+              <button type="button" className="graph-expand" onClick={() => setExpanded(true)}>
+                放大查看
+              </button>
+            )}
+          </div>
+        </div>
       <svg
         ref={svgRef}
         className="graph-live"
@@ -145,6 +155,11 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
           const mx = (s.x1 + s.x2) / 2;
           const my = (s.y1 + s.y2) / 2;
           const thick = 1 + (Number(e.amount) / maxAmt) * 2.4;
+          const edgeFactors = expanded
+            ? riskFactors.filter((factor) =>
+                (factor.evidence_ids || []).some((id) => e.tx_ids?.includes(id) || e.id === id),
+              )
+            : [];
           return (
             <g
               key={`${e.source}-${e.target}-${e.id}`}
@@ -167,6 +182,23 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
                   {e.count > 1 ? ` · ${e.count}笔` : ""}
                 </text>
               )}
+              {edgeFactors.slice(0, 2).map((factor, index) => {
+                const label = `疑点 ${factor.label || factor.code || "规则命中"}`;
+                const width = Math.min(132, Math.max(48, label.length * 7 + 12));
+                return (
+                  <g
+                    key={`${e.id}-${factor.code || index}`}
+                    className="graph-callout graph-edge-callout"
+                    transform={`translate(${mx - width / 2} ${my + 8 + index * 15})`}
+                    pointerEvents="none"
+                  >
+                    <rect width={width} height="13" rx="2" />
+                    <text x={width / 2} y="9" textAnchor="middle">
+                      {label.slice(0, 20)}
+                    </text>
+                  </g>
+                );
+              })}
             </g>
           );
         })}
@@ -174,6 +206,15 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
           const hot = nodeHot(n, selected, hotEdges) || n.id === hover;
           const cap = nodeCaption(n);
           const r = nodeRadius(n, hot);
+          const nodeFlags = [];
+          if (expanded && n.kind === "watch") nodeFlags.push("名单命中");
+          if (
+            expanded &&
+            String(n.id).startsWith("UNK-") &&
+            riskFactors.some((factor) => factor.code === "unregistered-counterparty")
+          ) {
+            nodeFlags.push("未登记对手");
+          }
           return (
             <g
               key={n.id}
@@ -205,6 +246,15 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
                   {cap.secondary}
                 </text>
               ) : null}
+              {nodeFlags.length > 0 && (
+                <g className="graph-callout graph-node-callout" pointerEvents="none">
+                  <line x1={n.x + r} y1={n.y - r} x2={n.x + r + 8} y2={n.y - r - 8} />
+                  <rect x={n.x + r + 7} y={n.y - r - 22} width="68" height="14" rx="2" />
+                  <text x={n.x + r + 41} y={n.y - r - 12} textAnchor="middle">
+                    {nodeFlags[0]}
+                  </text>
+                </g>
+              )}
             </g>
           );
         })}
@@ -237,6 +287,24 @@ export default function Graph({ graph, selected, onSelect, formatYuan = (n) => S
           <span>资金沿箭头流动。同名过桥账户用编号区分，可拖开重叠节点。</span>
         )}
       </div>
-    </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {!expanded && renderGraph()}
+      <Modal
+        title="案例回溯 · 关系图谱"
+        open={expanded}
+        onCancel={() => setExpanded(false)}
+        footer={null}
+        destroyOnClose
+        width={1120}
+        centered
+      >
+        {expanded && renderGraph()}
+      </Modal>
+    </>
   );
 }

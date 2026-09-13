@@ -95,6 +95,8 @@ Case → Planner → Evidence Collector → Indicator Analyst
 
 工作台快捷键 1–5：案例 A/B/C/F/L。
 
+比赛现场 3 分钟完整演示：见 [比赛演示脚本-3分钟.md](比赛演示脚本-3分钟.md)，主线固定为案例 L，覆盖证据链、AI Judge、反事实质询、政策护栏、人工签发和审计回溯。
+
 ## 11. Installation
 
 ```bash

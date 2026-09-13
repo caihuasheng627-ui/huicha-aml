@@ -588,6 +588,23 @@ def metrics(db: Session = Depends(get_db)):
         by_status[a.status] = by_status.get(a.status, 0) + 1
     signed = sum(1 for i in invs if i.human_decision == "confirm")
     labeled = sum(1 for a in alerts if (a.gold_label or ""))
+    parsed_payloads = []
+    for inv in invs:
+        try:
+            parsed_payloads.append(json.loads(inv.payload_json or "{}"))
+        except (TypeError, json.JSONDecodeError):
+            continue
+    validations = [p.get("judge_validation") or {} for p in parsed_payloads]
+    validated = [v for v in validations if v.get("score_kind") == "evidence_contract"]
+    rejected_claims = [
+        claim
+        for p in parsed_payloads
+        for claim in (p.get("rejected_claims") or [])
+    ]
+    fact_blocked = sum(1 for p in parsed_payloads if p.get("fact_issues"))
+    elapsed = [float(p["elapsed_ms"]) for p in parsed_payloads if p.get("elapsed_ms") is not None]
+    validation_audits = db.query(AuditLog).filter(AuditLog.action == "validator").count()
+    decision_audits = db.query(AuditLog).filter(AuditLog.action == "decide").count()
     return {
         "alerts": len(alerts),
         "labeled": labeled,
@@ -596,6 +613,18 @@ def metrics(db: Session = Depends(get_db)):
         "drafts": len(invs),
         "signed": signed,
         "by_status": by_status,
+        "quality": {
+            "evidence_contract_pass_rate": round(
+                sum(1 for v in validated if v.get("passed")) / len(validated), 4
+            ) if validated else None,
+            "evidence_contract_checked": len(validated),
+            "rejected_claims": len(rejected_claims),
+            "fact_check_blocked": fact_blocked,
+            "avg_investigation_ms": round(sum(elapsed) / len(elapsed)) if elapsed else None,
+            "audited_validations": validation_audits,
+            "human_decisions": decision_audits,
+        },
+        "quality_note": "质量指标来自当前合成案件草稿与审计记录，不代表生产准确率",
     }
 
 

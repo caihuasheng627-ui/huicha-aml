@@ -235,6 +235,47 @@ const DECISION_LABEL = {
   suggest_report: "建议上报",
 };
 
+export function ApproachComparison({ validation, guardrails, factIssues }) {
+  const evidenceGate = validation?.passed ? "已通过本案证据校验" : "未通过则阻断建议";
+  const policyGate = guardrails?.overridden ? "护栏已覆盖模型建议" : "护栏检查未覆盖结论";
+  const factGate = factIssues?.length ? "事实回查失败，禁止签发" : "事实回查通过后可人工签发";
+  const rows = [
+    ["结论来源", "直接生成结论", "只在本轮工具证据范围内给建议"],
+    ["事实依据", "依赖上下文，难以逐项回溯", "理由绑定证据编号，可点击回到原始交易"],
+    ["错误控制", "主要依赖人工阅读发现问题", `${evidenceGate}；跨案或伪造引用不进结论`],
+    ["风险边界", "可能把模型输出当成最终结果", `${policyGate}；${factGate}`],
+    ["最终动作", "容易形成自动化闭环", "AI 只能生成草稿，人工身份签发且写入审计"],
+  ];
+  return (
+    <section className="approach-compare" aria-label="普通 AI 与循证慧查对照">
+      <div className="approach-compare-hd">
+        <div>
+          <b>普通 AI vs 循证慧查</b>
+          <span>同样使用模型，控制边界完全不同</span>
+        </div>
+        <em>本案实时状态</em>
+      </div>
+      <div className="approach-compare-grid">
+        <div className="approach-col approach-col-basic">
+          <strong>普通 AI</strong>
+          <small>生成优先</small>
+        </div>
+        <div className="approach-col approach-col-huicha">
+          <strong>循证慧查</strong>
+          <small>证据约束 + 人工负责</small>
+        </div>
+        {rows.map(([label, basic, huicha]) => (
+          <div className="approach-row" key={label}>
+            <b>{label}</b>
+            <span className="approach-basic">{basic}</span>
+            <span className="approach-huicha">{huicha}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function materialGaps(list) {
   return (list || []).filter((t) => /[\u4e00-\u9fff]/.test(t) && !/^(EV|TX|KB|ALT)-/i.test(String(t).trim()));
 }

@@ -174,6 +174,7 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/struct_set.json` · `runs/20260912T235835Z_blind_struct_judge_v{2,3}.jsonl` | 结构盲区 hold-out |
 | `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
 | `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
+| `runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl` | judge_v4 消融（主集/盲区；结构盲区因欠费中断） |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
 
 ---
@@ -281,6 +282,16 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 
 仍是合成对照，11 个族级金标，禁止写成生产能力。
 
-### 10.7 `judge_v4` 三套集对比（待写入）
+### 10.7 `judge_v4` 消融（默认仍为 `judge_v3`）
 
-主集 / 盲区 / 结构盲区的 v4 全量数字跑完后补表。切默认的条件未变：三套都不低于 v3，且观察偏严减少。目前**不提议**切换线上默认。
+模型 `deepseek-v4-flash-0731`，`cached=False`。日志：`runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl`。结构盲区 v4 在开跑后全部 HTTP 400 `Arrearage`（账号欠费），**没有有效数字**，不得用失败 jsonl 填表。
+
+| 集 | v3 Macro-F1 | v4 Macro-F1 | v3 observe 召回 | v4 observe 召回 | v4 相对 v3 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 主集 | **0.9662** | 0.9480 | 0.8636 | 0.8372 | 低于 v3；`inheritance_partial` 偏严 6→7；parse_failures 5→10 |
+| 盲区 | 0.9286 | **0.9940** | 0.7436 | **1.0000** | 观察族 10 条偏严清零；仅 `fx_split` 1 条降观察 |
+| 结构盲区 | 0.9630 | — | 0.8718 | — | 未跑成（欠费） |
+
+切默认条件是「三套都不低于 v3，且观察偏严减少」。主集未达标，结构盲区缺失，主集观察族偏严没有变好。**不提议切换线上默认。**
+
+盲区上的 0.99 说明「口头陈述不一致不得单独升档」这条约束在 *docs_pending / first_large* 上有效，但还不能外推到主集继承族，更不能在欠费中断后写成全面胜利。默认继续 `judge_v3`。

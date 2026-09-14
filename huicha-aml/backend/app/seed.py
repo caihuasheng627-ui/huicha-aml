@@ -9,6 +9,7 @@ def seed_if_empty(db: Session) -> None:
         # 旧库可能缺扩展集 / gold_label：尽量补齐
         seed_extended_cases(db)
         seed_layering_case(db)
+        seed_high_volume_case(db)
         _backfill_gold(db)
         return
 
@@ -387,6 +388,7 @@ def seed_if_empty(db: Session) -> None:
     db.commit()
     seed_extended_cases(db)
     seed_layering_case(db)
+    seed_high_volume_case(db)
 
 
 def _backfill_gold(db: Session) -> None:
@@ -398,6 +400,7 @@ def _backfill_gold(db: Session) -> None:
         "ALT-E-20260908": "exclude",
         "ALT-F-20260910": "observe",
         "ALT-L-20260910": "suggest_report",
+        "ALT-H-20260910": "suggest_report",
     }
     changed = False
     for aid, gold in mapping.items():
@@ -465,6 +468,104 @@ def seed_layering_case(db: Session) -> None:
             status="pending",
             demo_tag="L",
             upstream="合成规则：短时多层快进快出",
+            gold_label="suggest_report",
+        )
+    )
+    db.commit()
+
+
+def seed_high_volume_case(db: Session) -> None:
+    """高频经营户嵌拆分：约 150 笔日常 POS/供应商流水，嵌入 8 笔贴线现金与 1 笔夜间转出。"""
+    if db.get(Alert, "ALT-H-20260910"):
+        return
+    if not db.get(Customer, "C-H"):
+        db.add(
+            Customer(
+                id="C-H",
+                name="江南连锁商超结算户（合成）",
+                kind="enterprise",
+                industry="日用百货批发",
+                kyc_level="普通",
+                opened_at="2019-04-08",
+                city="苏州",
+                summary="合成高频结算户：窗口内约 150 笔 POS/采购流水，嵌入 8 笔 4.9–5 万现金存入及一笔夜间转至未登记对手。用于演示抽数层。",
+                watchlist=0,
+            )
+        )
+    if not db.get(Account, "6222-H-7701"):
+        db.add(Account(id="6222-H-7701", customer_id="C-H", opened_at="2019-04-08"))
+
+    txs: list[Transaction] = []
+    for i in range(1, 132):
+        day = 15 + ((i - 1) // 2)
+        month = 6
+        if day > 30:
+            month, day = 7, day - 30
+        if day > 31:
+            month, day = 8, day - 31
+        hour = 10 if i % 2 else 16
+        txs.append(
+            Transaction(
+                id=f"TX-H-POS-{i:03d}",
+                from_account="POS-H",
+                to_account="6222-H-7701",
+                amount=1800 + (i % 17) * 90,
+                occurred_at=f"2026-{month:02d}-{day:02d} {hour:02d}:{(i * 3) % 50:02d}:00",
+                channel="POS",
+                remark="营业收入",
+            )
+        )
+    for i in range(1, 11):
+        txs.append(
+            Transaction(
+                id=f"TX-H-SUP-{i:02d}",
+                from_account="6222-H-7701",
+                to_account="6222-SUP",
+                amount=148000 + i * 1200,
+                occurred_at=f"2026-07-{i * 2:02d} 14:{10 + i}:00",
+                channel="对公转账",
+                remark="向上游采购",
+            )
+        )
+    cash_amts = (49000, 49200, 49500, 49800, 49100, 49300, 49600, 49700)
+    for i, amt in enumerate(cash_amts, start=1):
+        txs.append(
+            Transaction(
+                id=f"TX-H-CASH-{i:02d}",
+                from_account=f"CASH-H{i:02d}",
+                to_account="6222-H-7701",
+                amount=amt,
+                occurred_at=f"2026-09-0{i} 09:{10 + i}:00",
+                channel="ATM/现金",
+                remark="存入",
+            )
+        )
+    txs.append(
+        Transaction(
+            id="TX-H-NIGHT-01",
+            from_account="6222-H-7701",
+            to_account="UNK-H-01",
+            amount=396000,
+            occurred_at="2026-09-08 22:18:00",
+            channel="网银",
+            remark="转出",
+        )
+    )
+    for row in txs:
+        if not db.get(Transaction, row.id):
+            db.add(row)
+    db.add(
+        Alert(
+            id="ALT-H-20260910",
+            customer_id="C-H",
+            account_id="6222-H-7701",
+            alert_type="拆分存入后集中转出",
+            title="高频经营户窗口内嵌贴线现金后夜间转出（合成 Demo）",
+            amount=396000,
+            created_at="2026-09-10 08:20:00",
+            status="pending",
+            demo_tag="H",
+            upstream="合成规则：拆分特征 + 夜间快进快出",
             gold_label="suggest_report",
         )
     )

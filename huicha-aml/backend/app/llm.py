@@ -501,7 +501,7 @@ def enrich_challenger(
         "score_hints": score_hints,
         "allowed_evidence_ids": list(dict.fromkeys([*(t["id"] for t in facts["transactions"] if t.get("id")), *allowed_evidence]))[:80],
         "delta_bound": DELTA_BOUND,
-        "transactions": facts["transactions"][:24],
+        "transactions": facts["transactions"],
         "allowed_predicates": catalog_for_prompt(),
     }
     if privacy:
@@ -626,6 +626,8 @@ def enrich_judge(
     missing_evidence: list[str] | None = None,
     prior_issues: list[dict] | None = None,
     prompt_kind: str | None = None,
+    tx_clusters: list[dict] | None = None,
+    tx_summary: dict | None = None,
 ) -> tuple[dict, dict]:
     from .prompts import PROMPTS, prompt_version
 
@@ -644,7 +646,9 @@ def enrich_judge(
             for key in ("id", "name", "kind", "industry", "opened_at", "kyc_level", "summary")
         },
         "findings": findings,
-        "transactions": transactions[:30],
+        "transactions": list(transactions or []),
+        "transaction_summary": tx_summary or {},
+        "transaction_clusters": tx_clusters or [],
         "baseline": baseline,
         "knowledge": [
             {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}

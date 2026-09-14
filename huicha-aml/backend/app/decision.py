@@ -113,7 +113,7 @@ def verify_judge(decision: dict, *, allowed_evidence: set[str]) -> dict:
             {
                 "kind": "invalid_citation",
                 "evidence_ids": invalid,
-                "message": f"引用不属于本案工具结果：{','.join(invalid[:6])}",
+                "message": f"引用不在允许集合（进模样本或簇代表）中：{','.join(invalid[:6])}",
             }
         )
     if not decision.get("rationale"):

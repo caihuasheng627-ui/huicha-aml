@@ -230,3 +230,9 @@ export async function fetchKnowledge(q = "") {
   if (!r.ok) throw new Error(await readError(r, "无法加载知识库"));
   return r.json();
 }
+
+export async function fetchKnowledgeDoc(id) {
+  const r = await request(`/api/kb/${encodeURIComponent(id)}`);
+  if (!r.ok) throw new Error(await readError(r, "无法打开知识库条目"));
+  return r.json();
+}

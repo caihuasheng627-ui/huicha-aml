@@ -18,7 +18,7 @@ from .checklist import (
     merge_note,
 )
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
-from .knowledge import corpus_size, list_knowledge, search_knowledge
+from .knowledge import corpus_size, get_knowledge, list_knowledge, retrieval_mode, search_knowledge, search_unit_count
 from .llm import llm_mode, llm_model
 from .models import Alert, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
@@ -142,11 +142,12 @@ def health():
         "auth": auth_mode(),
         "cors": cors_origins(),
         "kb_docs": corpus_size(),
-        "kb_retrieval": "keyword-overlap",
+        "kb_search_units": search_unit_count(),
+        "kb_retrieval": retrieval_mode(),
         "limitations": [
             "无银行 SSO；演示登录绑定签发人，HUICHA_DEMO_TOKEN 为空则接口开放",
             "SQLite 文件库",
-            "知识库为公开要求转述，关键词检索，条数见 kb_docs",
+            "知识库含现行法律规章官方条款（按条切块）+ 作业转述；混合检索（关键词 + 字符 TF-IDF），目录条数见 kb_docs，检索单元见 kb_search_units",
             "告警为合成数据，gold_label 与规则模板同源",
             "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
@@ -191,10 +192,19 @@ def kb_index(q: str = ""):
     return {
         "query": q,
         "total": len(docs),
+        "search_units": search_unit_count(),
         "hits": hits,
-        "retrieval": "keyword-overlap",
-        "data_note": "synthetic-paraphrase",
+        "retrieval": retrieval_mode(),
+        "data_note": "official-statute+playbook",
     }
+
+
+@app.get("/api/kb/{doc_id}")
+def kb_doc(doc_id: str):
+    doc = get_knowledge(doc_id)
+    if not doc:
+        raise HTTPException(404, "知识库条目不存在")
+    return doc
 
 
 @app.get("/api/alerts")

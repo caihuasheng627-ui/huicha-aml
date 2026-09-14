@@ -195,11 +195,12 @@ def test_labeled_corpus_size(client):
 def test_health_reports_llm(client):
     r = client.get("/api/health")
     body = r.json()
-    assert body["llm"] == "bailian"
+    assert body["llm"] == "deepseek"
     assert body["auth"] in {"off", "demo_token"}
     assert "*" not in body["cors"]
-    assert body["kb_docs"] >= 15
-    assert body["kb_retrieval"] == "keyword-overlap"
+    assert body["kb_docs"] >= 30
+    assert body["kb_retrieval"] == "hybrid-keyword-tfidf"
+    assert body.get("kb_search_units", 0) >= body["kb_docs"]
     assert body["limitations"]
 
 

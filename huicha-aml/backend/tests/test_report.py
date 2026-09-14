@@ -27,7 +27,7 @@ def test_report_binds_evidence_and_regulation(client):
 
 
 def test_regulation_cites_carry_paraphrase_for_review():
-    """法规依据要能在前端展开核对，转述正文与生效日不能缺。"""
+    """法规依据要能在前端展开核对，正文与生效日不能缺。"""
     from app.agents import regulation_cites
     from app.knowledge import search_knowledge
 
@@ -36,7 +36,7 @@ def test_regulation_cites_carry_paraphrase_for_review():
     cites = [c.model_dump() for c in regulation_cites(hits, "2026-09-10")]
     assert len(cites) == len(hits)
     for cite in cites:
-        assert cite["regulation_id"].startswith("KB-REG-")
+        assert cite["regulation_id"].startswith("KB-")
         assert cite["evidence"] and cite["source"]
         assert cite["effective_date"] and cite["as_of"] == "2026-09-10"
 

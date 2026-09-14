@@ -143,7 +143,7 @@ export default function SystemManual({ open, onClose, health }) {
               模型 {health?.model || health?.llm || "未配置"}
             </Tag>
             <Tag>知识库 {health?.kb_docs ?? "—"} 条</Tag>
-            <Tag>检索 {health?.kb_retrieval || "keyword-overlap"}</Tag>
+            <Tag>检索 {health?.kb_retrieval || "hybrid-keyword-tfidf"}</Tag>
             <Tag color="orange">数据 {health?.data_note || "synthetic"}</Tag>
           </div>
           <p className="manual-note">{health?.stack || "FastAPI + SQLite + React（竞赛原型）"}</p>
@@ -155,7 +155,7 @@ export default function SystemManual({ open, onClose, health }) {
             {(health?.limitations || []).map((x) => (
               <li key={x}>{x}</li>
             ))}
-            <li>法规依据为公开要求转述，不是法规全文，展开后仍须回原文核对。</li>
+            <li>法规依据含现行法律规章官方条款（按条切块混合检索）与作业转述；签发前仍须回原文核对。</li>
             <li>本台只出调查草稿，不是监管结论，也不产生报送报文。</li>
           </ul>
         </section>

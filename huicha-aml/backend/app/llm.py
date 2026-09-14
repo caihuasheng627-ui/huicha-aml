@@ -15,7 +15,8 @@ from .privacy import PrivacyMap
 from .validator import DELTA_BOUND, filter_challenger_items
 
 _ENV_LOADED = False
-DEFAULT_MODEL = "deepseek-v4-flash-0731"
+DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 
 
 def _load_env() -> None:
@@ -38,15 +39,27 @@ def _load_env() -> None:
 
 def require_api_key() -> str:
     _load_env()
-    api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
+    api_key = (os.getenv("DEEPSEEK_API_KEY") or os.getenv("DASHSCOPE_API_KEY") or "").strip()
     if not api_key:
-        raise RuntimeError("未配置 DASHSCOPE_API_KEY，请在 backend/.env 填写百炼密钥")
+        raise RuntimeError("未配置 DEEPSEEK_API_KEY，请在 backend/.env 填写 DeepSeek 密钥")
     return api_key
+
+
+def llm_base_url() -> str:
+    _load_env()
+    return (
+        os.getenv("LLM_BASE_URL")
+        or os.getenv("DEEPSEEK_BASE_URL")
+        or os.getenv("DASHSCOPE_BASE_URL")
+        or DEFAULT_BASE_URL
+    ).rstrip("/")
 
 
 def llm_model() -> str:
     _load_env()
-    return os.getenv("DASHSCOPE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    return (
+        os.getenv("DEEPSEEK_MODEL") or os.getenv("DASHSCOPE_MODEL") or DEFAULT_MODEL
+    ).strip() or DEFAULT_MODEL
 
 
 def llm_stub_enabled() -> bool:
@@ -69,9 +82,22 @@ def llm_mode() -> str:
         return "stub"
     try:
         require_api_key()
-        return "bailian"
     except RuntimeError:
         return "off"
+    if "dashscope" in llm_base_url().lower():
+        return "bailian"
+    return "deepseek"
+
+
+def llm_provider_label() -> str:
+    mode = llm_mode()
+    if mode == "bailian":
+        return "阿里云百炼 / DashScope"
+    if mode == "stub":
+        return "内置 stub"
+    if mode == "off":
+        return "未配置"
+    return "DeepSeek"
 
 
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
@@ -220,15 +246,16 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
     if llm_stub_enabled():
         return _offline_stub_chat(messages)
     api_key = require_api_key()
-    base = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+    base = llm_base_url()
     model = llm_model()
     payload = {
         "model": model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "enable_thinking": False,
     }
+    if "dashscope" in base.lower():
+        payload["enable_thinking"] = False
     req = urllib.request.Request(
         f"{base}/chat/completions",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -243,16 +270,16 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"百炼调用失败 model={model} HTTP {e.code}: {detail[:400]}") from e
+        raise RuntimeError(f"模型调用失败 model={model} HTTP {e.code}: {detail[:400]}") from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise RuntimeError(f"百炼网络错误 model={model}: {e}") from e
+        raise RuntimeError(f"模型网络错误 model={model}: {e}") from e
     try:
         msg = data["choices"][0]["message"]
         content = (msg.get("content") or "").strip()
         if not content:
             content = (msg.get("reasoning_content") or "").strip()
         if not content:
-            raise RuntimeError(f"百炼返回空 content model={model}")
+            raise RuntimeError(f"模型返回空 content model={model}")
         usage = data.get("usage") or {}
         return content, {
             "prompt_tokens": usage.get("prompt_tokens"),
@@ -263,7 +290,7 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
             "model": model,
         }
     except (KeyError, IndexError, TypeError, AttributeError) as e:
-        raise RuntimeError(f"百炼返回无法解析 model={model}: {data!r}"[:500]) from e
+        raise RuntimeError(f"模型返回无法解析 model={model}: {data!r}"[:500]) from e
 
 
 def _strip_fence(text: str) -> str:
@@ -562,7 +589,14 @@ def enrich_judge(
     allowed_evidence: list[str],
     missing_evidence: list[str] | None = None,
     prior_issues: list[dict] | None = None,
+    prompt_kind: str | None = None,
 ) -> tuple[dict, dict]:
+    from .prompts import PROMPTS, prompt_version
+
+    # prompt_kind 仅供实验消融覆盖；产品路径始终用 prompt_version("judge")。
+    kind = prompt_kind or prompt_version("judge")
+    if kind not in PROMPTS or not kind.startswith("judge"):
+        raise ValueError(f"未知 judge prompt 版本：{kind}")
     context = {
         "alert_trigger": {
             "type": alert.get("alert_type"),
@@ -595,17 +629,15 @@ def enrich_judge(
     }
     if privacy:
         context = privacy.mask_obj(context)
-    key = None if prior_issues else _cache_key("judge_v2", context)
+    key = None if prior_issues else _cache_key(kind, context)
     cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
         data = _extract_json_object(text)
     else:
-        from .prompts import PROMPTS
-
         text, usage = chat(
             [
-                {"role": "system", "content": PROMPTS["judge_v2"]},
+                {"role": "system", "content": PROMPTS[kind]},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
             temperature=0.0,
@@ -613,7 +645,7 @@ def enrich_judge(
         )
         data = _parse_model_json(text, usage, role="Judge")
         if key:
-            _cache_put(db, key, "judge_v2", text, usage)
+            _cache_put(db, key, kind, text, usage)
     return _unmask_value(data, privacy), usage
 
 

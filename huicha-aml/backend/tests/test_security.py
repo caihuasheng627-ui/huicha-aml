@@ -31,7 +31,7 @@ def test_demo_token_guard(client, monkeypatch):
     assert health.json()["auth"] == "demo_token"
 
 
-def test_export_rejects_query_token(client, monkeypatch):
+def test_export_rejects_query_token(client, monkeypatch, auth_headers):
     monkeypatch.setenv("HUICHA_DEMO_TOKEN", "demo-secret")
     client.post(
         "/api/alerts/ALT-B-20260910/investigate",
@@ -42,10 +42,26 @@ def test_export_rejects_query_token(client, monkeypatch):
     assert blocked.status_code == 401
     via_query = client.get("/api/alerts/ALT-B-20260910/export?token=demo-secret")
     assert via_query.status_code == 401
-    ok = client.get("/api/alerts/ALT-B-20260910/export", headers={"X-Huicha-Token": "demo-secret"})
+    token_only = client.get("/api/alerts/ALT-B-20260910/export", headers={"X-Huicha-Token": "demo-secret"})
+    assert token_only.status_code == 401
+    ok = client.get(
+        "/api/alerts/ALT-B-20260910/export",
+        headers={**auth_headers, "X-Huicha-Token": "demo-secret"},
+    )
     assert ok.status_code == 200
     assert "规则分" in ok.text
     assert "非校准置信度" in ok.text
+    assert "进模脱敏" in ok.text
+    assert "导出人" in ok.text
+
+
+def test_export_requires_login(client, auth_headers):
+    client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    blocked = client.get("/api/alerts/ALT-B-20260910/export")
+    assert blocked.status_code == 401
+    ok = client.get("/api/alerts/ALT-B-20260910/export", headers=auth_headers)
+    assert ok.status_code == 200
+    assert "进模脱敏" in ok.text
 
 
 def test_knowledge_is_small_keyword_corpus():

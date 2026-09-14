@@ -559,6 +559,7 @@ def _run_investigation_v3(
     plan = [
         f"按告警类型选择只读工具：{'、'.join(planned)}",
         "从流水、KYC、图谱和知识库提取支持/反向/缺失证据",
+        "Privacy：姓名/账号/客户号占位后再出站，检漏失败则中止",
         "慧查agent 输出完整三档建议与逐条引用",
         "Skeptic 校验证据契约并执行一次关键证据反事实",
         "政策护栏只作否决或升级，不参与加权",
@@ -583,6 +584,19 @@ def _run_investigation_v3(
                 f"工具：{name}" for name in planned
             ] + [
                 f"抽数：{sampling['summary']['omitted']} 笔未进模，簇合计 {sampling['summary']['in_count']} 入 / {sampling['summary']['out_count']} 出",
+            ],
+        },
+        {
+            "role": "Privacy",
+            "title": "进模脱敏与出站检漏",
+            "content": (
+                f"已登记姓名 {len(privacy.name_to_mask)}、账号 {len(privacy.acct_to_mask)}、"
+                f"客户号 {len(privacy.customer_to_mask)}；出站 {privacy.egress_calls} 次，未放行明文。"
+            ),
+            "items": [
+                "姓名 → CLIENT_00n，账号 → ACCOUNT_00n，客户号 → CUST_00n",
+                "交易编号 TX-* 保留，供引用校验",
+                "工作台与签发稿仍为受控明文；SQLite 不加密",
             ],
         },
         {
@@ -706,7 +720,7 @@ def _run_investigation_v3(
             "fact_retry": fact_retry,
             "usage": {"judge": judge_usage, "reporter": reporter_usage},
         },
-        "privacy": {"masked_names": len(privacy.name_to_mask), "masked_accounts": len(privacy.acct_to_mask)},
+        "privacy": privacy.receipt(),
         "conclusion": conclusion,
         "conclusion_label": CONCLUSION_LABEL[conclusion],
         "confidence": round(confidence, 2),
@@ -825,6 +839,7 @@ def _run_investigation_inner(
         "查询对手方一度关联" if "get_graph" in planned else "（本类型跳过图谱）",
         "名单命中" if "check_watchlist" in planned else "（本类型跳过名单）",
         "Analyst 模式分析",
+        "Privacy：姓名/账号占位后再出站",
         "Challenger：规则先验 + 模型有界 delta" if use_challenger else "跳过 Challenger（消融）",
         "Validator 校验 Claim→Evidence",
         "Reporter 要素草稿 + 事实回查（脱敏进模）",
@@ -1089,6 +1104,20 @@ def _run_investigation_inner(
 
     steps.append(
         {
+            "role": "Privacy",
+            "title": "进模脱敏与出站检漏",
+            "content": (
+                f"已登记姓名 {len(privacy.name_to_mask)}、账号 {len(privacy.acct_to_mask)}、"
+                f"客户号 {len(privacy.customer_to_mask)}；出站 {privacy.egress_calls} 次，未放行明文。"
+            ),
+            "items": [
+                "姓名 → CLIENT_00n，账号 → ACCOUNT_00n，客户号 → CUST_00n",
+                "交易编号 TX-* 保留，供引用校验",
+            ],
+        }
+    )
+    steps.append(
+        {
             "role": "Reporter",
             "title": "监管要素草稿 + 事实回查",
             "content": f"理由由 {llm_provider_label()} {llm_model()} 生成（脱敏进模）；事实不匹配不可签发。",
@@ -1215,7 +1244,7 @@ def _run_investigation_inner(
             "fact_retry": fact_retry,
             "usage": {"challenger": challenger_usage if use_challenger else None, "reporter": reporter_usage},
         },
-        "privacy": {"masked_names": len(privacy.name_to_mask), "masked_accounts": len(privacy.acct_to_mask)},
+        "privacy": privacy.receipt(),
         "conclusion": conclusion,
         "conclusion_label": CONCLUSION_LABEL[conclusion],
         "confidence": round(score, 2),

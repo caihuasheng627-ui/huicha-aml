@@ -32,6 +32,7 @@ from .security import (
     require_user,
     resolve_session,
 )
+from .privacy import POLICY_VERSION, PrivacyLeakError
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -91,7 +92,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="循证慧查", version="2.1.0", lifespan=lifespan)
+app = FastAPI(title="循证慧查", version="2.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
@@ -137,16 +138,18 @@ def health():
         "llm": llm_mode(),
         "model": llm_model() if llm_mode() != "off" else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "data_note": "synthetic",
         "auth": auth_mode(),
+        "privacy": {"policy": POLICY_VERSION, "llm_egress": "mask+assert"},
         "cors": cors_origins(),
         "kb_docs": corpus_size(),
         "kb_search_units": search_unit_count(),
         "kb_retrieval": retrieval_mode(),
         "limitations": [
-            "无银行 SSO；演示登录绑定签发人，HUICHA_DEMO_TOKEN 为空则接口开放",
-            "SQLite 文件库",
+            "无银行 SSO；演示登录绑定签发人与导出，HUICHA_DEMO_TOKEN 为空则读接口开放",
+            "SQLite 文件库，调查载荷明文存储，不是银行级加密",
+            "LLM 出站经 PrivacyMap 脱敏并检漏；工作台展示受控明文",
             "知识库含现行法律规章官方条款（按条切块）+ 作业转述；混合检索（关键词 + 字符 TF-IDF），目录条数见 kb_docs，检索单元见 kb_search_units",
             "告警为合成数据，gold_label 与规则模板同源",
             "Challenger 调分须封闭谓词在本案快照上执行为真",
@@ -317,6 +320,8 @@ def investigate(
             inject_hallucination=inject_hallucination,
             experiment_mode=experiment_mode,
         )
+    except PrivacyLeakError as e:
+        raise HTTPException(502, str(e)) from e
     except RuntimeError as e:
         raise HTTPException(502, str(e)) from e
     inv = get_investigation(db, alert_id)
@@ -375,6 +380,7 @@ def investigate(
                 "validator_result": validator,
                 "counterfactual": result.get("counterfactual") or {},
                 "human_decision": "",
+                "privacy": result.get("privacy") or {},
                 "data_note": "synthetic",
             },
             ensure_ascii=False,
@@ -683,7 +689,8 @@ def feedback(db: Session = Depends(get_db)):
 
 
 @app.get("/api/alerts/{alert_id}/export")
-def export_report(alert_id: str, db: Session = Depends(get_db)):
+def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)):
+    user = require_user(request)
     inv = get_investigation(db, alert_id)
     if not inv:
         raise HTTPException(404, "尚无草稿")
@@ -697,6 +704,7 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         signer = inv.signed_by_name or inv.signed_by_id or "（未绑定用户）"
     v2 = payload.get("case_v2") or {}
     scoring = payload.get("scoring") or {}
+    priv = payload.get("privacy") or {}
     rejected = payload.get("rejected_claims") or []
     verified = [
         c
@@ -718,6 +726,8 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
         f"- 数据：{payload.get('data_note') or 'synthetic'}",
+        f"- 进模脱敏：{priv.get('policy') or 'privacy_v2'} · 姓名 {priv.get('masked_names', 0)} · 账号 {priv.get('masked_accounts', 0)} · 客户号 {priv.get('masked_customer_ids', 0)} · 出站 {priv.get('egress_calls', 0)} 次",
+        f"- 导出人：{user.label()}",
         "",
         report.get("full_text", ""),
         "",
@@ -746,6 +756,22 @@ def export_report(alert_id: str, db: Session = Depends(get_db)):
         "",
         "—— Agent 不可自动报送，须调查员签发 ——",
     ]
+    write_audit(
+        db,
+        alert_id,
+        user.label(),
+        "export",
+        json.dumps(
+            {
+                "summary": f"{user.label()} 导出调查底稿（非报送报文）",
+                "signed": bool(signed),
+                "privacy": {"policy": priv.get("policy"), "egress_calls": priv.get("egress_calls")},
+                "data_note": "synthetic",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.commit()
     filename = f"huicha-{alert_id}.md"
     headers = {
         "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"

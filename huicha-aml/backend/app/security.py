@@ -113,5 +113,5 @@ def session_from_request(request: Request) -> AuthUser | None:
 def require_user(request: Request) -> AuthUser:
     user = session_from_request(request)
     if not user:
-        raise HTTPException(401, "请先登录后再签发")
+        raise HTTPException(401, "请先登录后再签发或导出")
     return user

@@ -46,15 +46,16 @@ def test_regulation_cites_carry_paraphrase_for_review():
     assert "未检索到" in fallback[0]["title"]
 
 
-def test_export_is_draft_not_filing(client):
+def test_export_is_draft_not_filing(client, auth_headers):
     client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
-    r = client.get("/api/alerts/ALT-B-20260910/export")
+    r = client.get("/api/alerts/ALT-B-20260910/export", headers=auth_headers)
     assert r.status_code == 200
     text = r.text
     assert "非报送报文" in text
     assert "须调查员签发" in text
     assert "否（本文件仅为草稿）" in text
     assert "风险等级" in text
+    assert "进模脱敏" in text
 
 
 def test_export_reflects_human_sign(client, auth_headers):
@@ -65,7 +66,7 @@ def test_export_reflects_human_sign(client, auth_headers):
         headers=auth_headers,
     )
     assert ok.status_code == 200
-    text = client.get("/api/alerts/ALT-A-20260910/export").text
+    text = client.get("/api/alerts/ALT-A-20260910/export", headers=auth_headers).text
     assert "已记录签发" in text
     assert "同意排除" in text
     assert "陈析（002183）" in text

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.llm import _extract_json_array, _strip_fence, chat, llm_mode, normalize_challenger_items, validate_challenger_items
+from app.privacy import PrivacyLeakError
 
 
 def test_normalize_keeps_predicate_and_args():
@@ -75,6 +76,15 @@ def test_stub_mode_chat(monkeypatch):
     items = _extract_json_array(text)
     assert items[0]["predicate"] == "consecutive_transfer_chain"
     assert usage["model"] == "stub"
+
+
+def test_stub_chat_blocks_raw_account_token(monkeypatch):
+    monkeypatch.setenv("HUICHA_LLM_STUB", "1")
+    import app.llm as llm_mod
+
+    llm_mod._ENV_LOADED = False
+    with pytest.raises(PrivacyLeakError, match="6222-A-8801"):
+        chat([{"role": "user", "content": "对手 6222-A-8801"}])
 
 
 def test_strip_fence_removes_language_tag():

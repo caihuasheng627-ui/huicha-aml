@@ -32,6 +32,16 @@ const PIPELINE = [
     logs: ["analyze_pattern", "analyze_network", "analyze_baseline", "watchlist_hit"],
   },
   {
+    id: "privacy",
+    role: "Privacy",
+    title: "脱敏",
+    caption: "姓名账号占位后再出站",
+    dwell: 640,
+    linger: false,
+    ticks: ["登记 PrivacyMap", "字段级替换", "出站检漏"],
+    logs: ["prepare_for_llm", "assert_clean", "inspect_outbound"],
+  },
+  {
     id: "challenger",
     role: "慧查agent",
     title: "研判",
@@ -225,7 +235,7 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
     <div className={`theater${failed ? " is-error" : ""}`} role="status" aria-live="polite">
       <div className="theater-hd">
         <strong>{failed ? "调查中断" : "正在生成调查草稿"}</strong>
-        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 慧查agent · 规则护栏 · 人做决策"}</span>
+        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 脱敏出站 · 慧查agent · 规则护栏 · 人做决策"}</span>
       </div>
 
       <div className="theater-path" aria-hidden="true">

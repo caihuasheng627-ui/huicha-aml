@@ -7,12 +7,12 @@ const STEPS = [
   ["生成草稿", "中栏点「开始调查」。流水线按规划 → 取证 → 指标 → 脱敏出站 → 慧查agent → 核验 → 护栏 → 报告推进，全过程可见。"],
   ["读三方对照", "「判断来源对照」并排给出规则对照、慧查agent 建议和政策护栏后结论。三者不相加，分歧须由人裁决。"],
   ["回溯证据", "点报告里的证据编号、法规依据或图谱节点，右栏会定位到对应流水、客户资料与制度摘录。"],
-  ["人工签发", "登录后填写调查员意见，再选「签发结论」「修改后采纳」或「驳回重查」。系统不会自动报送。"],
+  ["人工签发", "登录后填写调查员意见，再选「签发结论」「修改后采纳」或「驳回重查」。导出底稿同样须登录。系统不会自动报送。"],
 ];
 
 const PANELS = [
   ["左栏", "待办告警队列、筛选与反馈闭环统计。"],
-  ["中栏", "案件舞台：指标卡、三方对照、进模脱敏凭证、慧查agent 面板、风险因子、时间线、反事实、法规依据、调查过程、报告草稿与待补证清单。底部是签发区。"],
+  ["中栏", "案件舞台：指标卡、三方对照、进模脱敏凭证、慧查agent 面板、风险因子、时间线、反事实、法规依据、调查过程、报告草稿与待补证清单。底部是签发与导出。"],
   ["右栏", "证据与关联：客户 KYC 卡、资金图谱、证据分组、制度与类型学、交易流水和操作审计。"],
 ];
 
@@ -25,6 +25,15 @@ const CONCLUSIONS = [
 const BLOCKERS = [
   ["事实回查未通过", "报告里出现了本案证据范围之外的账号、金额或编号，签发按钮锁定，须重跑或人工修改。"],
   ["慧查agent 证据契约未通过", "理由缺引用、引用了工具范围外的编号，或建议上报却没有支持证据，整份 AI 建议作废，只保留规则对照。"],
+  ["出站检漏失败", "发给模型的上下文仍含未脱敏账号或已登记姓名，本轮调查中止，不会把明文送出。"],
+];
+
+const PRIVACY_RULES = [
+  ["工作台", "客户姓名、账号、流水对调查员明文展示，便于核对证据。"],
+  ["进模替换", "姓名 → CLIENT_00n，账号 → ACCOUNT_00n，客户号 → CUST_00n。渠道名 CASH- / POS- / RELATIVE- 保留语义。"],
+  ["交易编号", "TX-* 不替换，否则慧查agent 无法按编号引用，Skeptic 也无法校验。"],
+  ["出站检漏", "替换后再扫一遍；命中 6222- 形态或未替换的登记字段即中止，不调用模型。"],
+  ["导出", "须先登录。底稿写明脱敏策略和导出人，仍是调查草稿，不是报送报文。"],
 ];
 
 const SWITCHES = [
@@ -34,11 +43,12 @@ const SWITCHES = [
 ];
 
 const KEYS = [
-  ["1 / 2 / 3 / 4 / 5", "打开案例 A 排除、B 拆分、C 归集、F 观察、L 多层（只打开历史草稿，不重跑）。"],
+  ["1 / 2 / 3 / 4 / 5 / 6", "打开案例 A 排除、B 拆分、C 归集、F 观察、L 多层、H 抽数（只打开历史草稿，不重跑）。"],
   ["点击编号", "报告、理由、法规、图谱里的编号都可点，用于回溯原始证据。"],
 ];
 
 export default function SystemManual({ open, onClose, health }) {
+  const privacyPolicy = health?.privacy?.policy || "privacy_v2";
   return (
     <Drawer
       title="系统说明书"
@@ -63,7 +73,7 @@ export default function SystemManual({ open, onClose, health }) {
         <section className="manual-sec">
           <h4>一、和普通 AI 有什么不同</h4>
           <p className="manual-note" style={{ marginTop: 0 }}>
-            同样可以接大模型，但循证慧查把「慧查agent」关在证据、护栏和人工签发之内——对照表如下，工作台只展示本案调查结果。
+            同样可以接大模型，但循证慧查把「慧查agent」关在证据、护栏、脱敏出站和人工签发之内——对照表如下，工作台只展示本案调查结果。
           </p>
           <ApproachComparison />
         </section>
@@ -121,14 +131,25 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>隐私出站</h4>
+          <h4>六、隐私与出站</h4>
           <p className="manual-note" style={{ marginTop: 0 }}>
-            工作台展示本案明文，便于调查员核对。调用大模型前，姓名变成 CLIENT_00n、账号变成 ACCOUNT_00n、客户号变成 CUST_00n；交易编号保留以便引用校验。出站前再扫一遍，命中未脱敏账号即中止。导出底稿须登录并写入审计，仍是调查草稿而不是报送报文。
+            策略 {privacyPolicy}：明文只给调查员看，占位符才给模型看。这是竞赛原型脱敏，不是银行级加密或数据不出域。
+          </p>
+          <dl className="manual-dl">
+            {PRIVACY_RULES.map(([name, desc]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{desc}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="manual-note">
+            调查完成后，中栏会出现「进模脱敏」标签（登记了多少姓名/账号、出站几次已检漏）。调查过程里也有 Privacy 步骤。金额、行业、交易模式仍会进模型，因为研判需要这些字段。
           </p>
         </section>
 
         <section className="manual-sec">
-          <h4>六、顶栏策略开关</h4>
+          <h4>七、顶栏策略开关</h4>
           <dl className="manual-dl">
             {SWITCHES.map(([name, desc]) => (
               <div key={name}>
@@ -140,7 +161,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>七、快捷操作</h4>
+          <h4>八、快捷操作</h4>
           <dl className="manual-dl">
             {KEYS.map(([name, desc]) => (
               <div key={name}>
@@ -152,7 +173,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>八、运行环境</h4>
+          <h4>九、运行环境</h4>
           <div className="manual-chips">
             <Tag>版本 {health?.version || "—"}</Tag>
             <Tag color={health?.llm && health.llm !== "off" ? "blue" : "red"}>
@@ -161,18 +182,20 @@ export default function SystemManual({ open, onClose, health }) {
             <Tag>知识库 {health?.kb_docs ?? "—"} 条</Tag>
             <Tag>检索 {health?.kb_retrieval || "hybrid-keyword-tfidf"}</Tag>
             <Tag color="orange">数据 {health?.data_note || "synthetic"}</Tag>
+            <Tag color="geekblue">出站 {privacyPolicy}</Tag>
           </div>
           <p className="manual-note">{health?.stack || "FastAPI + SQLite + React（竞赛原型）"}</p>
         </section>
 
         <section className="manual-sec">
-          <h4>九、诚实边界</h4>
+          <h4>十、诚实边界</h4>
           <ul className="manual-limits">
             {(health?.limitations || []).map((x) => (
               <li key={x}>{x}</li>
             ))}
             <li>法规依据含现行法律规章官方条款（按条切块混合检索）与作业转述；签发前仍须回原文核对。</li>
             <li>本台只出调查草稿，不是监管结论，也不产生报送报文。</li>
+            <li>SQLite 调查载荷仍明文存储；脱敏只发生在调用大模型之前。</li>
           </ul>
         </section>
       </div>

@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Divider,
+  Drawer,
   Form,
   Input,
   Modal,
@@ -27,6 +28,7 @@ import {
   fetchHealth,
   fetchMe,
   fetchMetrics,
+  fetchKnowledgeDoc,
   getDemoToken,
   getStoredUser,
   login,
@@ -359,6 +361,8 @@ export default function App() {
   const [checklist, setChecklist] = useState(null);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [checklistWriting, setChecklistWriting] = useState(false);
+  const [kbArticle, setKbArticle] = useState(null);
+  const [kbLoading, setKbLoading] = useState(false);
   const openSeq = useRef(0);
   const inv = detail?.investigation;
   const playback = usePipelinePlayback({ running: loading, failed: invError });
@@ -403,6 +407,7 @@ export default function App() {
     const seq = ++openSeq.current;
     setCurrent(id);
     setSelected("");
+    setKbArticle(null);
     const d = await fetchDetail(id);
     if (seq !== openSeq.current) return;
     setDetail(d);
@@ -564,10 +569,41 @@ export default function App() {
       }
     }
     setSelected(resolved);
+    if (String(resolved || "").startsWith("KB-")) {
+      openKnowledge(resolved);
+      return;
+    }
     requestAnimationFrame(() => {
       const el = document.getElementById(`ev-${resolved}`) || document.getElementById(`ev-${id}`);
       el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
+  }
+
+  async function openKnowledge(id) {
+    const kid = String(id || "").trim();
+    if (!kid.startsWith("KB-")) return;
+    const local = (inv?.kb_hits || []).find((h) => h.id === kid);
+    setSelected(kid);
+    setKbArticle(
+      local
+        ? { ...local, body: local.body || local.snippet || "" }
+        : { id: kid, title: kid },
+    );
+    requestAnimationFrame(() => {
+      document.getElementById(`ev-${kid}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    setKbLoading(true);
+    try {
+      const full = await fetchKnowledgeDoc(kid);
+      setKbArticle(full);
+    } catch (e) {
+      if (!local?.body && !local?.snippet) {
+        message.error(e.message);
+        setKbArticle(null);
+      }
+    } finally {
+      setKbLoading(false);
+    }
   }
 
   const listEvidence = (inv?.evidence || []).filter((e) => evidenceMatches(e, selected));
@@ -746,8 +782,8 @@ export default function App() {
           type="error"
           banner
           showIcon
-          message="未配置 DASHSCOPE_API_KEY"
-          description="Judge/Reporter 强制走百炼 API。请在 backend/.env 填写密钥后再调查。"
+          message="未配置模型密钥"
+          description="Judge/Reporter 需要 DEEPSEEK_API_KEY、DASHSCOPE_API_KEY 或 ZHIPU_API_KEY。也可设 HUICHA_LLM_STUB=1 走内置 stub。"
         />
       )}
       {needsToken && (
@@ -1114,18 +1150,26 @@ export default function App() {
                   <div
                     key={h.id}
                     id={`ev-${h.id}`}
-                    className={`ev ${selected === h.id ? "active" : ""}`}
+                    className={`ev kb-hit ${selected === h.id || kbArticle?.id === h.id ? "active" : ""}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => selectEvidence(h.id)}
+                    onClick={() => openKnowledge(h.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openKnowledge(h.id);
+                      }
+                    }}
                   >
                     <code>{h.id}</code>
                     <Tag style={{ marginLeft: 6 }}>{h.kind_label}</Tag>
+                    {h.article ? <Tag style={{ marginLeft: 4 }}>{h.article}</Tag> : null}
                     <div style={{ fontWeight: 650, margin: "4px 0 2px" }}>{h.title}</div>
                     <div className="hint" style={{ margin: "0 0 4px" }}>
                       {h.source}
                     </div>
-                    <div>{h.snippet}</div>
+                    <div className="kb-preview">{h.snippet || h.body}</div>
+                    <div className="kb-open">打开全文</div>
                   </div>
                 ))
               )}
@@ -1183,6 +1227,58 @@ export default function App() {
         </aside>
       </div>
       </div>
+      <Drawer
+        title={kbArticle ? `${kbArticle.id} · ${kbArticle.title || "知识库条目"}` : "知识库"}
+        placement="right"
+        width={640}
+        open={Boolean(kbArticle)}
+        onClose={() => setKbArticle(null)}
+        className="kb-drawer"
+      >
+        {kbArticle && (
+          <article className="kb-article">
+            <div className="kb-article-meta">
+              {kbArticle.kind_label ? <Tag>{kbArticle.kind_label}</Tag> : null}
+              {kbArticle.data_note === "official-statute" ? <Tag color="blue">官方条款</Tag> : <Tag>作业转述</Tag>}
+              <span>{kbArticle.source || "演示知识库"}</span>
+            </div>
+            <h4>{kbArticle.title || kbArticle.id}</h4>
+            {kbLoading && !kbArticle.body && !kbArticle.snippet ? (
+              <p className="hint">正在打开全文…</p>
+            ) : (
+              <p className="kb-article-body">{kbArticle.body || kbArticle.snippet || "本条没有可展示的正文。"}</p>
+            )}
+            <dl className="kb-article-dl">
+              <div>
+                <dt>条款</dt>
+                <dd>{kbArticle.article || "—"}</dd>
+              </div>
+              <div>
+                <dt>生效日</dt>
+                <dd>{kbArticle.effective_date || "—"}</dd>
+              </div>
+              <div>
+                <dt>版本</dt>
+                <dd>{kbArticle.version || "—"}</dd>
+              </div>
+              <div>
+                <dt>编号</dt>
+                <dd>
+                  <code>{kbArticle.id}</code>
+                  {kbArticle.parent_id && kbArticle.parent_id !== kbArticle.id ? (
+                    <span className="hint"> · 所属 {kbArticle.parent_id}</span>
+                  ) : null}
+                </dd>
+              </div>
+            </dl>
+            <p className="kb-article-note">
+              {kbArticle.data_note === "official-statute"
+                ? "本文为官方公布法律/规章条款，按调查引用分篇收录。签发前请与最新有效文本核对。"
+                : "本文为作业口径转述，不是法规全文，签发前须回原文核对。"}
+            </p>
+          </article>
+        )}
+      </Drawer>
       <footer className="footer">
         <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>
         <span>

@@ -116,6 +116,18 @@ def llm_mode() -> str:
     return "bailian"
 
 
+def llm_provider_label() -> str:
+    mode = llm_mode()
+    labels = {
+        "bailian": "阿里云百炼 / DashScope",
+        "zhipu": "智谱 GLM",
+        "deepseek": "DeepSeek",
+        "stub": "内置 stub",
+        "off": "未配置",
+    }
+    return labels.get(mode, mode)
+
+
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     usage = {
         "prompt_tokens": 8,

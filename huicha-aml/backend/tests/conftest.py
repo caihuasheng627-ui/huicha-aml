@@ -116,6 +116,9 @@ def client(monkeypatch):
 
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test-not-used")
     monkeypatch.setenv("DASHSCOPE_MODEL", "deepseek-v4-flash-0731")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    monkeypatch.delenv("BIGMODEL_API_KEY", raising=False)
     monkeypatch.setenv("HUICHA_DATABASE_URL", "sqlite://")
     monkeypatch.setattr("app.llm.chat", fake_chat)
     import app.llm as llm_mod

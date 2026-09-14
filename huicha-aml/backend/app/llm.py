@@ -19,6 +19,8 @@ DEFAULT_MODEL = "deepseek-v4-flash-0731"
 DEFAULT_DASHSCOPE_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DEFAULT_ZHIPU_BASE = "https://open.bigmodel.cn/api/paas/v4"
 DEFAULT_ZHIPU_MODEL = "glm-5.2"
+DEFAULT_DEEPSEEK_BASE = "https://api.deepseek.com/v1"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 
 
 def _load_env() -> None:
@@ -44,18 +46,27 @@ def _zhipu_key() -> str:
     return (os.getenv("ZHIPU_API_KEY") or os.getenv("BIGMODEL_API_KEY") or "").strip()
 
 
+def _deepseek_key() -> str:
+    _load_env()
+    return (os.getenv("DEEPSEEK_API_KEY") or "").strip()
+
+
 def require_api_key() -> str:
     _load_env()
+    if _deepseek_key():
+        return _deepseek_key()
     if _zhipu_key():
         return _zhipu_key()
     api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("未配置 DASHSCOPE_API_KEY 或 ZHIPU_API_KEY")
+        raise RuntimeError("未配置 DEEPSEEK_API_KEY、DASHSCOPE_API_KEY 或 ZHIPU_API_KEY")
     return api_key
 
 
 def llm_model() -> str:
     _load_env()
+    if _deepseek_key():
+        return (os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip() or DEFAULT_DEEPSEEK_MODEL
     explicit = (os.getenv("DASHSCOPE_MODEL") or os.getenv("ZHIPU_MODEL") or "").strip()
     if explicit:
         return explicit
@@ -66,6 +77,8 @@ def llm_model() -> str:
 
 def llm_base_url() -> str:
     _load_env()
+    if _deepseek_key():
+        return (os.getenv("DEEPSEEK_BASE_URL") or DEFAULT_DEEPSEEK_BASE).rstrip("/")
     explicit = os.getenv("DASHSCOPE_BASE_URL", "").strip()
     if explicit:
         return explicit.rstrip("/")
@@ -96,7 +109,11 @@ def llm_mode() -> str:
         require_api_key()
     except RuntimeError:
         return "off"
-    return "zhipu" if "bigmodel.cn" in llm_base_url() else "bailian"
+    if "bigmodel.cn" in llm_base_url():
+        return "zhipu"
+    if "deepseek.com" in llm_base_url():
+        return "deepseek"
+    return "bailian"
 
 
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
@@ -247,14 +264,16 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
     api_key = require_api_key()
     base = llm_base_url()
     model = llm_model()
-    timeout_s = 90 if model.startswith("glm") else 45
+    timeout_s = 90 if model.startswith("glm") or "deepseek.com" in base else 45
     payload = {
         "model": model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "enable_thinking": False,
     }
+    # 百炼 / 智谱 GLM 需要显式关思考；官方 DeepSeek 不接受该字段。
+    if "deepseek.com" not in base:
+        payload["enable_thinking"] = False
     req = urllib.request.Request(
         f"{base}/chat/completions",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -264,7 +283,12 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
         },
         method="POST",
     )
-    vendor = "智谱" if "bigmodel.cn" in base else "百炼"
+    if "bigmodel.cn" in base:
+        vendor = "智谱"
+    elif "deepseek.com" in base:
+        vendor = "DeepSeek"
+    else:
+        vendor = "百炼"
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             data = json.loads(resp.read().decode("utf-8"))

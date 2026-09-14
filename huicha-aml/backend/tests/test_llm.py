@@ -110,6 +110,8 @@ def test_validate_delta_bounds_and_evidence():
 
 def test_chat_timeout_becomes_runtime_error(monkeypatch):
     monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
 
@@ -125,6 +127,8 @@ def test_chat_timeout_becomes_runtime_error(monkeypatch):
 
 def test_chat_http_error_becomes_runtime_error(monkeypatch):
     monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
     import urllib.error
@@ -147,6 +151,8 @@ def test_chat_http_error_becomes_runtime_error(monkeypatch):
 
 def test_chat_parses_usage(monkeypatch):
     monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
     import app.llm as llm_mod
 
@@ -215,8 +221,10 @@ def test_result_source_key_namespaces_non_deepseek_models():
 
     deepseek = {"source": "narrative_vignette_blind_struct", "model": "deepseek-v4-flash-0731"}
     glm = {"source": "narrative_vignette_blind_struct", "model": "glm-5.2"}
+    official = {"source": "narrative_vignette_blind_struct", "model": "deepseek-chat"}
     assert bench._result_source_key(deepseek) == "narrative_vignette_blind_struct"
     assert bench._result_source_key(glm) == "narrative_vignette_blind_struct__glm-5.2"
+    assert bench._result_source_key(official) == "narrative_vignette_blind_struct__deepseek-chat"
 
 
 def test_zhipu_key_routes_to_glm52(monkeypatch):
@@ -226,12 +234,28 @@ def test_zhipu_key_routes_to_glm52(monkeypatch):
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("DASHSCOPE_MODEL", raising=False)
     monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setenv("ZHIPU_API_KEY", "sk-zhipu-test")
     llm_mod._ENV_LOADED = False
     assert llm_mod.require_api_key() == "sk-zhipu-test"
     assert llm_mod.llm_model() == "glm-5.2"
     assert "bigmodel.cn" in llm_mod.llm_base_url()
     assert llm_mod.llm_mode() == "zhipu"
+
+
+def test_deepseek_official_key_routes_to_deepseek_chat(monkeypatch):
+    import app.llm as llm_mod
+
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    monkeypatch.delenv("ZHIPU_API_KEY", raising=False)
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-bailian-unused")
+    monkeypatch.setenv("DASHSCOPE_MODEL", "qwen3.7-flash")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-test")
+    llm_mod._ENV_LOADED = False
+    assert llm_mod.require_api_key() == "sk-deepseek-test"
+    assert llm_mod.llm_model() == "deepseek-chat"
+    assert "deepseek.com" in llm_mod.llm_base_url()
+    assert llm_mod.llm_mode() == "deepseek"
 
 
 def test_judge_v4_is_ablation_only_and_avoids_v3_exemplars():

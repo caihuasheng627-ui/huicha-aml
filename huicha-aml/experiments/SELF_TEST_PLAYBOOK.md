@@ -67,6 +67,10 @@ py experiments\benchmark.py --real --set blind_struct --prompt judge_v2
 # $env:ZHIPU_API_KEY="..."
 # 结果写入 runs_by_source[<source>__glm-5.2]，不覆盖 deepseek 槽
 py experiments\benchmark.py --real --set blind_struct --prompt judge_v4
+# 公开改写探针（不上 RESULTS 主表；12 条全是上报侧）
+py experiments\benchmark\import_real_cases.py --public-rewrite
+py experiments\benchmark.py --baselines-only --set public-rewrite
+py experiments\benchmark.py --real --set public-rewrite --no-write
 ```
 
 ## 5. 读哪些数
@@ -86,7 +90,8 @@ py experiments\benchmark.py --real --set blind_struct --prompt judge_v4
 - 不要把 v1（0.69）、v2 集（0.17，有 missing_evidence 泄漏且无规则层）与 v3 集混比  
 - 不要在 SYSTEM/judge_v3 里列举测试集叙事族（判定标准只写可操作边界，不写族名）  
 - 不要开 stub 却写入「真实模型」  
-- 不要把 keyword 基线 0.87 当成「模型该打到的分」——它只说明合成文本仍有表面线索
+- 不要把 `public_rewrite.json` 的命中率写成准确率：12/12 都是 suggest_report，只能当上报侧形态探针
+- 不要把生产 STR / 真实 hold-out 写成下一步：当前拿不到，公开改写已是外部来源上限
 
 ## 7. 口令
 

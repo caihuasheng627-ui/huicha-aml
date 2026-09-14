@@ -62,3 +62,66 @@ def test_build_payload_rejects_residual_pii():
     cases[0]["vignette"]["summary"] += " 110101199001011234"
     with pytest.raises(RuntimeError, match="身份证"):
         build_payload(cases, data_note="placeholder", source="real_holdout_placeholder")
+
+
+OUTCOME_LEAK = (
+    "有期徒刑",
+    "判处",
+    "判决书",
+    "洗钱罪",
+    "帮信罪",
+    "掩饰、隐瞒",
+    "公诉",
+    "移送起诉",
+    "罚金",
+    "已报送",
+    "重点可疑交易报告",
+)
+
+
+def test_public_rewrite_set_is_report_probe_not_results():
+    payload = json.loads((BENCH / "public_rewrite.json").read_text(encoding="utf-8"))
+    assert payload["data_note"] == "public-rewrite"
+    assert payload["n"] == 12
+    assert payload["n_unique"] == 12
+    assert payload["gold_distribution"] == {"suggest_report": 12}
+    assert payload["citations"]
+    blob = json.dumps(payload, ensure_ascii=False)
+    assert "110101199001011234" not in blob
+    assert "13800138000" not in blob
+    golds = {c["gold"] for c in payload["cases"]}
+    assert golds == {"suggest_report"}
+    urls = {c["source_citation"]["url"] for c in payload["cases"]}
+    assert all(u.startswith("http") for u in urls)
+    assert len(urls) >= 8
+    for case in payload["cases"]:
+        assert case["gold_provenance"] == "author-mapped-from-public-conclusion"
+        vig = json.dumps(case["vignette"], ensure_ascii=False)
+        for token in OUTCOME_LEAK:
+            assert token not in vig, f"{case['case_id']} vignette 含结局泄漏: {token}"
+        name = case["vignette"]["customer"]["name"]
+        if case["vignette"]["customer"]["kind"] == "individual":
+            assert name.endswith("**")
+        txs = case["vignette"]["transactions"]
+        assert len(txs) >= 6
+        assert all(t["id"].startswith("TX-") for t in txs)
+        assert "真实 hold-out" not in vig
+        assert "生产能力" not in vig
+
+
+def test_public_rewrite_rebuild_is_stable():
+    from public_rewrite_cases import public_rewrite_rows  # noqa: E402
+
+    existing = json.loads((BENCH / "public_rewrite.json").read_text(encoding="utf-8"))
+    rebuilt = [row_to_case(row, i) for i, row in enumerate(public_rewrite_rows(), 1)]
+    assert [c["fingerprint"] for c in rebuilt] == [c["fingerprint"] for c in existing["cases"]]
+
+
+def test_skip_results_write_covers_public_rewrite():
+    from import_real_cases import skip_results_write  # noqa: E402
+
+    assert skip_results_write({"data_note": "public-rewrite", "source": "public_rewrite_holdout"})
+    assert skip_results_write({"data_note": "placeholder", "source": "real_holdout_placeholder"})
+    assert not skip_results_write(
+        {"data_note": "synthetic-blind-struct-v1", "source": "narrative_vignette_blind_struct"}
+    )

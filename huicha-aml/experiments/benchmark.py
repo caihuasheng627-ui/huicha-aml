@@ -34,6 +34,8 @@ from app.prompts import prompt_version  # noqa: E402
 
 BENCH_DIR = Path(__file__).parent / "benchmark"
 RUNS_DIR = BENCH_DIR / "runs"
+sys.path.insert(0, str(BENCH_DIR))
+from import_real_cases import skip_results_write  # noqa: E402
 
 SET_FILES = {
     "v3": "independent_set.json",
@@ -43,6 +45,9 @@ SET_FILES = {
     "blind_struct": "struct_set.json",
     "struct": "struct_set.json",
     "real": "real_holdout.json",
+    "public": "public_rewrite.json",
+    "public-rewrite": "public_rewrite.json",
+    "public_rewrite": "public_rewrite.json",
 }
 
 CONFIDENCE_BINS = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01))
@@ -759,7 +764,7 @@ def main() -> dict:
         "--set",
         dest="set_name",
         default="v3",
-        help="数据集：v3 / nopolarity / blind / blind_struct / real，或 json 文件名。默认 independent_set.json",
+        help="数据集：v3 / nopolarity / blind / blind_struct / real / public-rewrite，或 json 文件名。默认 independent_set.json",
     )
     args = parser.parse_args()
     if args.rerender:
@@ -792,12 +797,10 @@ def main() -> dict:
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
     result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt, set_name=args.set_name)
-    placeholder = str(result.get("data_note") or "") == "placeholder" or str(result.get("source") or "").startswith(
-        "real_holdout"
-    )
-    if placeholder and not args.no_write:
-        print("skip RESULTS write: real/placeholder hold-out 不写入主表", flush=True)
-    if not args.no_write and not placeholder:
+    skipped = skip_results_write(result)
+    if skipped and not args.no_write:
+        print("skip RESULTS write: placeholder/public-rewrite/real hold-out 不写入主表", flush=True)
+    if not args.no_write and not skipped:
         ablation = update_results_json(result)
         update_results_md(result, ablation)
     printable = {k: v for k, v in result.items() if k != "by_tag"}

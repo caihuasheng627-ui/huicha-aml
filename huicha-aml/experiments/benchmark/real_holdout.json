@@ -106,7 +106,7 @@
           "avg_in_ticket": 0,
           "peer_typical_monthly_in": 100000,
           "peer_typical_ticket": 20000,
-          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "peer_note": "同业区间未经本行业校准",
           "in_sum_vs_peer": null
         },
         "graph": {
@@ -232,7 +232,7 @@
           "avg_in_ticket": 0,
           "peer_typical_monthly_in": 100000,
           "peer_typical_ticket": 20000,
-          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "peer_note": "同业区间未经本行业校准",
           "in_sum_vs_peer": null
         },
         "graph": {
@@ -358,7 +358,7 @@
           "avg_in_ticket": 0,
           "peer_typical_monthly_in": 100000,
           "peer_typical_ticket": 20000,
-          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "peer_note": "同业区间未经本行业校准",
           "in_sum_vs_peer": null
         },
         "graph": {
@@ -484,7 +484,7 @@
           "avg_in_ticket": 0,
           "peer_typical_monthly_in": 100000,
           "peer_typical_ticket": 20000,
-          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "peer_note": "同业区间未经本行业校准",
           "in_sum_vs_peer": null
         },
         "graph": {
@@ -610,7 +610,7 @@
           "avg_in_ticket": 0,
           "peer_typical_monthly_in": 100000,
           "peer_typical_ticket": 20000,
-          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "peer_note": "同业区间未经本行业校准",
           "in_sum_vs_peer": null
         },
         "graph": {

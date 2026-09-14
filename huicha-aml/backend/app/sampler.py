@@ -169,13 +169,31 @@ def _counter_example_ids(
     return [tid for _, _, tid in scored[:COUNTER_MAX]]
 
 
-def compact_findings_for_llm(findings: list[dict] | None, *, cap: int = 8) -> list[dict]:
+def citable_tx_ids(sample: list[dict] | None, clusters: list[dict] | None) -> set[str]:
+    """Judge 可引用的交易号 = 进模样本 ∪ 簇代表。窗口内其它流水不能当引用。"""
+    ids: set[str] = set()
+    for tx in sample or []:
+        if tx.get("id"):
+            ids.add(str(tx["id"]))
+    for cluster in clusters or []:
+        ids.update(str(i) for i in (cluster.get("representative_ids") or []) if i)
+    return ids
+
+
+def compact_findings_for_llm(
+    findings: list[dict] | None,
+    *,
+    cap: int = 8,
+    keep_ids: set[str] | None = None,
+) -> list[dict]:
     out: list[dict] = []
     for finding in findings or []:
         ids = list(finding.get("evidence_ids") or [])
         row = dict(finding)
+        if keep_ids is not None:
+            ids = [item for item in ids if item in keep_ids]
         row["evidence_ids"] = ids[:cap]
-        row["evidence_count"] = len(ids)
+        row["evidence_count"] = len(finding.get("evidence_ids") or [])
         out.append(row)
     return out
 

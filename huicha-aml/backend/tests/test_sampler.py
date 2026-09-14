@@ -121,3 +121,38 @@ def test_sampler_keeps_finding_reps_not_all_inflow():
     pos_in_sample = [t["id"] for t in result["sample"] if t["id"].startswith("TX-POS-")]
     assert "TX-POS-001" in {t["id"] for t in result["sample"]}
     assert len(pos_in_sample) < 20
+
+
+def test_compact_findings_clips_to_keep_ids():
+    from app.sampler import compact_findings_for_llm
+
+    findings = [
+        {
+            "code": "funnel",
+            "title": "归集",
+            "evidence_ids": ["TX-POS-001", "TX-POS-004", "TX-CASH-01"],
+            "polarity": "support",
+        }
+    ]
+    compact = compact_findings_for_llm(findings, keep_ids={"TX-CASH-01"})
+    assert compact[0]["evidence_ids"] == ["TX-CASH-01"]
+    assert compact[0]["evidence_count"] == 3
+
+
+def test_verify_judge_rejects_tx_outside_sample():
+    from app.decision import verify_judge
+
+    decision = {
+        "disposition": "suggest_report",
+        "confidence": 0.7,
+        "typologies": [],
+        "supporting_evidence_ids": ["TX-H-CASH-01"],
+        "contradicting_evidence_ids": ["TX-H-POS-004"],
+        "missing_evidence": [],
+        "rationale": [{"text": "反证", "evidence_ids": ["TX-H-POS-004"]}],
+        "next_actions": [],
+    }
+    result = verify_judge(decision, allowed_evidence={"TX-H-CASH-01", "TX-H-NIGHT-01"})
+    assert result["passed"] is False
+    assert "TX-H-POS-004" in result["invalid_ids"]
+    assert "进模样本或簇代表" in result["issues"][0]["message"]

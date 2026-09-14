@@ -19,7 +19,7 @@ from .report_draft import apply_full_text, apply_reason, render_report
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL, aggregate, counterfactual, score_to_level
 from .schema import InvestigationPlan, PlanStep, RegulationCite, StructuredReport
 from .tool_audit import bind_tool_context, reset_tool_context, tool
-from .sampler import compact_findings_for_llm, select_for_judge, visible_evidence_ids
+from .sampler import citable_tx_ids, compact_findings_for_llm, select_for_judge, visible_evidence_ids
 from .tools import (
     ALLOWED_TOOLS,
     collect_bundle,
@@ -294,7 +294,9 @@ def _run_investigation_v3(
         baseline=baseline,
     )
     sample_txs = sampling["sample"]
-    llm_findings = compact_findings_for_llm(findings)
+    citable = citable_tx_ids(sample_txs, sampling["clusters"])
+    sampling["citable_tx_ids"] = sorted(citable)
+    llm_findings = compact_findings_for_llm(findings, keep_ids=citable)
     ev_graph = build_evidence_graph(alert["id"], bundle, kb_hits)
     allowed_evidence = sorted(
         source_ids_of(ev_graph)
@@ -315,6 +317,7 @@ def _run_investigation_v3(
     judge_repaired = False
     fallback_reason = ""
     allowed_set = set(allowed_evidence)
+    cite_set = set(prompt_allowed)
 
     def _judge_once(prior_issues: list[dict] | None, transactions=None, findings_for_llm=None, allowed_for_prompt=None) -> tuple[dict, dict, dict]:
         raw, usage = enrich_judge(
@@ -332,7 +335,7 @@ def _run_investigation_v3(
             tx_summary=sampling["summary"],
         )
         decision = normalize_judge(raw, known_ids=allowed_set)
-        return decision, verify_judge(decision, allowed_evidence=allowed_set), usage
+        return decision, verify_judge(decision, allowed_evidence=cite_set), usage
 
     if use_challenger:
         try:
@@ -415,7 +418,7 @@ def _run_investigation_v3(
             None,
         )
         removed_ids = set((key_finding or {}).get("evidence_ids") or [key_id])
-        cf_allowed = allowed_set - removed_ids
+        cf_cite = cite_set - removed_ids
         # 其余指标里也可能引用被移除的流水；不擦掉的话模型会照抄，导致反事实轮次因「伪造引用」失效。
         cf_findings = []
         for f in findings:
@@ -426,7 +429,7 @@ def _run_investigation_v3(
                 continue
             cf_findings.append({**f, "evidence_ids": kept_ids})
         try:
-            cf_llm_findings = compact_findings_for_llm(cf_findings)
+            cf_llm_findings = compact_findings_for_llm(cf_findings, keep_ids=citable - removed_ids)
             cf_sample = [t for t in sample_txs if t.get("id") not in removed_ids]
             raw_cf, _ = enrich_judge(
                 db=db,
@@ -447,8 +450,8 @@ def _run_investigation_v3(
                 tx_clusters=sampling["clusters"],
                 tx_summary=sampling["summary"],
             )
-            cf_judge = normalize_judge(raw_cf, known_ids=cf_allowed)
-            cf_valid = verify_judge(cf_judge, allowed_evidence=cf_allowed)
+            cf_judge = normalize_judge(raw_cf, known_ids=allowed_set - removed_ids)
+            cf_valid = verify_judge(cf_judge, allowed_evidence=cf_cite)
             changed = cf_judge["disposition"] != judge["disposition"]
             if not cf_valid["passed"]:
                 note = "反事实轮次输出未通过引用校验，无法判断建议是否依赖该证据，已标记供人工复核"

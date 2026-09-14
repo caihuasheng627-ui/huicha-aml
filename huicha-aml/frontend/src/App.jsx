@@ -108,7 +108,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
           <Button danger disabled={!hasDraft} onClick={() => onDecide("reject")}>
             驳回重查
           </Button>
-          <Button disabled={!hasDraft} onClick={onExport}>
+          <Button disabled={!hasDraft || !user} onClick={onExport}>
             导出底稿
           </Button>
         </div>
@@ -118,7 +118,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
               <button type="button" className="sign-dock-link" onClick={onLogin}>
                 登录
               </button>
-              后才能签发
+              后才能签发或导出
             </>
           ) : (
             status
@@ -514,7 +514,7 @@ export default function App() {
   async function onDecide(decision) {
     if (!current) return;
     if (!user) {
-      message.warning("请先登录后再签发");
+      message.warning("请先登录后再签发或导出");
       setLoginOpen(true);
       return;
     }
@@ -712,7 +712,7 @@ export default function App() {
           </label>
         )}
         <span className="hint" style={{ margin: 0 }}>
-          快捷键 1–6 打开历史案（不重跑）；顶部策略只作用于「按当前策略重跑」。签发须登录；AI 不得自动报送。
+          快捷键 1–6 打开历史案（不重跑）；顶部策略只作用于「按当前策略重跑」。签发与导出须登录；AI 不得自动报送。
         </span>
       </div>
 
@@ -966,6 +966,12 @@ export default function App() {
                 {inv?.llm?.reporter || inv?.llm?.judge ? (
                   <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
                 ) : null}
+                {inv?.privacy && (
+                  <Tag color="geekblue">
+                    进模脱敏 姓名 {inv.privacy.masked_names ?? 0} · 账号 {inv.privacy.masked_accounts ?? 0}
+                    {inv.privacy.egress_calls ? ` · 出站 ${inv.privacy.egress_calls} 次已检漏` : ""}
+                  </Tag>
+                )}
               </Space>
               <div className="client-box">
                 {detail?.alert?.upstream}

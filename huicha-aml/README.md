@@ -35,7 +35,7 @@ V3 不再把上游告警类型重复计入规则分，也不再用“规则分 +
 Transaction / Customer / Account / Relationship
         ↓
 Case → Planner → Evidence Collector → Indicator Analyst
-        → Evidence Judge → Skeptic / Counterfactual
+        → Privacy Gate → Evidence Judge → Skeptic / Counterfactual
         → Policy Guardrail → Full-report Reporter
         → Human Approval → Audit Trail
 ```
@@ -47,6 +47,7 @@ Case → Planner → Evidence Collector → Indicator Analyst
 | Planner | 只规划白名单只读工具 | 不打分、不报送 |
 | Collector | 只读取数，写入 Evidence；按告警窗口取全量流水，再用确定性规则抽代表样本。Judge 引用必须落在进模样本或簇代表 | 不编造事实；**不得由模型决定抽哪笔** |
 | Analyst | 从流水/KYC/图谱计算事实指标和规则对照 | 不读取告警标签给结论加分 |
+| Privacy | 进模前把姓名/账号/客户号换成占位符，出站检漏 | 不得把明文 PII 发给模型 |
 | Judge | 输出完整建议、支持/反向/缺失证据及行动 | 不得引用工具范围外事实 |
 | Skeptic | 校验逐条引用并做关键证据反事实 | 失败建议不得签发 |
 | Policy Guardrail | 执行名单、事实完整性等硬边界 | 不与 AI 评分合成 |
@@ -75,11 +76,16 @@ Case → Planner → Evidence Collector → Indicator Analyst
 
 ## 8. Privacy & Security
 
-- PrivacyMap：姓名 → `CLIENT_001`，账号 → `ACCOUNT_001`，仅 LLM 上下文脱敏，签发前受控还原。
+- Privacy 层（`privacy_v2`）：工作台与签发稿保持受控明文；**只有 LLM 出站**走脱敏。
+- PrivacyMap：姓名 → `CLIENT_001`，账号 → `ACCOUNT_001`，客户号 → `CUST_001`；渠道聚合名 `CASH-`/`POS-`/`RELATIVE-` 保留语义。交易编号 `TX-*` 不替换，供引用校验。
+- `prepare_for_llm`：字段级替换后 `assert_clean`；`city`/`phone`/`id_number` 等准标识直接丢弃。命中未脱敏字段则中止调查。
+- `chat()` 出站前门再拦截 `6222-` 账号形态；LLM 缓存 hash 的是脱敏后上下文。
+- 调查 payload 带 `privacy` 凭证（登记数量、出站次数）；工作台展示「进模脱敏」标签。
 - 工具白名单只读；禁止改交易/客户/规则、删数据、自动报送。
 - CORS 默认只放行本地 Vite 源，可用 `HUICHA_CORS_ORIGINS` 覆盖；**不是** `allow_origins=["*"]`。
-- `HUICHA_DEMO_TOKEN` 为空则接口开放；填写后需 `X-Huicha-Token`。这是竞赛原型口令，**不是银行登录/SSO**。
-- 日志分级 INFO / WARNING / ERROR / AUDIT，账号类 token 脱敏。
+- `HUICHA_DEMO_TOKEN` 为空则读接口开放；填写后需 `X-Huicha-Token`。签发与导出始终需要演示登录会话。这是竞赛原型口令，**不是银行登录/SSO**。
+- 日志分级 INFO / WARNING / ERROR / AUDIT；账号 token 与「××公司」形态会脱敏，作业中文不整段抹掉。
+- SQLite 调查载荷仍为明文，**不是**银行级加密或数据不出域。
 
 ## 9. Benchmark
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .predicates import catalog_for_prompt, case_facts, stub_challenger_item
-from .privacy import PrivacyMap
+from .privacy import inspect_outbound
 from .validator import DELTA_BOUND, filter_challenger_items
 
 _ENV_LOADED = False
@@ -271,6 +271,7 @@ def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict) 
 
 
 def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 900) -> tuple[str, dict]:
+    inspect_outbound(messages)
     if llm_stub_enabled():
         return _offline_stub_chat(messages)
     api_key = require_api_key()
@@ -505,7 +506,7 @@ def enrich_challenger(
         "allowed_predicates": catalog_for_prompt(),
     }
     if privacy:
-        context = privacy.mask_obj(context)
+        context = privacy.prepare_for_llm(context)
 
     key = _cache_key("challenger_v3", context)
     cached = _cache_get(db, key)
@@ -578,7 +579,7 @@ def enrich_report_reason(
         "avoid_tokens": [i.get("token") for i in (prior_issues or []) if i.get("token")],
     }
     if privacy:
-        context = privacy.mask_obj(context)
+        context = privacy.prepare_for_llm(context)
 
     key = None if prior_issues else _cache_key("reporter_v2", context)
     if key:
@@ -668,7 +669,7 @@ def enrich_judge(
         },
     }
     if privacy:
-        context = privacy.mask_obj(context)
+        context = privacy.prepare_for_llm(context)
     key = None if prior_issues else _cache_key(kind, context)
     cached = _cache_get(db, key) if key else None
     if cached:
@@ -698,7 +699,7 @@ def enrich_full_report(
 ) -> tuple[str, dict]:
     payload = {**context, "repair_issues": prior_issues or []}
     if privacy:
-        payload = privacy.mask_obj(payload)
+        payload = privacy.prepare_for_llm(payload)
     key = None if prior_issues else _cache_key("reporter_v3", payload)
     cached = _cache_get(db, key) if key else None
     if cached:

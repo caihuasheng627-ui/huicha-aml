@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import re
 
-_PII = re.compile(r"(6222-[A-Z0-9\-]+)|([\u4e00-\u9fff]{2,12}(?:有限公司|公司)?)")
+_ACCOUNT = re.compile(r"6222-[A-Z0-9\-]+")
+_COMPANY = re.compile(r"[\u4e00-\u9fff]{2,20}(?:有限公司|股份有限公司|公司)")
 
 AUDIT = 25
 logging.addLevelName(AUDIT, "AUDIT")
@@ -16,7 +17,8 @@ if not log.handlers:
 
 
 def redact(text: str) -> str:
-    return _PII.sub("[REDACTED]", text or "")
+    out = _ACCOUNT.sub("[REDACTED]", text or "")
+    return _COMPANY.sub("[REDACTED]", out)
 
 
 def info(msg: str) -> None:

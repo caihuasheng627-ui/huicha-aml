@@ -1,7 +1,9 @@
-"""一键跑通 V2 Demo：A→B→C→D 多层转移（合成数据）。
+"""一键跑通案例 L：A→B→C→D 多层转移（合成数据）。
 
 用法（在 backend 目录）：
   python -m app.demo
+
+比赛现场请用工作台快捷键 0，而不是把本命令的 stub 结果当成真实模型输出。
 """
 
 from __future__ import annotations

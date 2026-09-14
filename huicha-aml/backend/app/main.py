@@ -92,7 +92,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="循证慧查", version="2.2.0", lifespan=lifespan)
+app = FastAPI(title="循证慧查", version="3.0.1", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
@@ -138,7 +138,7 @@ def health():
         "llm": llm_mode(),
         "model": llm_model() if llm_mode() != "off" else "",
         "stack": "FastAPI + SQLite + React（竞赛原型，非生产 PG/Docker）",
-        "version": "2.2.0",
+        "version": "3.0.1",
         "data_note": "synthetic",
         "auth": auth_mode(),
         "privacy": {"policy": POLICY_VERSION, "llm_egress": "mask+assert"},
@@ -146,12 +146,19 @@ def health():
         "kb_docs": corpus_size(),
         "kb_search_units": search_unit_count(),
         "kb_retrieval": retrieval_mode(),
+        "contest": {
+            "headline": "AI 负责推理，规则负责边界，证据负责事实，人负责最终决策。",
+            "demo_case": "ALT-L-20260910",
+            "memory_points": ["证据闭环", "安全兜底", "人工负责"],
+            "playbook": "答辩作战手册.md",
+        },
         "limitations": [
             "无银行 SSO；演示登录绑定签发人与导出，HUICHA_DEMO_TOKEN 为空则读接口开放",
             "SQLite 文件库，调查载荷明文存储，不是银行级加密",
             "LLM 出站经 PrivacyMap 脱敏并检漏；工作台展示受控明文",
             "知识库含现行法律规章官方条款（按条切块）+ 作业转述；混合检索（关键词 + 字符 TF-IDF），目录条数见 kb_docs，检索单元见 kb_search_units",
-            "告警为合成数据，gold_label 与规则模板同源",
+            "告警为合成数据，gold_label 与规则模板同源；合成集 Macro-F1 不是生产准确率",
+            "人效对照未完成前不得填写效率提升百分比",
             "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
     }

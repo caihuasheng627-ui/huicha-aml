@@ -279,13 +279,13 @@ function materialGaps(list) {
   return (list || []).filter((t) => /[\u4e00-\u9fff]/.test(t) && !/^(EV|TX|KB|ALT)-/i.test(String(t).trim()));
 }
 
-export function JudgePanel({ judge, baseline, guardrails, validation, onSelect }) {
+export function JudgePanel({ judge, baseline, guardrails, validation, onSelect, contestHot }) {
   if (!judge || !baseline) return null;
   const support = judge.supporting_evidence_ids || [];
   const counter = judge.contradicting_evidence_ids || [];
   const missing = materialGaps(judge.missing_evidence);
   return (
-    <div className="ch-panel">
+    <div className={`ch-panel${contestHot ? " contest-hot" : ""}`} data-contest="evidence">
       <div className="v2-hd">证据约束的慧查agent</div>
       <div className={validation?.passed ? "ch-on" : "ch-ablation"}>
         {validation?.reason || "等待证据契约校验"}；把握度为模型自评，未经概率校准。

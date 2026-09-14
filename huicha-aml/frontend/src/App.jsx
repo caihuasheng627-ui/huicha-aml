@@ -38,11 +38,13 @@ import {
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
 import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
+import ContestCoach from "./ContestCoach.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 import SystemManual from "./SystemManual.jsx";
 
 const EMPTY_KEYS = [
+  ["比赛演示（案例 L 主线）", "0"],
   ["打开案例 A 排除", "1"],
   ["打开案例 B 拆分", "2"],
   ["打开案例 C 归集", "3"],
@@ -60,7 +62,7 @@ function WelcomeBrief() {
         <BrandLogo size={68} />
       </div>
       <div className="welcome-title">循证慧查</div>
-      <div className="welcome-subtitle">证据约束的反洗钱 AI 调查工作台 · 快捷操作指南</div>
+      <div className="welcome-subtitle">证据约束的反洗钱 AI 调查工作台 · 快捷键 0 进入比赛演示</div>
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -75,7 +77,7 @@ function WelcomeBrief() {
   );
 }
 
-function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport }) {
+function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHot }) {
   const hasDraft = Boolean(inv?.report);
   const canSign = Boolean(hasDraft && inv.can_sign);
   const status = !current
@@ -88,7 +90,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
           ? "待签发"
           : "事实回查未通过，不能签发";
   return (
-    <div className="sign-dock">
+    <div className={`sign-dock${contestHot ? " contest-hot" : ""}`} data-contest="sign">
       <Input.TextArea
         id="investigator-note"
         rows={4}
@@ -239,11 +241,11 @@ function ReportText({ text, issues, onSelect }) {
   );
 }
 
-function DecisionComparison({ judge, baseline, guardrails, label, ablation }) {
+function DecisionComparison({ judge, baseline, guardrails, label, ablation, contestHot }) {
   if (!baseline) return null;
   const same = baseline.conclusion === guardrails?.final_conclusion;
   return (
-    <div className="score-break">
+    <div className={`score-break${contestHot ? " contest-hot" : ""}`} data-contest="guardrail">
       <div className="score-break-hd">
         判断来源对照
         <b className={conclusionTone(label)}>{label}</b>
@@ -365,7 +367,10 @@ export default function App() {
   const [checklistWriting, setChecklistWriting] = useState(false);
   const [kbArticle, setKbArticle] = useState(null);
   const [kbLoading, setKbLoading] = useState(false);
+  const [contestMode, setContestMode] = useState(false);
+  const [contestStep, setContestStep] = useState("draft");
   const openSeq = useRef(0);
+  const startContestRef = useRef(null);
   const inv = detail?.investigation;
   const playback = usePipelinePlayback({ running: loading, failed: invError });
   const showTheater = playback.phase === "playing" || playback.phase === "holding" || playback.phase === "error";
@@ -475,6 +480,10 @@ export default function App() {
         setManualOpen((v) => !v);
         return;
       }
+      if (e.key === "0") {
+        startContestRef.current?.();
+        return;
+      }
       const hit = DEMOS.find((d) => d.key === e.key);
       if (hit) open(hit.id).catch((err) => message.error(err.message));
     }
@@ -503,6 +512,7 @@ export default function App() {
       });
       await open(id);
       await loadList();
+      if (contestMode) setContestStep("evidence");
     } catch (e) {
       setInvError(true);
       message.error(e.message || "调查失败");
@@ -523,6 +533,7 @@ export default function App() {
       await open(current);
       await loadList();
       message.success(`处置意见已由 ${user.name} 写入审计`);
+      if (contestMode) setContestStep("sign");
     } catch (e) {
       if (String(e.message || "").includes("登录")) {
         clearSession();
@@ -556,6 +567,28 @@ export default function App() {
     message.success("已退出登录");
   }
 
+  async function startContest() {
+    setContestMode(true);
+    setContestStep("draft");
+    setExperimentMode(false);
+    setInjectHallucination(false);
+    setCurrentChallengerEnabled(true);
+    setQueueKind("demo");
+    try {
+      await open("ALT-L-20260910");
+      message.success("比赛演示已锁定案例 L。按条带三步走。");
+    } catch (e) {
+      message.error(e.message);
+    }
+  }
+  startContestRef.current = startContest;
+
+  useEffect(() => {
+    if (contestMode && inv && contestStep === "draft") {
+      setContestStep("evidence");
+    }
+  }, [contestMode, inv, contestStep]);
+
   function selectEvidence(id) {
     const graph = inv?.evidence_graph || [];
     let resolved = id;
@@ -571,6 +604,9 @@ export default function App() {
       }
     }
     setSelected(resolved);
+    if (contestMode && contestStep === "evidence" && resolved) {
+      setContestStep("guardrail");
+    }
     if (String(resolved || "").startsWith("KB-")) {
       openKnowledge(resolved);
       return;
@@ -627,7 +663,7 @@ export default function App() {
     .filter((a) => !q || `${a.title}${a.customer_name}${a.alert_type}${a.id}`.includes(q));
 
   return (
-    <div className="app">
+    <div className={`app${contestMode ? " is-contest" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <BrandLogo size={36} />
@@ -636,11 +672,16 @@ export default function App() {
               <strong>循证慧查</strong>
               <span className="brand-tag">AML JUDGE</span>
             </div>
-            <span>证据约束的反洗钱调查工作台</span>
+            <span>证据约束的反洗钱 AI 调查工作台 · 快捷键 0 进入比赛演示</span>
           </div>
         </div>
         <div className="staff">
           <span className="top-clock">{clock}</span>
+          <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
+            <button type="button" className="ghost-btn primary" onClick={() => startContest()}>
+              比赛演示
+            </button>
+          </Tooltip>
           <Tooltip title="按 H 也可打开">
             <button type="button" className="ghost-btn manual-btn" onClick={() => setManualOpen(true)}>
               系统说明书
@@ -668,6 +709,7 @@ export default function App() {
 
       <SystemManual open={manualOpen} onClose={() => setManualOpen(false)} health={healthInfo} />
 
+      <div className="toolbar-stack">
       <div className="toolbar">
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
           {experimentMode ? "实验模式：用于慧查agent 消融实验" : "慧查agent · 已启用"}
@@ -712,8 +754,34 @@ export default function App() {
           </label>
         )}
         <span className="hint" style={{ margin: 0 }}>
-          快捷键 1–6 打开历史案（不重跑）；顶部策略只作用于「按当前策略重跑」。签发与导出须登录；AI 不得自动报送。
+          快捷键 0 比赛演示 · 1–6 打开历史案（不重跑）。签发与导出须登录；AI 不得自动报送。
         </span>
+      </div>
+      {contestMode && (
+        <ContestCoach
+          step={contestStep}
+          hasDraft={Boolean(inv)}
+          selected={selected}
+          user={user}
+          signed={detail}
+          llmOff={llmOff}
+          onStep={setContestStep}
+          onInvestigate={() => onInvestigate("ALT-L-20260910")}
+          onHallucination={() => {
+            setExperimentMode(true);
+            setInjectHallucination(true);
+            setContestStep("guardrail");
+            message.info("已打开幻觉演示。请重跑，指出 6222-FAKE-9999 标红且不可签发。");
+          }}
+          onAblation={() => {
+            setExperimentMode(true);
+            setCurrentChallengerEnabled(false);
+            setInjectHallucination(false);
+            message.info("下次重跑将关闭慧查agent，只保留规则对照。");
+          }}
+          onExit={() => setContestMode(false)}
+        />
+      )}
       </div>
 
       <Modal
@@ -1007,7 +1075,7 @@ export default function App() {
               )}
               {inv && (
                 <div className="viz-row">
-                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} />
+                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} />
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
@@ -1017,7 +1085,7 @@ export default function App() {
                   数据 {inv.data_note || "synthetic"} · Agent 不得自动报送
                 </div>
               )}
-              {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} />}
+              {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
@@ -1103,6 +1171,7 @@ export default function App() {
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
             onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
+            contestHot={contestMode && contestStep === "sign"}
           />
         </main>
 
@@ -1281,7 +1350,10 @@ export default function App() {
         )}
       </Drawer>
       <footer className="footer">
-        <span>内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发</span>
+        <span>
+          {contestMode ? "比赛演示 · 案例 L · " : ""}
+          内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发
+        </span>
         <span>
           队列 {metrics?.alerts ?? "—"}　模板精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
           {metrics?.signed ?? "—"}

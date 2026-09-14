@@ -222,6 +222,89 @@ body {
   font-size: 13px;
   color: var(--muted);
 }
+.toolbar-stack .toolbar {
+  border-bottom: none;
+}
+.contest-coach {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 16px 10px;
+  background: #fffbeb;
+  border-top: 1px solid #fde68a;
+  color: var(--text);
+  font-size: 13px;
+}
+.contest-coach-main {
+  min-width: 0;
+  flex: 1;
+}
+.contest-coach-main b {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #92400e;
+  margin-bottom: 6px;
+}
+.contest-coach ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+}
+.contest-coach ol button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.contest-coach ol button.on {
+  border-color: #c59b27;
+  background: #fef3c7;
+  font-weight: 600;
+}
+.contest-coach p {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.contest-warn {
+  color: #9a3412 !important;
+  margin-top: 4px !important;
+}
+.contest-ok {
+  color: var(--pass) !important;
+  margin-top: 4px !important;
+}
+.contest-coach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+}
+.contest-coach-actions button {
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.contest-coach-actions .contest-primary {
+  background: var(--brand-blue);
+  color: #fff;
+  border-color: var(--brand-blue);
+}
+.app.is-contest .contest-hot {
+  outline: 2px solid var(--brand-gold);
+  outline-offset: 3px;
+}
 .toolbar label {
   display: flex;
   align-items: center;

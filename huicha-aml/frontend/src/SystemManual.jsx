@@ -43,6 +43,7 @@ const SWITCHES = [
 ];
 
 const KEYS = [
+  ["0", "进入比赛演示，锁定案例 L 主线（生成草稿后按条带三步走）。"],
   ["1 / 2 / 3 / 4 / 5 / 6", "打开案例 A 排除、B 拆分、C 归集、F 观察、L 多层、H 抽数（只打开历史草稿，不重跑）。"],
   ["点击编号", "报告、理由、法规、图谱里的编号都可点，用于回溯原始证据。"],
 ];
@@ -65,7 +66,7 @@ export default function SystemManual({ open, onClose, health }) {
             <b>循证慧查 · 证据约束的反洗钱调查工作台</b>
             <p>
               上游监测已经出了告警，本台只负责把告警升级为可追溯的案件草稿：AI 负责推理，规则负责边界，证据负责事实，
-              <em>人负责最终决策</em>。系统不连接真实银行，不会自动报送。
+              <em>人负责最终决策</em>。系统不连接真实银行，不会自动报送。比赛请按 0 锁定案例 L。
             </p>
           </div>
         </div>
@@ -173,7 +174,42 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>九、运行环境</h4>
+          <h4>九、比赛演示（3 分钟主线）</h4>
+          <p className="manual-note" style={{ marginTop: 0 }}>
+            顶栏「比赛演示」或快捷键 0，锁定案例 L。只带评委看三件事：点证据编号、护栏后不是已报送、登录签发进审计。
+            A/B/C/F/H、幻觉拦截、关闭慧查agent 都是备用枝。合成对照不是生产准确率，人效数字未测完不报提升百分比。
+          </p>
+        </section>
+
+        <section className="manual-sec">
+          <h4>十、评委常问（第一句）</h4>
+          <dl className="manual-dl">
+            <div>
+              <dt>准确率多少</dt>
+              <dd>合成对照不是生产准确率，现场看引用和拦截。</dd>
+            </div>
+            <div>
+              <dt>数据是真的吗</dt>
+              <dd>全部合成，不接核心。试点才只读接告警队列。</dd>
+            </div>
+            <div>
+              <dt>去掉大模型</dt>
+              <dd>能降级，但没有证据综合建议和可用全文草稿。</dd>
+            </div>
+            <div>
+              <dt>责任谁负</dt>
+              <dd>调查员签发；系统不会变成已报送。</dd>
+            </div>
+            <div>
+              <dt>和监测什么关系</dt>
+              <dd>他们做疑不疑，我们做为什么、证据在哪、报告怎么写。</dd>
+            </div>
+          </dl>
+          <p className="manual-note">完整 20 题与禁语见仓库根目录《答辩作战手册》。</p>
+        </section>
+
+        <section className="manual-sec">
+          <h4>十一、运行环境</h4>
           <div className="manual-chips">
             <Tag>版本 {health?.version || "—"}</Tag>
             <Tag color={health?.llm && health.llm !== "off" ? "blue" : "red"}>
@@ -188,7 +224,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>十、诚实边界</h4>
+          <h4>十二、诚实边界</h4>
           <ul className="manual-limits">
             {(health?.limitations || []).map((x) => (
               <li key={x}>{x}</li>

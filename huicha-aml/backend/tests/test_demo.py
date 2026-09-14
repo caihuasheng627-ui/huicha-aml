@@ -202,6 +202,8 @@ def test_health_reports_llm(client):
     assert body["kb_retrieval"] == "hybrid-keyword-tfidf"
     assert body.get("kb_search_units", 0) >= body["kb_docs"]
     assert body["limitations"]
+    assert body["contest"]["demo_case"] == "ALT-L-20260910"
+    assert "人效对照未完成" in " ".join(body["limitations"])
 
 
 def test_planner_skips_watchlist_on_wholesale(client):

@@ -11,6 +11,7 @@
 - 账号改写成 ACC-****** 形态
 
 `--placeholder` 写入 5 条手写样例，data_note=placeholder，禁止写入 RESULTS 主表。
+`--public-rewrite` 写入公开典型案例改写探针，data_note=public-rewrite，同样禁止写入主表。
 """
 
 from __future__ import annotations
@@ -165,7 +166,7 @@ def row_to_case(row: dict, idx: int) -> dict:
     ]
     allowed = sorted({t["id"] for t in txs} | {e["id"] for e in candidate} | {customer_id, account_id})
     blob = json.dumps({"alert_type": alert["alert_type"], "summary": summary, "evidence": [e["text"] for e in candidate]}, ensure_ascii=False, sort_keys=True)
-    return {
+    case = {
         "case_id": case_id,
         "gold": row["gold"],
         "tag": row.get("tag") or "real",
@@ -202,6 +203,18 @@ def row_to_case(row: dict, idx: int) -> dict:
             "candidate_evidence": candidate,
         },
     }
+    if row.get("source_url") or row.get("source_title") or row.get("source_id"):
+        case["source_citation"] = {
+            "id": (row.get("source_id") or "").strip(),
+            "title": mask_text(row.get("source_title") or ""),
+            "url": (row.get("source_url") or "").strip(),
+            "public_conclusion": mask_text(row.get("public_conclusion") or ""),
+        }
+    if row.get("gold_provenance"):
+        case["gold_provenance"] = mask_text(row["gold_provenance"])
+    if row.get("ledger_note"):
+        case["ledger_note"] = mask_text(row["ledger_note"])
+    return case
 
 
 PLACEHOLDER_CSV = """case_id,gold,alert_type,industry,customer_kind,customer_name,amount,summary,evidence,annotation_reason,tag
@@ -220,38 +233,94 @@ def cases_from_csv(text: str) -> list[dict]:
     return [row_to_case(row, i) for i, row in enumerate(reader, 1)]
 
 
-def build_payload(cases: list[dict], *, data_note: str, source: str) -> dict:
+DEFAULT_CAVEATS = {
+    "placeholder": "真实 hold-out 槽位。placeholder 为手写样例，不是生产案件，禁止写入 RESULTS 主表，禁止写成准确率。",
+    "real-imported": "真实 hold-out 导入。须为脱敏生产/从业者标注案件；禁止把未脱敏材料入库。未满独立双标前禁止写成准确率。",
+    "public-rewrite": (
+        "公开改写探针。来源为监管通报、法院典型案例、义务机构宣传稿；"
+        "gold 由作者按公开结论映射，不是独立标注；几乎全为 suggest_report，"
+        "不能测排除/观察，禁止写入 RESULTS 主表，禁止写成准确率。"
+    ),
+}
+
+
+def build_payload(
+    cases: list[dict],
+    *,
+    data_note: str,
+    source: str,
+    split: str = "real_holdout",
+    variant: str = "real",
+    caveat: str | None = None,
+    extra: dict | None = None,
+) -> dict:
     raw = json.dumps(cases, ensure_ascii=False)
     if ID_CARD_RE.search(raw) or PHONE_RE.search(raw):
         raise RuntimeError("导出仍含身份证或手机号，已拒绝写入")
-    return {
+    payload = {
         "data_note": data_note,
-        "split": "real_holdout",
-        "variant": "real",
+        "split": split,
+        "variant": variant,
         "source": source,
         "n": len(cases),
         "n_unique": len({c["fingerprint"] for c in cases}),
         "judge_input_contract": "enrich_judge(alert, customer, findings, transactions, baseline, kb_hits, allowed_evidence)；不传 missing_evidence",
-        "caveat": "真实 hold-out 槽位。placeholder 为手写样例，不是生产案件，禁止写入 RESULTS 主表，禁止写成准确率。",
+        "caveat": caveat or DEFAULT_CAVEATS.get(data_note) or DEFAULT_CAVEATS["placeholder"],
         "cases": cases,
     }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+SKIP_RESULTS_NOTES = frozenset({"placeholder", "public-rewrite"})
+SKIP_RESULTS_SOURCE_PREFIXES = ("real_holdout", "public_rewrite")
+
+
+def skip_results_write(result: dict) -> bool:
+    """placeholder / public-rewrite / 未核验真实 hold-out 不得写入 RESULTS 主表。"""
+    note = str(result.get("data_note") or "")
+    source = str(result.get("source") or "")
+    if note in SKIP_RESULTS_NOTES:
+        return True
+    return any(source.startswith(prefix) for prefix in SKIP_RESULTS_SOURCE_PREFIXES)
 
 
 def main(argv: list[str] | None = None) -> Path:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", help="脱敏 CSV 路径")
     parser.add_argument("--placeholder", action="store_true", help="写入 5 条手写样例")
-    parser.add_argument("--out", default=str(HERE / "real_holdout.json"))
+    parser.add_argument("--public-rewrite", action="store_true", help="写入公开典型案例改写探针")
+    parser.add_argument("--out", default=None)
     args = parser.parse_args(argv)
     if args.placeholder:
         cases = cases_from_csv(PLACEHOLDER_CSV)
         payload = build_payload(cases, data_note="placeholder", source="real_holdout_placeholder")
+        out = Path(args.out or (HERE / "real_holdout.json"))
+    elif args.public_rewrite:
+        from public_rewrite_cases import CAVEAT, CITATIONS, public_rewrite_rows  # noqa: WPS433
+
+        cases = [row_to_case(row, i) for i, row in enumerate(public_rewrite_rows(), 1)]
+        payload = build_payload(
+            cases,
+            data_note="public-rewrite",
+            source="public_rewrite_holdout",
+            split="public_rewrite",
+            variant="public_rewrite",
+            caveat=CAVEAT,
+            extra={
+                "gold_distribution": {"suggest_report": len(cases)},
+                "selection_bias": "public cases are almost always already reported or prosecuted; always_suggest_report accuracy is 1.0 by construction; cannot measure exclude/observe",
+                "citations": CITATIONS,
+            },
+        )
+        out = Path(args.out or (HERE / "public_rewrite.json"))
     elif args.csv:
         cases = cases_from_csv(Path(args.csv).read_text(encoding="utf-8"))
         payload = build_payload(cases, data_note="real-imported", source="real_holdout")
+        out = Path(args.out or (HERE / "real_holdout.json"))
     else:
-        raise SystemExit("需要 --csv 或 --placeholder")
-    out = Path(args.out)
+        raise SystemExit("需要 --csv、--placeholder 或 --public-rewrite")
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"wrote {out} n={payload['n']} data_note={payload['data_note']}")
     return out

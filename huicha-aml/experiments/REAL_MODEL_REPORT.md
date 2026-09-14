@@ -174,6 +174,7 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/struct_set.json` · `runs/20260912T235835Z_blind_struct_judge_v{2,3}.jsonl` | 结构盲区 hold-out |
 | `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
 | `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
+| `benchmark/public_rewrite.json` · `public_rewrite_cases.py` | 公开案例改写探针（12 条，不上主表） |
 | `runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl` | judge_v4 消融（主集/盲区；结构盲区因欠费中断） |
 | `runs/20260914T074816Z_blind_struct_judge_v{3,4}.jsonl` | 官方 deepseek-chat 结构盲区补跑 |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
@@ -266,6 +267,15 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 ### 10.5 真实 hold-out 接口
 
 `import_real_cases.py`：脱敏 CSV → `real_holdout.json`；`benchmark.py --set real`。占位 5 条 `data_note=placeholder`，**不写 RESULTS 主表**。字段校验与去标识见 `backend/tests/test_real_holdout.py`。
+
+公开网上能找到的是监管通报、法院典型案例、义务机构宣传稿，**不是**银行 STR 流水与双人标注。已改写 12 条进 `public_rewrite.json`（`--set public-rewrite`）：
+
+- `data_note=public-rewrite`；gold 由作者按「公开结论为报送/追诉」映射，**不是独立标注**。
+- always_suggest_report 在本集准确率为 1.0（金标全是上报）；模型打满分**不能**当能力证据，漏报才有信息量。
+- 输入 vignette 只保留银行侧可见形态，不含判决刑期；流水按公开数量级重构，不是原件账本。
+- 出处写在每条 `source_citation` 与 payload `citations`。
+
+这只证明「上报侧公开形态能否被认出来」。真正 hold-out 仍需脱敏 CSV + ≥2 人独立标。
 
 ### 10.6 结构盲区真实跑（`struct_set.json` × v2/v3）
 

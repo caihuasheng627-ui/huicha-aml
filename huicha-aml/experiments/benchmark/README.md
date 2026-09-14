@@ -9,6 +9,8 @@
 - `blind_set.json`：例举词盲区 hold-out
 - `struct_set.json`：结构盲区 hold-out（禁词同盲区，且流水不触发 structuring/funnel/night-out/layering）
 - `real_holdout.json`：真实 hold-out 导入槽（占位样例 `data_note=placeholder`，不写入 RESULTS 主表）
+- `public_rewrite.json`：公开典型案例改写探针（`data_note=public-rewrite`，12 条均为 suggest_report，不写入主表，不能测排除/观察）
+- `public_rewrite_cases.py` · `import_real_cases.py --public-rewrite`：生成上述探针
 - `build_independent_set.py`：生成器（`--variant v3|nopolarity|blind|blind_struct`）
 - `runs/`：真实调用原始 jsonl，文件名带 prompt 版本（`<ts>_<judge_vN>.jsonl`）
 
@@ -40,6 +42,9 @@ python experiments/benchmark/export_gold_review.py
 python experiments/benchmark/score_gold_review.py
 python experiments/benchmark/import_real_cases.py --placeholder
 python experiments/benchmark.py --real --set real --limit 5 --no-write
+python experiments/benchmark/import_real_cases.py --public-rewrite
+python experiments/benchmark.py --real --set public-rewrite --no-write
+python experiments/benchmark.py --baselines-only --set public-rewrite
 ```
 
 `judge_v4` 仅消融：`--prompt judge_v4`。默认产品仍是 `judge_v3`。

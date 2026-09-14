@@ -1,0 +1,3260 @@
+{
+  "data_note": "public-rewrite",
+  "split": "public_rewrite",
+  "variant": "public_rewrite",
+  "source": "public_rewrite_holdout",
+  "n": 12,
+  "n_unique": 12,
+  "judge_input_contract": "enrich_judge(alert, customer, findings, transactions, baseline, kb_hits, allowed_evidence)；不传 missing_evidence",
+  "caveat": "公开改写探针（public-rewrite）。来源为监管通报、法院典型案例、义务机构宣传稿；gold 由作者按「公开结论为报送/追诉」映射，不是独立标注；12/12 均为 suggest_report，always_suggest_report 准确率为 1.0，命中不能证明能力，漏报（判成 observe/exclude）才有信息量；不能测排除/观察，禁止写入 RESULTS 主表，禁止写成准确率或生产能力。",
+  "cases": [
+    {
+      "case_id": "PR-0001",
+      "gold": "suggest_report",
+      "tag": "dormant_awakening",
+      "annotation_reason": "公开改写：休眠后突发快进快出异地取现",
+      "gold_support_ids": [
+        "IX-PR-0001-01",
+        "IX-PR-0001-02",
+        "IX-PR-0001-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0001-01",
+        "IX-PR-0001-02",
+        "IX-PR-0001-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "789cf245dc0ad8dc550d038c2e18632e5df0dea172ceb8ea6e203a25c0912778",
+      "vignette": {
+        "alert_type": "休眠账户突发大额进出",
+        "industry": "个人-灵活就业",
+        "summary": "长期无交易账户突然连续大额转入并在异地取现，余额接近零",
+        "alert": {
+          "id": "PR-0001",
+          "alert_type": "休眠账户突发大额进出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-058E5F",
+          "customer_id": "C-0001",
+          "amount": 1100000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0001",
+          "name": "钟**",
+          "kind": "individual",
+          "industry": "个人-灵活就业",
+          "opened_at": "2011-08-12",
+          "kyc_level": "普通",
+          "summary": "长期无交易账户突然连续大额转入并在异地取现，余额接近零"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "长期无交易账户突然连续大额转入并在异地取现，余额接近零",
+            "evidence_ids": [
+              "TX-PR-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「休眠账户突发大额进出」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "2013年至2015年除系统扣费外无其他交易",
+            "evidence_ids": [
+              "IX-PR-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "2016年起资金入账后数小时内在另一城市柜台或ATM取走",
+            "evidence_ids": [
+              "IX-PR-0001-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "客户职业与年交易规模明显不匹配，无法说明资金来源",
+            "evidence_ids": [
+              "IX-PR-0001-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0001-01",
+            "from_account": "ACC-F5F8CC",
+            "to_account": "ACC-5C9B39",
+            "amount": 28000.0,
+            "occurred_at": "2012-03-08 11:20:00",
+            "channel": "柜面",
+            "remark": "存入"
+          },
+          {
+            "id": "TX-PR-0001-02",
+            "from_account": "ACC-C48BB4",
+            "to_account": "ACC-EA6019",
+            "amount": 15000.0,
+            "occurred_at": "2012-09-19 09:40:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0001-03",
+            "from_account": "ACC-314122",
+            "to_account": "ACC-5090D6",
+            "amount": 3.0,
+            "occurred_at": "2014-06-01 00:00:01",
+            "channel": "系统",
+            "remark": "年费"
+          },
+          {
+            "id": "TX-PR-0001-04",
+            "from_account": "ACC-FB602C",
+            "to_account": "ACC-B33066",
+            "amount": 2.0,
+            "occurred_at": "2015-06-01 00:00:01",
+            "channel": "系统",
+            "remark": "短信费"
+          },
+          {
+            "id": "TX-PR-0001-05",
+            "from_account": "ACC-B70FE8",
+            "to_account": "ACC-BF361D",
+            "amount": 860000.0,
+            "occurred_at": "2016-04-12 09:18:00",
+            "channel": "转账",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0001-06",
+            "from_account": "ACC-F5F990",
+            "to_account": "ACC-F506D9",
+            "amount": 858000.0,
+            "occurred_at": "2016-04-12 11:05:00",
+            "channel": "ATM",
+            "remark": "异地取现"
+          },
+          {
+            "id": "TX-PR-0001-07",
+            "from_account": "ACC-98F684",
+            "to_account": "ACC-543649",
+            "amount": 920000.0,
+            "occurred_at": "2016-05-03 14:22:00",
+            "channel": "转账",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0001-08",
+            "from_account": "ACC-D9C0E2",
+            "to_account": "ACC-BCA04D",
+            "amount": 918500.0,
+            "occurred_at": "2016-05-03 16:40:00",
+            "channel": "柜面",
+            "remark": "异地取现"
+          },
+          {
+            "id": "TX-PR-0001-09",
+            "from_account": "ACC-00E728",
+            "to_account": "ACC-6E1B04",
+            "amount": 1100000.0,
+            "occurred_at": "2016-07-21 10:11:00",
+            "channel": "转账",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0001-10",
+            "from_account": "ACC-592C12",
+            "to_account": "ACC-82046E",
+            "amount": 1097000.0,
+            "occurred_at": "2016-07-21 13:02:00",
+            "channel": "ATM",
+            "remark": "异地取现"
+          },
+          {
+            "id": "TX-PR-0001-11",
+            "from_account": "ACC-F18E31",
+            "to_account": "ACC-A06DB8",
+            "amount": 760000.0,
+            "occurred_at": "2016-11-08 08:55:00",
+            "channel": "转账",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0001-12",
+            "from_account": "ACC-0F51D8",
+            "to_account": "ACC-5331F5",
+            "amount": 758200.0,
+            "occurred_at": "2016-11-08 10:16:00",
+            "channel": "柜面",
+            "remark": "异地取现"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-灵活就业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 1100000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-058E5F",
+          "C-0001",
+          "IX-PR-0001-01",
+          "IX-PR-0001-02",
+          "IX-PR-0001-03",
+          "TX-PR-0001-01",
+          "TX-PR-0001-02",
+          "TX-PR-0001-03",
+          "TX-PR-0001-04",
+          "TX-PR-0001-05",
+          "TX-PR-0001-06",
+          "TX-PR-0001-07",
+          "TX-PR-0001-08",
+          "TX-PR-0001-09",
+          "TX-PR-0001-10",
+          "TX-PR-0001-11",
+          "TX-PR-0001-12"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0001-01",
+            "text": "2013年至2015年除系统扣费外无其他交易"
+          },
+          {
+            "id": "IX-PR-0001-02",
+            "text": "2016年起资金入账后数小时内在另一城市柜台或ATM取走"
+          },
+          {
+            "id": "IX-PR-0001-03",
+            "text": "客户职业与年交易规模明显不匹配，无法说明资金来源"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-01",
+        "title": "“沉睡”账户突然“苏醒”银行警觉牵出洗钱大案（中行韶关 / 韶关中支，宣传转载）",
+        "url": "https://www.zyfutures.com/fxqzsal/55439.jhtml",
+        "public_conclusion": "义务机构报送并移送，后牵出地下钱庄线索"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0002",
+      "gold": "suggest_report",
+      "tag": "scatter_gather_24h",
+      "annotation_reason": "公开改写：分散进集中出且全天交易",
+      "gold_support_ids": [
+        "IX-PR-0002-01",
+        "IX-PR-0002-02",
+        "IX-PR-0002-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0002-01",
+        "IX-PR-0002-02",
+        "IX-PR-0002-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "ad811e2edeec05cd5c89481ee2419a17568fdfd971a50c5c6b0d022bd0e70afa",
+      "vignette": {
+        "alert_type": "分散转入集中转出",
+        "industry": "个人-受雇",
+        "summary": "新开个人卡每日多笔分散网银转入后经手机银行集中转出，含凌晨交易",
+        "alert": {
+          "id": "PR-0002",
+          "alert_type": "分散转入集中转出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-AF8F71",
+          "customer_id": "C-0002",
+          "amount": 61280.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0002",
+          "name": "刘**",
+          "kind": "individual",
+          "industry": "个人-受雇",
+          "opened_at": "2020-05-20",
+          "kyc_level": "普通",
+          "summary": "新开个人卡每日多笔分散网银转入后经手机银行集中转出，含凌晨交易"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "新开个人卡每日多笔分散网银转入后经手机银行集中转出，含凌晨交易",
+            "evidence_ids": [
+              "TX-PR-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「分散转入集中转出」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "转入对手来自多个地区不同银行自然人，单笔金额相近",
+            "evidence_ids": [
+              "IX-PR-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "转出对手固定，当日进出基本轧平",
+            "evidence_ids": [
+              "IX-PR-0002-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "交易覆盖凌晨，客户称日常消费但无法指认对手",
+            "evidence_ids": [
+              "IX-PR-0002-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0002-01",
+            "from_account": "ACC-8B7740",
+            "to_account": "ACC-B9D4A9",
+            "amount": 4200.0,
+            "occurred_at": "2020-06-18 00:00:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-02",
+            "from_account": "ACC-0A01B2",
+            "to_account": "ACC-97F7B7",
+            "amount": 4237.5,
+            "occurred_at": "2020-06-18 03:11:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-03",
+            "from_account": "ACC-F8BF4B",
+            "to_account": "ACC-4177A0",
+            "amount": 4275.0,
+            "occurred_at": "2020-06-18 06:22:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-04",
+            "from_account": "ACC-C3D385",
+            "to_account": "ACC-385EB4",
+            "amount": 4312.5,
+            "occurred_at": "2020-06-18 09:33:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-05",
+            "from_account": "ACC-90ED05",
+            "to_account": "ACC-53C4C2",
+            "amount": 4350.0,
+            "occurred_at": "2020-06-18 12:44:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-06",
+            "from_account": "ACC-A82796",
+            "to_account": "ACC-FC5783",
+            "amount": 4387.5,
+            "occurred_at": "2020-06-18 15:55:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-07",
+            "from_account": "ACC-D9888E",
+            "to_account": "ACC-25CD81",
+            "amount": 4425.0,
+            "occurred_at": "2020-06-18 18:06:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-08",
+            "from_account": "ACC-503671",
+            "to_account": "ACC-CC56A9",
+            "amount": 4462.5,
+            "occurred_at": "2020-06-18 21:17:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-09",
+            "from_account": "ACC-B44FB9",
+            "to_account": "ACC-3A489F",
+            "amount": 4500.0,
+            "occurred_at": "2020-06-18 00:28:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-10",
+            "from_account": "ACC-88BF65",
+            "to_account": "ACC-AE8E16",
+            "amount": 4537.5,
+            "occurred_at": "2020-06-18 03:39:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-11",
+            "from_account": "ACC-2EB8E7",
+            "to_account": "ACC-F7B801",
+            "amount": 4575.0,
+            "occurred_at": "2020-06-18 06:50:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-12",
+            "from_account": "ACC-AB4A65",
+            "to_account": "ACC-B68CA6",
+            "amount": 4612.5,
+            "occurred_at": "2020-06-18 09:01:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-13",
+            "from_account": "ACC-7A252F",
+            "to_account": "ACC-74F9B3",
+            "amount": 4650.0,
+            "occurred_at": "2020-06-18 12:12:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-14",
+            "from_account": "ACC-13862A",
+            "to_account": "ACC-66EB4B",
+            "amount": 4687.5,
+            "occurred_at": "2020-06-18 15:23:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-15",
+            "from_account": "ACC-5E4DB9",
+            "to_account": "ACC-84AC11",
+            "amount": 61280.0,
+            "occurred_at": "2020-06-18 23:51:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-16",
+            "from_account": "ACC-1F060F",
+            "to_account": "ACC-E3C85D",
+            "amount": 3900.0,
+            "occurred_at": "2020-06-19 00:00:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-17",
+            "from_account": "ACC-7F1201",
+            "to_account": "ACC-DE970F",
+            "amount": 3937.5,
+            "occurred_at": "2020-06-19 03:11:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-18",
+            "from_account": "ACC-1976DC",
+            "to_account": "ACC-577479",
+            "amount": 3975.0,
+            "occurred_at": "2020-06-19 06:22:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-19",
+            "from_account": "ACC-E92DDD",
+            "to_account": "ACC-589F7A",
+            "amount": 4012.5,
+            "occurred_at": "2020-06-19 09:33:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-20",
+            "from_account": "ACC-9EA48F",
+            "to_account": "ACC-AAD8BD",
+            "amount": 4050.0,
+            "occurred_at": "2020-06-19 12:44:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-21",
+            "from_account": "ACC-A1ACA8",
+            "to_account": "ACC-34465B",
+            "amount": 4087.5,
+            "occurred_at": "2020-06-19 15:55:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-22",
+            "from_account": "ACC-7529FD",
+            "to_account": "ACC-52F948",
+            "amount": 4125.0,
+            "occurred_at": "2020-06-19 18:06:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-23",
+            "from_account": "ACC-8C6020",
+            "to_account": "ACC-A2C9B4",
+            "amount": 4162.5,
+            "occurred_at": "2020-06-19 21:17:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-24",
+            "from_account": "ACC-05636C",
+            "to_account": "ACC-C9654C",
+            "amount": 4200.0,
+            "occurred_at": "2020-06-19 00:28:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-25",
+            "from_account": "ACC-561AC4",
+            "to_account": "ACC-0E95DC",
+            "amount": 4237.5,
+            "occurred_at": "2020-06-19 03:39:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-26",
+            "from_account": "ACC-60EAFC",
+            "to_account": "ACC-094991",
+            "amount": 4275.0,
+            "occurred_at": "2020-06-19 06:50:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-27",
+            "from_account": "ACC-1F238D",
+            "to_account": "ACC-D8E33B",
+            "amount": 4312.5,
+            "occurred_at": "2020-06-19 09:01:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0002-28",
+            "from_account": "ACC-ACD6E5",
+            "to_account": "ACC-3C9082",
+            "amount": 54120.0,
+            "occurred_at": "2020-06-19 22:08:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-受雇",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 61280.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-AF8F71",
+          "C-0002",
+          "IX-PR-0002-01",
+          "IX-PR-0002-02",
+          "IX-PR-0002-03",
+          "TX-PR-0002-01",
+          "TX-PR-0002-02",
+          "TX-PR-0002-03",
+          "TX-PR-0002-04",
+          "TX-PR-0002-05",
+          "TX-PR-0002-06",
+          "TX-PR-0002-07",
+          "TX-PR-0002-08",
+          "TX-PR-0002-09",
+          "TX-PR-0002-10",
+          "TX-PR-0002-11",
+          "TX-PR-0002-12",
+          "TX-PR-0002-13",
+          "TX-PR-0002-14",
+          "TX-PR-0002-15",
+          "TX-PR-0002-16",
+          "TX-PR-0002-17",
+          "TX-PR-0002-18",
+          "TX-PR-0002-19",
+          "TX-PR-0002-20",
+          "TX-PR-0002-21",
+          "TX-PR-0002-22",
+          "TX-PR-0002-23",
+          "TX-PR-0002-24",
+          "TX-PR-0002-25",
+          "TX-PR-0002-26",
+          "TX-PR-0002-27",
+          "TX-PR-0002-28"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0002-01",
+            "text": "转入对手来自多个地区不同银行自然人，单笔金额相近"
+          },
+          {
+            "id": "IX-PR-0002-02",
+            "text": "转出对手固定，当日进出基本轧平"
+          },
+          {
+            "id": "IX-PR-0002-03",
+            "text": "交易覆盖凌晨，客户称日常消费但无法指认对手"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-02",
+        "title": "线上银行业务洗钱典型案例分析（中国电子银行网）",
+        "url": "https://www.cebnet.com.cn/20200817/102683310.html",
+        "public_conclusion": "义务机构研判为过渡性可疑并报送"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0003",
+      "gold": "suggest_report",
+      "tag": "wager_pass_through",
+      "annotation_reason": "公开改写：分散小额进、集中出、全天候",
+      "gold_support_ids": [
+        "IX-PR-0003-01",
+        "IX-PR-0003-02",
+        "IX-PR-0003-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0003-01",
+        "IX-PR-0003-02",
+        "IX-PR-0003-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "5602792a9a8df1493fd0411ec8fe11d335ac7d796e34d18d2940a5fb1392383d",
+      "vignette": {
+        "alert_type": "分散小额转入集中转出",
+        "industry": "个人-网络销售",
+        "summary": "上游对手极为分散的小额入账后集中转出，部分附言像平台编号",
+        "alert": {
+          "id": "PR-0003",
+          "alert_type": "分散小额转入集中转出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-B30EA6",
+          "customer_id": "C-0003",
+          "amount": 7501.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0003",
+          "name": "李**",
+          "kind": "individual",
+          "industry": "个人-网络销售",
+          "opened_at": "2021-11-03",
+          "kyc_level": "普通",
+          "summary": "上游对手极为分散的小额入账后集中转出，部分附言像平台编号"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "上游对手极为分散的小额入账后集中转出，部分附言像平台编号",
+            "evidence_ids": [
+              "TX-PR-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「分散小额转入集中转出」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "上游对手数量远多于下游，单笔多为数百至数千",
+            "evidence_ids": [
+              "IX-PR-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "下游集中且金额带零头，凌晨仍有转出",
+            "evidence_ids": [
+              "IX-PR-0003-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "客户称买卖虚拟物品，但附言与对手分布不像普通零售",
+            "evidence_ids": [
+              "IX-PR-0003-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0003-01",
+            "from_account": "ACC-825121",
+            "to_account": "ACC-5BA693",
+            "amount": 320.0,
+            "occurred_at": "2023-04-09 00:00:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-02",
+            "from_account": "ACC-2AB04F",
+            "to_account": "ACC-8C695D",
+            "amount": 357.5,
+            "occurred_at": "2023-04-09 03:11:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-03",
+            "from_account": "ACC-7D23DC",
+            "to_account": "ACC-7D06F0",
+            "amount": 395.0,
+            "occurred_at": "2023-04-09 06:22:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-04",
+            "from_account": "ACC-0CA1AB",
+            "to_account": "ACC-243BA5",
+            "amount": 432.5,
+            "occurred_at": "2023-04-09 09:33:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-05",
+            "from_account": "ACC-C8F3B0",
+            "to_account": "ACC-CF5797",
+            "amount": 470.0,
+            "occurred_at": "2023-04-09 12:44:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-06",
+            "from_account": "ACC-06805A",
+            "to_account": "ACC-58C201",
+            "amount": 507.5,
+            "occurred_at": "2023-04-09 15:55:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-07",
+            "from_account": "ACC-548093",
+            "to_account": "ACC-0D44A4",
+            "amount": 545.0,
+            "occurred_at": "2023-04-09 18:06:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-08",
+            "from_account": "ACC-EF27CC",
+            "to_account": "ACC-BF0E1E",
+            "amount": 582.5,
+            "occurred_at": "2023-04-09 21:17:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-09",
+            "from_account": "ACC-DC20CD",
+            "to_account": "ACC-209C6B",
+            "amount": 620.0,
+            "occurred_at": "2023-04-09 00:28:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-10",
+            "from_account": "ACC-B84974",
+            "to_account": "ACC-9D8DA4",
+            "amount": 657.5,
+            "occurred_at": "2023-04-09 03:39:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-11",
+            "from_account": "ACC-91FA1D",
+            "to_account": "ACC-4B31B9",
+            "amount": 695.0,
+            "occurred_at": "2023-04-09 06:50:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-12",
+            "from_account": "ACC-D99525",
+            "to_account": "ACC-D38B1A",
+            "amount": 732.5,
+            "occurred_at": "2023-04-09 09:01:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-13",
+            "from_account": "ACC-D33E32",
+            "to_account": "ACC-14CE19",
+            "amount": 770.0,
+            "occurred_at": "2023-04-09 12:12:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-14",
+            "from_account": "ACC-B5A712",
+            "to_account": "ACC-F796E6",
+            "amount": 807.5,
+            "occurred_at": "2023-04-09 15:23:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-15",
+            "from_account": "ACC-3AD207",
+            "to_account": "ACC-036570",
+            "amount": 845.0,
+            "occurred_at": "2023-04-09 18:34:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-16",
+            "from_account": "ACC-2D7D88",
+            "to_account": "ACC-D82210",
+            "amount": 882.5,
+            "occurred_at": "2023-04-09 21:45:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-17",
+            "from_account": "ACC-3E5469",
+            "to_account": "ACC-94CE9E",
+            "amount": 7006.0,
+            "occurred_at": "2023-04-09 21:14:00",
+            "channel": "手机银行",
+            "remark": "UID-88**"
+          },
+          {
+            "id": "TX-PR-0003-18",
+            "from_account": "ACC-B80899",
+            "to_account": "ACC-6E4A84",
+            "amount": 7301.0,
+            "occurred_at": "2023-04-10 00:42:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-19",
+            "from_account": "ACC-787D5F",
+            "to_account": "ACC-3A75A4",
+            "amount": 5504.0,
+            "occurred_at": "2023-04-10 03:18:00",
+            "channel": "手机银行",
+            "remark": "平台结算"
+          },
+          {
+            "id": "TX-PR-0003-20",
+            "from_account": "ACC-05F4A4",
+            "to_account": "ACC-052F56",
+            "amount": 5003.0,
+            "occurred_at": "2023-04-10 18:55:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0003-21",
+            "from_account": "ACC-353183",
+            "to_account": "ACC-797F65",
+            "amount": 7501.0,
+            "occurred_at": "2023-04-11 02:07:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-网络销售",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 7501.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-B30EA6",
+          "C-0003",
+          "IX-PR-0003-01",
+          "IX-PR-0003-02",
+          "IX-PR-0003-03",
+          "TX-PR-0003-01",
+          "TX-PR-0003-02",
+          "TX-PR-0003-03",
+          "TX-PR-0003-04",
+          "TX-PR-0003-05",
+          "TX-PR-0003-06",
+          "TX-PR-0003-07",
+          "TX-PR-0003-08",
+          "TX-PR-0003-09",
+          "TX-PR-0003-10",
+          "TX-PR-0003-11",
+          "TX-PR-0003-12",
+          "TX-PR-0003-13",
+          "TX-PR-0003-14",
+          "TX-PR-0003-15",
+          "TX-PR-0003-16",
+          "TX-PR-0003-17",
+          "TX-PR-0003-18",
+          "TX-PR-0003-19",
+          "TX-PR-0003-20",
+          "TX-PR-0003-21"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0003-01",
+            "text": "上游对手数量远多于下游，单笔多为数百至数千"
+          },
+          {
+            "id": "IX-PR-0003-02",
+            "text": "下游集中且金额带零头，凌晨仍有转出"
+          },
+          {
+            "id": "IX-PR-0003-03",
+            "text": "客户称买卖虚拟物品，但附言与对手分布不像普通零售"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-03",
+        "title": "商业银行对网络赌博类洗钱的风险防范（澎湃转载）",
+        "url": "https://m.thepaper.cn/newsDetail_forward_29551063",
+        "public_conclusion": "义务机构限制非柜面并报送重点可疑"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0004",
+      "gold": "suggest_report",
+      "tag": "pos_pass_through",
+      "annotation_reason": "公开改写：POS快进快出不留余额",
+      "gold_support_ids": [
+        "IX-PR-0004-01",
+        "IX-PR-0004-02",
+        "IX-PR-0004-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0004-01",
+        "IX-PR-0004-02",
+        "IX-PR-0004-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "4336c526ac73913b9a887c27fdb8fac68f525fe656189506fc581f0a052b2be7",
+      "vignette": {
+        "alert_type": "POS入账后即转出",
+        "industry": "个人-个体经营",
+        "summary": "连续多日POS大额入账后同一小时内转出，账户几乎不留余额",
+        "alert": {
+          "id": "PR-0004",
+          "alert_type": "POS入账后即转出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-919257",
+          "customer_id": "C-0004",
+          "amount": 265000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0004",
+          "name": "吴**",
+          "kind": "individual",
+          "industry": "个人-个体经营",
+          "opened_at": "2019-02-11",
+          "kyc_level": "普通",
+          "summary": "连续多日POS大额入账后同一小时内转出，账户几乎不留余额"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "连续多日POS大额入账后同一小时内转出，账户几乎不留余额",
+            "evidence_ids": [
+              "TX-PR-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「POS入账后即转出」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "单笔POS入账后约30至40分钟全额转出",
+            "evidence_ids": [
+              "IX-PR-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "连续多日形态重复，无对应进货或工资发放痕迹",
+            "evidence_ids": [
+              "IX-PR-0004-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "客户身份与单日刷卡规模不匹配，无法提供真实经营凭证",
+            "evidence_ids": [
+              "IX-PR-0004-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0004-01",
+            "from_account": "ACC-3C6891",
+            "to_account": "ACC-58BE2D",
+            "amount": 186000.0,
+            "occurred_at": "2020-08-03 10:02:00",
+            "channel": "POS",
+            "remark": "刷卡入账"
+          },
+          {
+            "id": "TX-PR-0004-02",
+            "from_account": "ACC-79C2B5",
+            "to_account": "ACC-F8EF44",
+            "amount": 185400.0,
+            "occurred_at": "2020-08-03 10:41:00",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0004-03",
+            "from_account": "ACC-3F4992",
+            "to_account": "ACC-B8BF5E",
+            "amount": 242000.0,
+            "occurred_at": "2020-08-04 09:18:00",
+            "channel": "POS",
+            "remark": "刷卡入账"
+          },
+          {
+            "id": "TX-PR-0004-04",
+            "from_account": "ACC-9D00FF",
+            "to_account": "ACC-E5D0A5",
+            "amount": 241200.0,
+            "occurred_at": "2020-08-04 09:50:00",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0004-05",
+            "from_account": "ACC-AACC64",
+            "to_account": "ACC-89FCE7",
+            "amount": 198500.0,
+            "occurred_at": "2020-08-05 11:22:00",
+            "channel": "POS",
+            "remark": "刷卡入账"
+          },
+          {
+            "id": "TX-PR-0004-06",
+            "from_account": "ACC-F3CFB1",
+            "to_account": "ACC-513A62",
+            "amount": 197800.0,
+            "occurred_at": "2020-08-05 11:47:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0004-07",
+            "from_account": "ACC-C2F512",
+            "to_account": "ACC-EE50F2",
+            "amount": 265000.0,
+            "occurred_at": "2020-08-06 16:05:00",
+            "channel": "POS",
+            "remark": "刷卡入账"
+          },
+          {
+            "id": "TX-PR-0004-08",
+            "from_account": "ACC-833934",
+            "to_account": "ACC-3CD8AE",
+            "amount": 264100.0,
+            "occurred_at": "2020-08-06 16:33:00",
+            "channel": "网银",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-个体经营",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 265000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-919257",
+          "C-0004",
+          "IX-PR-0004-01",
+          "IX-PR-0004-02",
+          "IX-PR-0004-03",
+          "TX-PR-0004-01",
+          "TX-PR-0004-02",
+          "TX-PR-0004-03",
+          "TX-PR-0004-04",
+          "TX-PR-0004-05",
+          "TX-PR-0004-06",
+          "TX-PR-0004-07",
+          "TX-PR-0004-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0004-01",
+            "text": "单笔POS入账后约30至40分钟全额转出"
+          },
+          {
+            "id": "IX-PR-0004-02",
+            "text": "连续多日形态重复，无对应进货或工资发放痕迹"
+          },
+          {
+            "id": "IX-PR-0004-03",
+            "text": "客户身份与单日刷卡规模不匹配，无法提供真实经营凭证"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-02",
+        "title": "线上银行业务洗钱典型案例分析（中国电子银行网）",
+        "url": "https://www.cebnet.com.cn/20200817/102683310.html",
+        "public_conclusion": "义务机构研判为POS过渡性可疑并报送"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0005",
+      "gold": "suggest_report",
+      "tag": "unlicensed_fx_layer",
+      "annotation_reason": "公开改写：无牌换汇、快进快出、指定收款人",
+      "gold_support_ids": [
+        "IX-PR-0005-01",
+        "IX-PR-0005-02",
+        "IX-PR-0005-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0005-01",
+        "IX-PR-0005-02",
+        "IX-PR-0005-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "663d4f142731a0211df43a92b3934e20a7d6f698ed29f6fd418d2cd824db33a9",
+      "vignette": {
+        "alert_type": "大额快进快出对公转私人",
+        "industry": "个人-汇兑中介",
+        "summary": "多笔大额转入后扣除尾差转给指定账户，客户称换汇但无牌照材料",
+        "alert": {
+          "id": "PR-0005",
+          "alert_type": "大额快进快出对公转私人",
+          "upstream": "real-holdout",
+          "account_id": "ACC-2E253A",
+          "customer_id": "C-0005",
+          "amount": 3200000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0005",
+          "name": "袁**",
+          "kind": "individual",
+          "industry": "个人-汇兑中介",
+          "opened_at": "2016-04-01",
+          "kyc_level": "普通",
+          "summary": "多笔大额转入后扣除尾差转给指定账户，客户称换汇但无牌照材料"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "多笔大额转入后扣除尾差转给指定账户，客户称换汇但无牌照材料",
+            "evidence_ids": [
+              "TX-PR-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额快进快出对公转私人」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "入账后约半小时按固定比例扣减尾差转出",
+            "evidence_ids": [
+              "IX-PR-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "对手多为新出现对公或个人账户，无持续贸易合同",
+            "evidence_ids": [
+              "IX-PR-0005-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "客户无法提供外汇业务资质或真实货物单据",
+            "evidence_ids": [
+              "IX-PR-0005-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0005-01",
+            "from_account": "ACC-1B27DB",
+            "to_account": "ACC-CC291A",
+            "amount": 2800000.0,
+            "occurred_at": "2019-11-12 09:10:00",
+            "channel": "转账",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0005-02",
+            "from_account": "ACC-E50E63",
+            "to_account": "ACC-DF15F7",
+            "amount": 2744000.0,
+            "occurred_at": "2019-11-12 09:40:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0005-03",
+            "from_account": "ACC-E1CEE0",
+            "to_account": "ACC-4311A5",
+            "amount": 1950000.0,
+            "occurred_at": "2019-12-03 14:22:00",
+            "channel": "转账",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0005-04",
+            "from_account": "ACC-016DE6",
+            "to_account": "ACC-D46544",
+            "amount": 1911000.0,
+            "occurred_at": "2019-12-03 14:51:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0005-05",
+            "from_account": "ACC-08095F",
+            "to_account": "ACC-1EB7B4",
+            "amount": 3200000.0,
+            "occurred_at": "2020-02-18 11:05:00",
+            "channel": "转账",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0005-06",
+            "from_account": "ACC-DDC93F",
+            "to_account": "ACC-A73090",
+            "amount": 3136000.0,
+            "occurred_at": "2020-02-18 11:28:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0005-07",
+            "from_account": "ACC-30D880",
+            "to_account": "ACC-98C4C7",
+            "amount": 1500000.0,
+            "occurred_at": "2020-04-09 16:40:00",
+            "channel": "转账",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0005-08",
+            "from_account": "ACC-974C7B",
+            "to_account": "ACC-4525FC",
+            "amount": 1470000.0,
+            "occurred_at": "2020-04-09 17:02:00",
+            "channel": "转账",
+            "remark": "往来"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-汇兑中介",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 3200000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-2E253A",
+          "C-0005",
+          "IX-PR-0005-01",
+          "IX-PR-0005-02",
+          "IX-PR-0005-03",
+          "TX-PR-0005-01",
+          "TX-PR-0005-02",
+          "TX-PR-0005-03",
+          "TX-PR-0005-04",
+          "TX-PR-0005-05",
+          "TX-PR-0005-06",
+          "TX-PR-0005-07",
+          "TX-PR-0005-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0005-01",
+            "text": "入账后约半小时按固定比例扣减尾差转出"
+          },
+          {
+            "id": "IX-PR-0005-02",
+            "text": "对手多为新出现对公或个人账户，无持续贸易合同"
+          },
+          {
+            "id": "IX-PR-0005-03",
+            "text": "客户无法提供外汇业务资质或真实货物单据"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-04",
+        "title": "人民法院依法惩治金融犯罪典型案例（最高人民法院）",
+        "url": "https://www.court.gov.cn/zixun/xiangqing/372731.html",
+        "public_conclusion": "公开典型案例：地下换汇通道协助资金出境"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0006",
+      "gold": "suggest_report",
+      "tag": "soe_to_ms_crossborder",
+      "annotation_reason": "公开改写：国企关联入账后转中介账户",
+      "gold_support_ids": [
+        "IX-PR-0006-01",
+        "IX-PR-0006-02",
+        "IX-PR-0006-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0006-01",
+        "IX-PR-0006-02",
+        "IX-PR-0006-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "69f3d9d6f446eebf88fbff622da5072bb033b3eb4857d0c7d409e4528bf431f4",
+      "vignette": {
+        "alert_type": "关联大额转入后外转",
+        "industry": "个人-无固定职业",
+        "summary": "园区国企关联账户多次大额转入后迅速转往资金中介类账户，客户称借款",
+        "alert": {
+          "id": "PR-0006",
+          "alert_type": "关联大额转入后外转",
+          "upstream": "real-holdout",
+          "account_id": "ACC-6D1592",
+          "customer_id": "C-0006",
+          "amount": 2100000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0006",
+          "name": "周**",
+          "kind": "individual",
+          "industry": "个人-无固定职业",
+          "opened_at": "2014-09-18",
+          "kyc_level": "普通",
+          "summary": "园区国企关联账户多次大额转入后迅速转往资金中介类账户，客户称借款"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "园区国企关联账户多次大额转入后迅速转往资金中介类账户，客户称借款",
+            "evidence_ids": [
+              "TX-PR-0006-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「关联大额转入后外转」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0006-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "对手与国有园区企业出纳或关联人账户重叠",
+            "evidence_ids": [
+              "IX-PR-0006-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "客户称私人借款但无法提供合同、利息约定或还款计划",
+            "evidence_ids": [
+              "IX-PR-0006-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "资金在当日或数小时内转出至疑似兑换/中介账户",
+            "evidence_ids": [
+              "IX-PR-0006-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0006-01",
+            "from_account": "ACC-1A2BC8",
+            "to_account": "ACC-1B4FB0",
+            "amount": 1200000.0,
+            "occurred_at": "2017-03-15 10:12:00",
+            "channel": "转账",
+            "remark": "借款"
+          },
+          {
+            "id": "TX-PR-0006-02",
+            "from_account": "ACC-64B237",
+            "to_account": "ACC-D15B55",
+            "amount": 1180000.0,
+            "occurred_at": "2017-03-15 15:40:00",
+            "channel": "转账",
+            "remark": "还款"
+          },
+          {
+            "id": "TX-PR-0006-03",
+            "from_account": "ACC-F5D540",
+            "to_account": "ACC-D0F5E4",
+            "amount": 980000.0,
+            "occurred_at": "2017-08-22 09:05:00",
+            "channel": "转账",
+            "remark": "借款"
+          },
+          {
+            "id": "TX-PR-0006-04",
+            "from_account": "ACC-10A5A0",
+            "to_account": "ACC-8BE099",
+            "amount": 970000.0,
+            "occurred_at": "2017-08-22 13:18:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0006-05",
+            "from_account": "ACC-43991E",
+            "to_account": "ACC-ABD4C6",
+            "amount": 2100000.0,
+            "occurred_at": "2018-01-09 11:33:00",
+            "channel": "转账",
+            "remark": "借款"
+          },
+          {
+            "id": "TX-PR-0006-06",
+            "from_account": "ACC-C21A71",
+            "to_account": "ACC-8D68B3",
+            "amount": 2085000.0,
+            "occurred_at": "2018-01-09 16:02:00",
+            "channel": "转账",
+            "remark": "还款"
+          },
+          {
+            "id": "TX-PR-0006-07",
+            "from_account": "ACC-589472",
+            "to_account": "ACC-36C721",
+            "amount": 1560000.0,
+            "occurred_at": "2018-06-27 08:44:00",
+            "channel": "转账",
+            "remark": "借款"
+          },
+          {
+            "id": "TX-PR-0006-08",
+            "from_account": "ACC-F7E59E",
+            "to_account": "ACC-95079E",
+            "amount": 1542000.0,
+            "occurred_at": "2018-06-27 12:11:00",
+            "channel": "转账",
+            "remark": "往来"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-无固定职业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 2100000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-6D1592",
+          "C-0006",
+          "IX-PR-0006-01",
+          "IX-PR-0006-02",
+          "IX-PR-0006-03",
+          "TX-PR-0006-01",
+          "TX-PR-0006-02",
+          "TX-PR-0006-03",
+          "TX-PR-0006-04",
+          "TX-PR-0006-05",
+          "TX-PR-0006-06",
+          "TX-PR-0006-07",
+          "TX-PR-0006-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0006-01",
+            "text": "对手与国有园区企业出纳或关联人账户重叠"
+          },
+          {
+            "id": "IX-PR-0006-02",
+            "text": "客户称私人借款但无法提供合同、利息约定或还款计划"
+          },
+          {
+            "id": "IX-PR-0006-03",
+            "text": "资金在当日或数小时内转出至疑似兑换/中介账户"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-04",
+        "title": "人民法院依法惩治金融犯罪典型案例（最高人民法院）",
+        "url": "https://www.court.gov.cn/zixun/xiangqing/372731.html",
+        "public_conclusion": "公开典型案例：协助公款跨境转移"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0007",
+      "gold": "suggest_report",
+      "tag": "employee_mule_cards",
+      "annotation_reason": "公开改写：出借卡、拆分取现、同柜存取",
+      "gold_support_ids": [
+        "IX-PR-0007-01",
+        "IX-PR-0007-02",
+        "IX-PR-0007-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0007-01",
+        "IX-PR-0007-02",
+        "IX-PR-0007-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "b4487cdd5ce7ed37e83145c53e770801c49ccf017f553ed9b888b804eee74a77",
+      "vignette": {
+        "alert_type": "员工账户大额取现拆转",
+        "industry": "个人-公司职员",
+        "summary": "职员卡接收实际控制人多个账户转入后大额取现、拆分转账或同柜先取后存",
+        "alert": {
+          "id": "PR-0007",
+          "alert_type": "员工账户大额取现拆转",
+          "upstream": "real-holdout",
+          "account_id": "ACC-9F9CDA",
+          "customer_id": "C-0007",
+          "amount": 860000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0007",
+          "name": "雷**",
+          "kind": "individual",
+          "industry": "个人-公司职员",
+          "opened_at": "2016-12-20",
+          "kyc_level": "普通",
+          "summary": "职员卡接收实际控制人多个账户转入后大额取现、拆分转账或同柜先取后存"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "职员卡接收实际控制人多个账户转入后大额取现、拆分转账或同柜先取后存",
+            "evidence_ids": [
+              "TX-PR-0007-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「员工账户大额取现拆转」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0007-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "工资之外另有每月固定好处费入账，客户承认把卡交给上司使用",
+            "evidence_ids": [
+              "IX-PR-0007-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "存在柜面大额取现后立即存入其他关联账户",
+            "evidence_ids": [
+              "IX-PR-0007-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "对手为同一控制关系下的多个账户，客户说不清用途",
+            "evidence_ids": [
+              "IX-PR-0007-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0007-01",
+            "from_account": "ACC-5AFC21",
+            "to_account": "ACC-011933",
+            "amount": 860000.0,
+            "occurred_at": "2017-06-12 09:20:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0007-02",
+            "from_account": "ACC-24D703",
+            "to_account": "ACC-FF7659",
+            "amount": 850000.0,
+            "occurred_at": "2017-06-12 10:05:00",
+            "channel": "柜面",
+            "remark": "大额取现"
+          },
+          {
+            "id": "TX-PR-0007-03",
+            "from_account": "ACC-DBBD5E",
+            "to_account": "ACC-B6D72E",
+            "amount": 420000.0,
+            "occurred_at": "2017-08-03 14:10:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0007-04",
+            "from_account": "ACC-4C228A",
+            "to_account": "ACC-099260",
+            "amount": 418000.0,
+            "occurred_at": "2017-08-03 14:40:00",
+            "channel": "转账",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0007-05",
+            "from_account": "ACC-13588C",
+            "to_account": "ACC-BC5F91",
+            "amount": 690000.0,
+            "occurred_at": "2017-10-19 11:00:00",
+            "channel": "柜面",
+            "remark": "取现存入"
+          },
+          {
+            "id": "TX-PR-0007-06",
+            "from_account": "ACC-FACFC7",
+            "to_account": "ACC-A212FE",
+            "amount": 688000.0,
+            "occurred_at": "2017-10-19 11:22:00",
+            "channel": "柜面",
+            "remark": "现金存入"
+          },
+          {
+            "id": "TX-PR-0007-07",
+            "from_account": "ACC-E8D573",
+            "to_account": "ACC-92E207",
+            "amount": 510000.0,
+            "occurred_at": "2017-12-08 15:33:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0007-08",
+            "from_account": "ACC-798CD3",
+            "to_account": "ACC-6CC30F",
+            "amount": 505000.0,
+            "occurred_at": "2017-12-08 16:01:00",
+            "channel": "柜面",
+            "remark": "大额取现"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-公司职员",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 860000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-9F9CDA",
+          "C-0007",
+          "IX-PR-0007-01",
+          "IX-PR-0007-02",
+          "IX-PR-0007-03",
+          "TX-PR-0007-01",
+          "TX-PR-0007-02",
+          "TX-PR-0007-03",
+          "TX-PR-0007-04",
+          "TX-PR-0007-05",
+          "TX-PR-0007-06",
+          "TX-PR-0007-07",
+          "TX-PR-0007-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0007-01",
+            "text": "工资之外另有每月固定好处费入账，客户承认把卡交给上司使用"
+          },
+          {
+            "id": "IX-PR-0007-02",
+            "text": "存在柜面大额取现后立即存入其他关联账户"
+          },
+          {
+            "id": "IX-PR-0007-03",
+            "text": "对手为同一控制关系下的多个账户，客户说不清用途"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-05",
+        "title": "反洗钱案例分享：员工出借账户转移集资款（义务机构宣传稿）",
+        "url": "https://www.mingyafunds.com/mingya/contents/2026/3/26-ab2d863d37fd4569934ed4869ece8c03.html",
+        "public_conclusion": "公开案例：员工出借账户转移集资款；经办行因未尽报告义务被处罚"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0008",
+      "gold": "suggest_report",
+      "tag": "idle_shell_company",
+      "annotation_reason": "公开改写：空壳对公户一周巨额快进快出",
+      "gold_support_ids": [
+        "IX-PR-0008-01",
+        "IX-PR-0008-02",
+        "IX-PR-0008-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0008-01",
+        "IX-PR-0008-02",
+        "IX-PR-0008-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "44a33d3436fd76bb4e2f1ee039b9c5bec98ba2e0f773c7f696d35f8fdb635c46",
+      "vignette": {
+        "alert_type": "闲置对公户突发巨额进出",
+        "industry": "医疗器械批发",
+        "summary": "长期闲置对公户在一周内进出数千万，操作人与原法定代表人不符",
+        "alert": {
+          "id": "PR-0008",
+          "alert_type": "闲置对公户突发巨额进出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-EFB5D1",
+          "customer_id": "C-0008",
+          "amount": 9100000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0008",
+          "name": "某医疗器械有限公司",
+          "kind": "enterprise",
+          "industry": "医疗器械批发",
+          "opened_at": "2019-03-08",
+          "kyc_level": "普通",
+          "summary": "长期闲置对公户在一周内进出数千万，操作人与原法定代表人不符"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "长期闲置对公户在一周内进出数千万，操作人与原法定代表人不符",
+            "evidence_ids": [
+              "TX-PR-0008-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「闲置对公户突发巨额进出」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0008-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "开户后长期无经营流水，突然连续对公快进快出",
+            "evidence_ids": [
+              "IX-PR-0008-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "U盾与印鉴实际由非原管理人使用，客户称已口头转让公司",
+            "evidence_ids": [
+              "IX-PR-0008-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "对手多为新登记公司，无对应进销存或物流单据",
+            "evidence_ids": [
+              "IX-PR-0008-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0008-01",
+            "from_account": "ACC-B50B19",
+            "to_account": "ACC-296F9F",
+            "amount": 8200000.0,
+            "occurred_at": "2023-06-18 09:05:00",
+            "channel": "网银",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0008-02",
+            "from_account": "ACC-685782",
+            "to_account": "ACC-A4715C",
+            "amount": 8150000.0,
+            "occurred_at": "2023-06-18 09:40:00",
+            "channel": "网银",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0008-03",
+            "from_account": "ACC-B2670D",
+            "to_account": "ACC-4C764A",
+            "amount": 6400000.0,
+            "occurred_at": "2023-06-19 10:12:00",
+            "channel": "网银",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0008-04",
+            "from_account": "ACC-22B97E",
+            "to_account": "ACC-F65DB5",
+            "amount": 6380000.0,
+            "occurred_at": "2023-06-19 10:47:00",
+            "channel": "网银",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0008-05",
+            "from_account": "ACC-5F365E",
+            "to_account": "ACC-1D1212",
+            "amount": 9100000.0,
+            "occurred_at": "2023-06-20 14:22:00",
+            "channel": "网银",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0008-06",
+            "from_account": "ACC-8AF39A",
+            "to_account": "ACC-8DF0D7",
+            "amount": 9070000.0,
+            "occurred_at": "2023-06-20 14:58:00",
+            "channel": "网银",
+            "remark": "货款"
+          },
+          {
+            "id": "TX-PR-0008-07",
+            "from_account": "ACC-ED2F3A",
+            "to_account": "ACC-BE285E",
+            "amount": 5300000.0,
+            "occurred_at": "2023-06-21 11:08:00",
+            "channel": "网银",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0008-08",
+            "from_account": "ACC-C8C81C",
+            "to_account": "ACC-EAA4EB",
+            "amount": 5280000.0,
+            "occurred_at": "2023-06-21 11:31:00",
+            "channel": "网银",
+            "remark": "往来"
+          }
+        ],
+        "baseline": {
+          "industry": "医疗器械批发",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 9100000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-EFB5D1",
+          "C-0008",
+          "IX-PR-0008-01",
+          "IX-PR-0008-02",
+          "IX-PR-0008-03",
+          "TX-PR-0008-01",
+          "TX-PR-0008-02",
+          "TX-PR-0008-03",
+          "TX-PR-0008-04",
+          "TX-PR-0008-05",
+          "TX-PR-0008-06",
+          "TX-PR-0008-07",
+          "TX-PR-0008-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0008-01",
+            "text": "开户后长期无经营流水，突然连续对公快进快出"
+          },
+          {
+            "id": "IX-PR-0008-02",
+            "text": "U盾与印鉴实际由非原管理人使用，客户称已口头转让公司"
+          },
+          {
+            "id": "IX-PR-0008-03",
+            "text": "对手多为新登记公司，无对应进销存或物流单据"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-06",
+        "title": "转让公司却成为洗钱帮凶（郑州中院）",
+        "url": "https://zzfy.hncourt.gov.cn/public/detail.php?id=29409",
+        "public_conclusion": "公开案例：闲置公司对公户被用于转移诈骗资金"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0009",
+      "gold": "suggest_report",
+      "tag": "related_cash_layer",
+      "annotation_reason": "公开改写：关联人账户取现分层",
+      "gold_support_ids": [
+        "IX-PR-0009-01",
+        "IX-PR-0009-02",
+        "IX-PR-0009-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0009-01",
+        "IX-PR-0009-02",
+        "IX-PR-0009-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "3dc7e8efeaec6f3118aabd24a2e956a5e81ebefbd3af5c3dea2ce8d375a5b98e",
+      "vignette": {
+        "alert_type": "关联账户频繁划转取现",
+        "industry": "个人-无固定职业",
+        "summary": "与多名关联人账户之间大额频繁划转并夹杂柜面取现，来源去向均无法闭合",
+        "alert": {
+          "id": "PR-0009",
+          "alert_type": "关联账户频繁划转取现",
+          "upstream": "real-holdout",
+          "account_id": "ACC-91310F",
+          "customer_id": "C-0009",
+          "amount": 2200000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0009",
+          "name": "曾**",
+          "kind": "individual",
+          "industry": "个人-无固定职业",
+          "opened_at": "2015-07-22",
+          "kyc_level": "普通",
+          "summary": "与多名关联人账户之间大额频繁划转并夹杂柜面取现，来源去向均无法闭合"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "与多名关联人账户之间大额频繁划转并夹杂柜面取现，来源去向均无法闭合",
+            "evidence_ids": [
+              "TX-PR-0009-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「关联账户频繁划转取现」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0009-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "对手多为户籍或联系方式关联的个人账户",
+            "evidence_ids": [
+              "IX-PR-0009-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "大额取现与转账交替，账户余额不沉淀",
+            "evidence_ids": [
+              "IX-PR-0009-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "客户称生意周转但无经营实体、发票或场地租赁",
+            "evidence_ids": [
+              "IX-PR-0009-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0009-01",
+            "from_account": "ACC-AD4A88",
+            "to_account": "ACC-876C77",
+            "amount": 1800000.0,
+            "occurred_at": "2019-01-08 09:30:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0009-02",
+            "from_account": "ACC-B092FC",
+            "to_account": "ACC-FD7C58",
+            "amount": 1750000.0,
+            "occurred_at": "2019-01-08 11:05:00",
+            "channel": "柜面",
+            "remark": "大额取现"
+          },
+          {
+            "id": "TX-PR-0009-03",
+            "from_account": "ACC-22894C",
+            "to_account": "ACC-A0FBC8",
+            "amount": 960000.0,
+            "occurred_at": "2019-02-14 13:18:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0009-04",
+            "from_account": "ACC-C189C4",
+            "to_account": "ACC-6E9DD6",
+            "amount": 950000.0,
+            "occurred_at": "2019-02-14 15:40:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0009-05",
+            "from_account": "ACC-3DE1E4",
+            "to_account": "ACC-97358B",
+            "amount": 2200000.0,
+            "occurred_at": "2019-03-02 10:12:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0009-06",
+            "from_account": "ACC-9D45E5",
+            "to_account": "ACC-54995F",
+            "amount": 2180000.0,
+            "occurred_at": "2019-03-02 16:22:00",
+            "channel": "柜面",
+            "remark": "大额取现"
+          },
+          {
+            "id": "TX-PR-0009-07",
+            "from_account": "ACC-501665",
+            "to_account": "ACC-F17771",
+            "amount": 1340000.0,
+            "occurred_at": "2019-03-21 09:44:00",
+            "channel": "转账",
+            "remark": "往来"
+          },
+          {
+            "id": "TX-PR-0009-08",
+            "from_account": "ACC-339A34",
+            "to_account": "ACC-09EF0B",
+            "amount": 1325000.0,
+            "occurred_at": "2019-03-21 10:18:00",
+            "channel": "转账",
+            "remark": "往来"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-无固定职业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 2200000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-91310F",
+          "C-0009",
+          "IX-PR-0009-01",
+          "IX-PR-0009-02",
+          "IX-PR-0009-03",
+          "TX-PR-0009-01",
+          "TX-PR-0009-02",
+          "TX-PR-0009-03",
+          "TX-PR-0009-04",
+          "TX-PR-0009-05",
+          "TX-PR-0009-06",
+          "TX-PR-0009-07",
+          "TX-PR-0009-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0009-01",
+            "text": "对手多为户籍或联系方式关联的个人账户"
+          },
+          {
+            "id": "IX-PR-0009-02",
+            "text": "大额取现与转账交替，账户余额不沉淀"
+          },
+          {
+            "id": "IX-PR-0009-03",
+            "text": "客户称生意周转但无经营实体、发票或场地租赁"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-07",
+        "title": "最高人民检察院、中国人民银行联合发布惩治洗钱犯罪典型案例",
+        "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212551439161/index.html",
+        "public_conclusion": "公开联合通报：关联账户大额取现与频繁划转"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0010",
+      "gold": "suggest_report",
+      "tag": "night_card_farm",
+      "annotation_reason": "公开改写：夜间分散转入后归集",
+      "gold_support_ids": [
+        "IX-PR-0010-01",
+        "IX-PR-0010-02",
+        "IX-PR-0010-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0010-01",
+        "IX-PR-0010-02",
+        "IX-PR-0010-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "87f51f98e15c6b59269f4a8296d7a33a42563d137c9313237ae7dc92dcd6bdcc",
+      "vignette": {
+        "alert_type": "夜间多卡归集转账",
+        "industry": "个人-灵活就业",
+        "summary": "多名对手夜间向该卡转入后立即归集到少数账户，客户承认帮忙转账记账",
+        "alert": {
+          "id": "PR-0010",
+          "alert_type": "夜间多卡归集转账",
+          "upstream": "real-holdout",
+          "account_id": "ACC-624F2A",
+          "customer_id": "C-0010",
+          "amount": 182400.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0010",
+          "name": "陈**",
+          "kind": "individual",
+          "industry": "个人-灵活就业",
+          "opened_at": "2020-08-01",
+          "kyc_level": "普通",
+          "summary": "多名对手夜间向该卡转入后立即归集到少数账户，客户承认帮忙转账记账"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "多名对手夜间向该卡转入后立即归集到少数账户，客户承认帮忙转账记账",
+            "evidence_ids": [
+              "TX-PR-0010-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「夜间多卡归集转账」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0010-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "交易集中在夜间，转入对手几乎不重复",
+            "evidence_ids": [
+              "IX-PR-0010-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "客户无法说明转账对象身份，称按上线指令操作",
+            "evidence_ids": [
+              "IX-PR-0010-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "同一时期名下多张卡出现同类夜间归集",
+            "evidence_ids": [
+              "IX-PR-0010-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0010-01",
+            "from_account": "ACC-403D0A",
+            "to_account": "ACC-95D049",
+            "amount": 18000.0,
+            "occurred_at": "2021-01-15 00:00:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-02",
+            "from_account": "ACC-B816A0",
+            "to_account": "ACC-FD6457",
+            "amount": 18037.5,
+            "occurred_at": "2021-01-15 03:11:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-03",
+            "from_account": "ACC-7EAA49",
+            "to_account": "ACC-4ED5DF",
+            "amount": 18075.0,
+            "occurred_at": "2021-01-15 06:22:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-04",
+            "from_account": "ACC-CE8713",
+            "to_account": "ACC-D21972",
+            "amount": 18112.5,
+            "occurred_at": "2021-01-15 09:33:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-05",
+            "from_account": "ACC-11BCCA",
+            "to_account": "ACC-BCDEC2",
+            "amount": 18150.0,
+            "occurred_at": "2021-01-15 12:44:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-06",
+            "from_account": "ACC-EB6F75",
+            "to_account": "ACC-41B181",
+            "amount": 18187.5,
+            "occurred_at": "2021-01-15 15:55:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-07",
+            "from_account": "ACC-A779C4",
+            "to_account": "ACC-807B20",
+            "amount": 18225.0,
+            "occurred_at": "2021-01-15 18:06:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-08",
+            "from_account": "ACC-FE0620",
+            "to_account": "ACC-504E46",
+            "amount": 18262.5,
+            "occurred_at": "2021-01-15 21:17:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-09",
+            "from_account": "ACC-3D019E",
+            "to_account": "ACC-097F1E",
+            "amount": 18300.0,
+            "occurred_at": "2021-01-15 00:28:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-10",
+            "from_account": "ACC-168DBC",
+            "to_account": "ACC-A707B4",
+            "amount": 18337.5,
+            "occurred_at": "2021-01-15 03:39:10",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-11",
+            "from_account": "ACC-08FB7D",
+            "to_account": "ACC-221EFA",
+            "amount": 182400.0,
+            "occurred_at": "2021-01-15 23:12:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-12",
+            "from_account": "ACC-1BDA3E",
+            "to_account": "ACC-9562ED",
+            "amount": 26400.0,
+            "occurred_at": "2021-01-16 01:08:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-13",
+            "from_account": "ACC-D9CDAD",
+            "to_account": "ACC-5B5BB1",
+            "amount": 19800.0,
+            "occurred_at": "2021-01-16 02:41:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-14",
+            "from_account": "ACC-AA5A10",
+            "to_account": "ACC-0C1DA4",
+            "amount": 45800.0,
+            "occurred_at": "2021-01-16 03:05:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-15",
+            "from_account": "ACC-B26D68",
+            "to_account": "ACC-6D4593",
+            "amount": 33100.0,
+            "occurred_at": "2021-01-16 22:50:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0010-16",
+            "from_account": "ACC-701A52",
+            "to_account": "ACC-06EDC0",
+            "amount": 32900.0,
+            "occurred_at": "2021-01-16 23:18:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-灵活就业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 182400.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-624F2A",
+          "C-0010",
+          "IX-PR-0010-01",
+          "IX-PR-0010-02",
+          "IX-PR-0010-03",
+          "TX-PR-0010-01",
+          "TX-PR-0010-02",
+          "TX-PR-0010-03",
+          "TX-PR-0010-04",
+          "TX-PR-0010-05",
+          "TX-PR-0010-06",
+          "TX-PR-0010-07",
+          "TX-PR-0010-08",
+          "TX-PR-0010-09",
+          "TX-PR-0010-10",
+          "TX-PR-0010-11",
+          "TX-PR-0010-12",
+          "TX-PR-0010-13",
+          "TX-PR-0010-14",
+          "TX-PR-0010-15",
+          "TX-PR-0010-16"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0010-01",
+            "text": "交易集中在夜间，转入对手几乎不重复"
+          },
+          {
+            "id": "IX-PR-0010-02",
+            "text": "客户无法说明转账对象身份，称按上线指令操作"
+          },
+          {
+            "id": "IX-PR-0010-03",
+            "text": "同一时期名下多张卡出现同类夜间归集"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-08",
+        "title": "陈某等人掩饰、隐瞒犯罪所得案（案例库转写，银行侧形态）",
+        "url": "http://www.drxsfd.com/xf/anli.asp?bh=5114",
+        "public_conclusion": "公开案例：组织多人银行卡夜间转移资金"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0011",
+      "gold": "suggest_report",
+      "tag": "lent_cards_cashout",
+      "annotation_reason": "公开改写：出借多卡并代为取现",
+      "gold_support_ids": [
+        "IX-PR-0011-01",
+        "IX-PR-0011-02",
+        "IX-PR-0011-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0011-01",
+        "IX-PR-0011-02",
+        "IX-PR-0011-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "e821757c24db73ad16654a226bb6af14d3440ff27aa5a46cc2db95eb0d64dc16",
+      "vignette": {
+        "alert_type": "出借账户后取现",
+        "industry": "个人-灵活就业",
+        "summary": "客户把多张卡及密码交给他人后按指示柜面取现，流水与本人收支明显不符",
+        "alert": {
+          "id": "PR-0011",
+          "alert_type": "出借账户后取现",
+          "upstream": "real-holdout",
+          "account_id": "ACC-676579",
+          "customer_id": "C-0011",
+          "amount": 35000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0011",
+          "name": "廖**",
+          "kind": "individual",
+          "industry": "个人-灵活就业",
+          "opened_at": "2022-04-16",
+          "kyc_level": "普通",
+          "summary": "客户把多张卡及密码交给他人后按指示柜面取现，流水与本人收支明显不符"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "客户把多张卡及密码交给他人后按指示柜面取现，流水与本人收支明显不符",
+            "evidence_ids": [
+              "TX-PR-0011-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「出借账户后取现」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0011-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "客户承认将三张卡交给不认识的人使用并获利",
+            "evidence_ids": [
+              "IX-PR-0011-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "取现资金来自刚入账的陌生对手，客户说不清还款或工资关系",
+            "evidence_ids": [
+              "IX-PR-0011-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "短期内多笔小额转入后集中取现",
+            "evidence_ids": [
+              "IX-PR-0011-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0011-01",
+            "from_account": "ACC-82AC03",
+            "to_account": "ACC-03FFC5",
+            "amount": 18600.0,
+            "occurred_at": "2023-09-29 16:20:00",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-02",
+            "from_account": "ACC-5AF67F",
+            "to_account": "ACC-F35617",
+            "amount": 22400.0,
+            "occurred_at": "2023-09-29 20:11:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-03",
+            "from_account": "ACC-C3FE60",
+            "to_account": "ACC-33D48F",
+            "amount": 15800.0,
+            "occurred_at": "2023-09-30 08:40:00",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-04",
+            "from_account": "ACC-C0D4DB",
+            "to_account": "ACC-5E6AE6",
+            "amount": 35000.0,
+            "occurred_at": "2023-09-30 10:15:00",
+            "channel": "柜面",
+            "remark": "取现"
+          },
+          {
+            "id": "TX-PR-0011-05",
+            "from_account": "ACC-14E805",
+            "to_account": "ACC-7E25C5",
+            "amount": 27100.0,
+            "occurred_at": "2023-09-30 14:22:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-06",
+            "from_account": "ACC-DC17FB",
+            "to_account": "ACC-636004",
+            "amount": 26800.0,
+            "occurred_at": "2023-09-30 15:01:00",
+            "channel": "手机银行",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-07",
+            "from_account": "ACC-4CE92A",
+            "to_account": "ACC-F88BE4",
+            "amount": 19200.0,
+            "occurred_at": "2023-10-01 09:33:00",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0011-08",
+            "from_account": "ACC-EC0878",
+            "to_account": "ACC-93F5F7",
+            "amount": 19000.0,
+            "occurred_at": "2023-10-01 11:08:00",
+            "channel": "柜面",
+            "remark": "取现"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-灵活就业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 35000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-676579",
+          "C-0011",
+          "IX-PR-0011-01",
+          "IX-PR-0011-02",
+          "IX-PR-0011-03",
+          "TX-PR-0011-01",
+          "TX-PR-0011-02",
+          "TX-PR-0011-03",
+          "TX-PR-0011-04",
+          "TX-PR-0011-05",
+          "TX-PR-0011-06",
+          "TX-PR-0011-07",
+          "TX-PR-0011-08"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0011-01",
+            "text": "客户承认将三张卡交给不认识的人使用并获利"
+          },
+          {
+            "id": "IX-PR-0011-02",
+            "text": "取现资金来自刚入账的陌生对手，客户说不清还款或工资关系"
+          },
+          {
+            "id": "IX-PR-0011-03",
+            "text": "短期内多笔小额转入后集中取现"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-09",
+        "title": "廖某掩饰、隐瞒犯罪所得案公开判决摘要（律师门户转写）",
+        "url": "https://m.055110.com/xs/3/26723.html",
+        "public_conclusion": "公开判决摘要：提供银行卡并按指示取现"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    },
+    {
+      "case_id": "PR-0012",
+      "gold": "suggest_report",
+      "tag": "counter_hop_cashout",
+      "annotation_reason": "公开改写：分散入账后多网点尝试取现",
+      "gold_support_ids": [
+        "IX-PR-0012-01",
+        "IX-PR-0012-02",
+        "IX-PR-0012-03"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PR-0012-01",
+        "IX-PR-0012-02",
+        "IX-PR-0012-03"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "34ebf888673e2e65272f2af2faeffd7cbafd6a71b4fc1231c4e35d6a1d9bcb11",
+      "vignette": {
+        "alert_type": "全国分散转入后柜面取现",
+        "industry": "个人-受雇",
+        "summary": "账户对手遍布多省且互不重复，客户称朋友还款但金额前后矛盾并改去其他网点取现",
+        "alert": {
+          "id": "PR-0012",
+          "alert_type": "全国分散转入后柜面取现",
+          "upstream": "real-holdout",
+          "account_id": "ACC-2A7801",
+          "customer_id": "C-0012",
+          "amount": 22000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0012",
+          "name": "黄**",
+          "kind": "individual",
+          "industry": "个人-受雇",
+          "opened_at": "2023-12-02",
+          "kyc_level": "普通",
+          "summary": "账户对手遍布多省且互不重复，客户称朋友还款但金额前后矛盾并改去其他网点取现"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "账户对手遍布多省且互不重复，客户称朋友还款但金额前后矛盾并改去其他网点取现",
+            "evidence_ids": [
+              "TX-PR-0012-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「全国分散转入后柜面取现」生成告警。",
+            "evidence_ids": [
+              "TX-PR-0012-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "转入对手地域跨度大、金额零碎、几乎不重复",
+            "evidence_ids": [
+              "IX-PR-0012-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "柜面问询时对金额和时间表述前后不一致",
+            "evidence_ids": [
+              "IX-PR-0012-02"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录3",
+            "detail": "在本网点暂缓后转往其他网点继续尝试取现",
+            "evidence_ids": [
+              "IX-PR-0012-03"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PR-0012-01",
+            "from_account": "ACC-C4F2FB",
+            "to_account": "ACC-DBE0A1",
+            "amount": 800.0,
+            "occurred_at": "2024-05-06 00:00:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-02",
+            "from_account": "ACC-ECF325",
+            "to_account": "ACC-DB79B1",
+            "amount": 837.5,
+            "occurred_at": "2024-05-06 03:11:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-03",
+            "from_account": "ACC-D7A207",
+            "to_account": "ACC-311A15",
+            "amount": 875.0,
+            "occurred_at": "2024-05-06 06:22:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-04",
+            "from_account": "ACC-F891C4",
+            "to_account": "ACC-DA3C71",
+            "amount": 912.5,
+            "occurred_at": "2024-05-06 09:33:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-05",
+            "from_account": "ACC-0B6051",
+            "to_account": "ACC-4361EF",
+            "amount": 950.0,
+            "occurred_at": "2024-05-06 12:44:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-06",
+            "from_account": "ACC-FD3C8D",
+            "to_account": "ACC-9EFD90",
+            "amount": 987.5,
+            "occurred_at": "2024-05-06 15:55:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-07",
+            "from_account": "ACC-87C8E6",
+            "to_account": "ACC-F5DD50",
+            "amount": 1025.0,
+            "occurred_at": "2024-05-06 18:06:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-08",
+            "from_account": "ACC-24F60D",
+            "to_account": "ACC-DF2D5B",
+            "amount": 1062.5,
+            "occurred_at": "2024-05-06 21:17:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-09",
+            "from_account": "ACC-FBA574",
+            "to_account": "ACC-879497",
+            "amount": 1100.0,
+            "occurred_at": "2024-05-06 00:28:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-10",
+            "from_account": "ACC-18A0E6",
+            "to_account": "ACC-8B0018",
+            "amount": 1137.5,
+            "occurred_at": "2024-05-06 03:39:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-11",
+            "from_account": "ACC-62ABE6",
+            "to_account": "ACC-41AE4E",
+            "amount": 1175.0,
+            "occurred_at": "2024-05-06 06:50:10",
+            "channel": "网银",
+            "remark": "转账"
+          },
+          {
+            "id": "TX-PR-0012-12",
+            "from_account": "ACC-E30960",
+            "to_account": "ACC-F3802D",
+            "amount": 18600.0,
+            "occurred_at": "2024-05-07 10:22:00",
+            "channel": "柜面",
+            "remark": "取现"
+          },
+          {
+            "id": "TX-PR-0012-13",
+            "from_account": "ACC-C10E3C",
+            "to_account": "ACC-CF5DE4",
+            "amount": 2600.0,
+            "occurred_at": "2024-05-07 13:40:00",
+            "channel": "网银",
+            "remark": "还款"
+          },
+          {
+            "id": "TX-PR-0012-14",
+            "from_account": "ACC-A63860",
+            "to_account": "ACC-1706E7",
+            "amount": 4300.0,
+            "occurred_at": "2024-05-07 15:18:00",
+            "channel": "网银",
+            "remark": "还款"
+          },
+          {
+            "id": "TX-PR-0012-15",
+            "from_account": "ACC-7FEC91",
+            "to_account": "ACC-B13AE0",
+            "amount": 22000.0,
+            "occurred_at": "2024-05-08 09:05:00",
+            "channel": "柜面",
+            "remark": "取现"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-受雇",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 22000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-2A7801",
+          "C-0012",
+          "IX-PR-0012-01",
+          "IX-PR-0012-02",
+          "IX-PR-0012-03",
+          "TX-PR-0012-01",
+          "TX-PR-0012-02",
+          "TX-PR-0012-03",
+          "TX-PR-0012-04",
+          "TX-PR-0012-05",
+          "TX-PR-0012-06",
+          "TX-PR-0012-07",
+          "TX-PR-0012-08",
+          "TX-PR-0012-09",
+          "TX-PR-0012-10",
+          "TX-PR-0012-11",
+          "TX-PR-0012-12",
+          "TX-PR-0012-13",
+          "TX-PR-0012-14",
+          "TX-PR-0012-15"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PR-0012-01",
+            "text": "转入对手地域跨度大、金额零碎、几乎不重复"
+          },
+          {
+            "id": "IX-PR-0012-02",
+            "text": "柜面问询时对金额和时间表述前后不一致"
+          },
+          {
+            "id": "IX-PR-0012-03",
+            "text": "在本网点暂缓后转往其他网点继续尝试取现"
+          }
+        ]
+      },
+      "source_citation": {
+        "id": "SRC-10",
+        "title": "银行柜员识破“跑分”洗钱陷阱（义务机构宣传稿）",
+        "url": "https://www.dakuaiji.org.cn/article/xmzc_xwfg/detail346.html",
+        "public_conclusion": "义务机构暂缓取现并通报同城网点，模式符合跑分套现"
+      },
+      "gold_provenance": "author-mapped-from-public-conclusion",
+      "ledger_note": "流水按公开报道的数量级与形态重构，不是原件账本。"
+    }
+  ],
+  "gold_distribution": {
+    "suggest_report": 12
+  },
+  "selection_bias": "public cases are almost always already reported or prosecuted; always_suggest_report accuracy is 1.0 by construction; cannot measure exclude/observe",
+  "citations": [
+    {
+      "id": "SRC-01",
+      "title": "“沉睡”账户突然“苏醒”银行警觉牵出洗钱大案（中行韶关 / 韶关中支，宣传转载）",
+      "url": "https://www.zyfutures.com/fxqzsal/55439.jhtml",
+      "used_by": [
+        "PR-0001"
+      ]
+    },
+    {
+      "id": "SRC-02",
+      "title": "线上银行业务洗钱典型案例分析（中国电子银行网）",
+      "url": "https://www.cebnet.com.cn/20200817/102683310.html",
+      "used_by": [
+        "PR-0002",
+        "PR-0004"
+      ]
+    },
+    {
+      "id": "SRC-03",
+      "title": "商业银行对网络赌博类洗钱的风险防范（澎湃转载）",
+      "url": "https://m.thepaper.cn/newsDetail_forward_29551063",
+      "used_by": [
+        "PR-0003"
+      ]
+    },
+    {
+      "id": "SRC-04",
+      "title": "人民法院依法惩治金融犯罪典型案例（最高人民法院）",
+      "url": "https://www.court.gov.cn/zixun/xiangqing/372731.html",
+      "used_by": [
+        "PR-0005",
+        "PR-0006"
+      ]
+    },
+    {
+      "id": "SRC-05",
+      "title": "反洗钱案例分享：员工出借账户转移集资款（义务机构宣传稿）",
+      "url": "https://www.mingyafunds.com/mingya/contents/2026/3/26-ab2d863d37fd4569934ed4869ece8c03.html",
+      "used_by": [
+        "PR-0007"
+      ]
+    },
+    {
+      "id": "SRC-06",
+      "title": "转让公司却成为洗钱帮凶（郑州中院）",
+      "url": "https://zzfy.hncourt.gov.cn/public/detail.php?id=29409",
+      "used_by": [
+        "PR-0008"
+      ]
+    },
+    {
+      "id": "SRC-07",
+      "title": "最高人民检察院、中国人民银行联合发布惩治洗钱犯罪典型案例",
+      "url": "https://www.pbc.gov.cn/goutongjiaoliu/113456/113469/2025092212551439161/index.html",
+      "used_by": [
+        "PR-0009"
+      ]
+    },
+    {
+      "id": "SRC-08",
+      "title": "陈某等人掩饰、隐瞒犯罪所得案（案例库转写，银行侧形态）",
+      "url": "http://www.drxsfd.com/xf/anli.asp?bh=5114",
+      "used_by": [
+        "PR-0010"
+      ]
+    },
+    {
+      "id": "SRC-09",
+      "title": "廖某掩饰、隐瞒犯罪所得案公开判决摘要（律师门户转写）",
+      "url": "https://m.055110.com/xs/3/26723.html",
+      "used_by": [
+        "PR-0011"
+      ]
+    },
+    {
+      "id": "SRC-10",
+      "title": "银行柜员识破“跑分”洗钱陷阱（义务机构宣传稿）",
+      "url": "https://www.dakuaiji.org.cn/article/xmzc_xwfg/detail346.html",
+      "used_by": [
+        "PR-0012"
+      ]
+    }
+  ]
+}

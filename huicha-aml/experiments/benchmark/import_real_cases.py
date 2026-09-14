@@ -193,7 +193,7 @@ def row_to_case(row: dict, idx: int) -> dict:
                 "avg_in_ticket": 0,
                 "peer_typical_monthly_in": 100000,
                 "peer_typical_ticket": 20000,
-                "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+                "peer_note": mask_text(row.get("peer_note") or "同业区间未经本行业校准"),
                 "in_sum_vs_peer": None,
             },
             "graph": {"nodes": [], "edges": []},
@@ -235,7 +235,7 @@ def cases_from_csv(text: str) -> list[dict]:
 
 DEFAULT_CAVEATS = {
     "placeholder": "真实 hold-out 槽位。placeholder 为手写样例，不是生产案件，禁止写入 RESULTS 主表，禁止写成准确率。",
-    "real-imported": "真实 hold-out 导入。须为脱敏生产/从业者标注案件；禁止把未脱敏材料入库。未满独立双标前禁止写成准确率。",
+    "real-imported": "真实 hold-out 导入。须为脱敏生产/从业者标注案件；禁止把未脱敏材料入库。当前拿不到生产 STR，此槽闲置；未满独立双标前禁止写成准确率。",
     "public-rewrite": (
         "公开改写探针。来源为监管通报、法院典型案例、义务机构宣传稿；"
         "gold 由作者按公开结论映射，不是独立标注；几乎全为 suggest_report，"

@@ -105,6 +105,8 @@ def test_public_rewrite_set_is_report_probe_not_results():
         txs = case["vignette"]["transactions"]
         assert len(txs) >= 6
         assert all(t["id"].startswith("TX-") for t in txs)
+        assert "真实 hold-out" not in vig
+        assert "生产能力" not in vig
 
 
 def test_public_rewrite_rebuild_is_stable():

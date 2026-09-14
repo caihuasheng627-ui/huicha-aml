@@ -91,6 +91,7 @@ py experiments\benchmark.py --real --set public-rewrite --no-write
 - 不要在 SYSTEM/judge_v3 里列举测试集叙事族（判定标准只写可操作边界，不写族名）  
 - 不要开 stub 却写入「真实模型」  
 - 不要把 `public_rewrite.json` 的命中率写成准确率：12/12 都是 suggest_report，只能当上报侧形态探针
+- 不要把生产 STR / 真实 hold-out 写成下一步：当前拿不到，公开改写已是外部来源上限
 
 ## 7. 口令
 

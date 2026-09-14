@@ -14,7 +14,8 @@
 2. **禁止**写成生产调查准确率或报送依据；Agent 建议须调查员签发。  
 3. v1（Macro-F1≈0.69，泄漏假集）与 v2 集（Macro-F1 0.1686，见 §1.1）均已降级，**不得与本报告混比**。  
 4. judge_v3 的三档标准里例举的异常节奏（短时多点取现回流、多层递减过桥、关联对倒闭环、现金→兑换商、分散归集→集中外转）**与本集 5 个上报族高度重合**——这是常见类型学，不是抄测试集，但意味着 0.97 是「标准覆盖了测试族」条件下的乐观估计；例举之外的类型学需要另做 hold-out（见 §7）。  
-5. 叙事项的 `polarity`（support/counter/context）由生成器按产品规则层的语义标注后**作为输入交给 Judge**，与产品路径中 `analyst_rules` 输出极性一致；它是产品输入的一部分，但也确实是强信号，读数时须知悉。
+5. 叙事项的 `polarity`（support/counter/context）由生成器按产品规则层的语义标注后**作为输入交给 Judge**，与产品路径中 `analyst_rules` 输出极性一致；它是产品输入的一部分，但也确实是强信号，读数时须知悉。  
+6. **生产 STR / 银行内部案件拿不到**。外部来源上限是公开典型案例改写（`public_rewrite.json`），不能补三档金标，也不能把数字写成生产能力。导入槽 `real_holdout.json` 保持占位，不再当成待办。
 
 ---
 
@@ -215,7 +216,7 @@ v3 几乎不依赖叙事项上的 support/counter 标签（差值 <0.001）；v2
 
 1. **API 与协议成立**；词面重合把主集 v3 从「真实泛化」抬到了 0.97，盲区把这个水分挤到 0.93，方向没变。  
 2. **v3 相对 v2 的贡献是真的**：两套集上排除召回都是 0→≈1，observe 率从 67–77% 降到 14–16%。  
-3. **不能对外说 93% 生产能力**；下一步仍是调查员标注的真实 hold-out，以及观察族偏严（继承/新户首笔）要不要改标准。
+3. **不能对外说 93% 生产能力**。生产 STR 拿不到，公开改写只覆盖上报侧形态；观察族偏严（继承/新户首笔）是产品侧还开着的问题，与有没有真实集无关。
 
 ---
 
@@ -265,20 +266,22 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 
 `prompt_version("judge")` **保持 judge_v3**。切默认的条件：主集、盲区、结构盲区三套上 v4 均不低于 v3，且观察族偏严减少。在此之前 PR 不得把「影响线上行为」勾成已确认。
 
-### 10.5 真实 hold-out 接口
+### 10.5 生产 STR 不可得（硬约束）
 
-`import_real_cases.py`：脱敏 CSV → `real_holdout.json`；`benchmark.py --set real`。占位 5 条 `data_note=placeholder`，**不写 RESULTS 主表**。字段校验与去标识见 `backend/tests/test_real_holdout.py`。
+银行内部可疑交易原件、调查记录和双人标注 **拿不到**。这不是接口没写好，是数据天花板：没有生产 STR，就不能报三档准确率或生产能力。
 
-公开网上能找到的是监管通报、法院典型案例、义务机构宣传稿，**不是**银行 STR 流水与双人标注。已改写 12 条进 `public_rewrite.json`（`--set public-rewrite`）：
+`import_real_cases.py --csv` 仍保留，以免将来有脱敏材料时无入口；**当前不作为待办**。`real_holdout.json` 5 条 `data_note=placeholder` 继续不上 RESULTS 主表。
+
+公开渠道能拿到的上限是监管通报 / 法院典型案例 / 义务机构宣传稿。已改写 12 条进 `public_rewrite.json`（`--set public-rewrite`）：
 
 - `data_note=public-rewrite`；gold 由作者按「公开结论为报送/追诉」映射，**不是独立标注**。
 - always_suggest_report 在本集准确率为 1.0（金标全是上报）；模型打满分**不能**当能力证据，漏报才有信息量。
 - 输入 vignette 只保留银行侧可见形态，不含判决刑期；流水按公开数量级重构，不是原件账本。
 - 出处写在每条 `source_citation` 与 payload `citations`。
 
-这只证明「上报侧公开形态能否被认出来」。真正 hold-out 仍需脱敏 CSV + ≥2 人独立标。
-
 官方 `deepseek-chat` 冒烟（`--no-write`，未写 RESULTS 主表）：n=12 全判 `suggest_report`，parse_failures=0。这与 `always_suggest_report` 准确率同为 1.0；keyword 只有 0.5。读法：这 12 条公开形态没有被降成观察/排除，**不是**生产能力，也不得与百炼 flash 主表混比。
+
+没有生产 STR 之后，对外仍只能说**机制 + 方向**（排除档从不敢判到能判、相对 keyword / v2 的贡献）。不能靠再搜公开案例把准确率补出来。
 
 ### 10.6 结构盲区真实跑（`struct_set.json` × v2/v3）
 

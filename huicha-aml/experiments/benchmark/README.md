@@ -8,8 +8,8 @@
     证据编号用 `TX-`（流水）/ `IX-`（叙事项）/ `KB-`（知识），与产品 `enrich_judge` 契约一致
 - `blind_set.json`：例举词盲区 hold-out
 - `struct_set.json`：结构盲区 hold-out（禁词同盲区，且流水不触发 structuring/funnel/night-out/layering）
-- `real_holdout.json`：真实 hold-out 导入槽（占位样例 `data_note=placeholder`，不写入 RESULTS 主表）
-- `public_rewrite.json`：公开典型案例改写探针（`data_note=public-rewrite`，12 条均为 suggest_report，不写入主表，不能测排除/观察）
+- `real_holdout.json`：生产 STR 导入槽（**拿不到真实案件，冻结**；占位 5 条 `data_note=placeholder`，不上主表）
+- `public_rewrite.json`：外部来源上限——公开典型案例改写探针（`data_note=public-rewrite`，12 条均为 suggest_report，不上主表，不能测排除/观察）
 - `public_rewrite_cases.py` · `import_real_cases.py --public-rewrite`：生成上述探针
 - `build_independent_set.py`：生成器（`--variant v3|nopolarity|blind|blind_struct`）
 - `runs/`：真实调用原始 jsonl，文件名带 prompt 版本（`<ts>_<judge_vN>.jsonl`）

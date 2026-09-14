@@ -175,6 +175,7 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
 | `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
 | `runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl` | judge_v4 消融（主集/盲区；结构盲区因欠费中断） |
+| `runs/20260914T074816Z_blind_struct_judge_v{3,4}.jsonl` | 官方 deepseek-chat 结构盲区补跑 |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
 
 ---

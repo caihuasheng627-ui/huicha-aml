@@ -175,6 +175,7 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
 | `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
 | `benchmark/public_rewrite.json` · `public_rewrite_cases.py` | 公开案例改写探针（12 条，不上主表） |
+| `runs/20260914T082025Z_public_rewrite_judge_v3.jsonl` | 官方 deepseek-chat × 公开改写探针（不上主表） |
 | `runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl` | judge_v4 消融（主集/盲区；结构盲区因欠费中断） |
 | `runs/20260914T074816Z_blind_struct_judge_v{3,4}.jsonl` | 官方 deepseek-chat 结构盲区补跑 |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
@@ -276,6 +277,8 @@ v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v
 - 出处写在每条 `source_citation` 与 payload `citations`。
 
 这只证明「上报侧公开形态能否被认出来」。真正 hold-out 仍需脱敏 CSV + ≥2 人独立标。
+
+官方 `deepseek-chat` 冒烟（`--no-write`，未写 RESULTS 主表）：n=12 全判 `suggest_report`，parse_failures=0。这与 `always_suggest_report` 准确率同为 1.0；keyword 只有 0.5。读法：这 12 条公开形态没有被降成观察/排除，**不是**生产能力，也不得与百炼 flash 主表混比。
 
 ### 10.6 结构盲区真实跑（`struct_set.json` × v2/v3）
 

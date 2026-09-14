@@ -1,25 +1,29 @@
 from __future__ import annotations
 
+import math
 import re
+from collections import Counter
 from functools import lru_cache
 
-# 本地制度/类型学摘录：公开要求的转述，不是法规全文，供 Agent 检索引用。
-DOCUMENTS: list[dict] = [
+from .knowledge_statutes import STATUTES
+
+# 作业口径摘录：供调查工作台引用，不是替代现行法律全文。
+PLAYBOOK: list[dict] = [
     {
         "id": "KB-REG-01",
         "kind": "regulation",
         "title": "可疑交易须人工分析并记录过程",
-        "source": "《金融机构大额交易和可疑交易报告管理办法》第十四条（转述）",
+        "source": "《反洗钱法》第三十五条、第五十三条；大额交易和可疑交易报告作业要求（转述）",
         "tags": ["人工分析", "过程记录", "可疑交易", "调查", "报告"],
-        "body": "金融机构发现或者有合理理由怀疑客户、客户的资金或者其他资产与洗钱等犯罪活动有关的，应当提交可疑交易报告。报告前须开展人工分析，并把分析过程留下来，不能只靠系统自动出数交差。",
+        "body": "金融机构发现或者有合理理由怀疑客户、客户的资金或者其他资产与洗钱、恐怖融资等犯罪活动有关的，应当提交可疑交易报告。报告前须开展人工识别与分析，完整记录分析过程、依据的交易、客户尽职调查情况和结论，不得仅以系统自动预警或模型输出代替人工判断。对应《反洗钱法》第三十五条及大额交易和可疑交易报告管理办法。",
     },
     {
         "id": "KB-REG-02",
         "kind": "regulation",
         "title": "排除告警须记录合理理由",
-        "source": "人民银行关于执行可疑交易报告工作的要求（转述）",
-        "tags": ["排除", "理由", "误报", "关闭", "批发", "经营"],
-        "body": "监测系统命中后，若经调查认为不构成可疑，仍须写下合理排除理由，例如交易与客户身份、职业或经营特征相符。不能只点关闭、不留痕迹。",
+        "source": "《反洗钱法》第三十五条；大额交易和可疑交易报告管理办法第十四条（2025年修订，转述）",
+        "tags": ["排除", "理由", "误报", "关闭", "批发", "经营", "人工分析"],
+        "body": "监测系统命中后，若经人工分析、识别认为不构成可疑，仍须记录分析排除的合理理由，例如交易与客户身份、职业或经营特征相符。不能只点关闭、不留痕迹。对应《大额交易和可疑交易报告管理办法》第十四条。",
     },
     {
         "id": "KB-REG-03",
@@ -33,7 +37,7 @@ DOCUMENTS: list[dict] = [
         "id": "KB-REG-04",
         "kind": "regulation",
         "title": "要素不全须限期补正",
-        "source": "人民银行关于可疑交易报告补正时限的执行要求（转述）",
+        "source": "《反洗钱法》第三十五条；人民银行关于可疑交易报告补正时限的执行要求（转述）",
         "tags": ["补正", "五日", "要素", "质量"],
         "body": "监测中心认为要素不全或填写错误的，可退回补正。机构一般应在五个工作日内补正。调查工作台的价值是先把要素和证据编号写全，降低补正。",
     },
@@ -41,7 +45,7 @@ DOCUMENTS: list[dict] = [
         "id": "KB-REG-05",
         "kind": "regulation",
         "title": "上报前须审定，不得系统自动直报",
-        "source": "管理办法第二十七条、第二十八条（转述）",
+        "source": "《反洗钱法》第八条、第三十五条；管理办法关于审定报送的要求（转述）",
         "tags": ["审定", "签发", "人工", "自动报送", "总部"],
         "body": "分析应至少经过初审和复核，上报前由总部专门机构审定。Agent 只出草稿，不能写核心、不能自动提交监测中心，结论须调查员签发。",
     },
@@ -135,6 +139,7 @@ DOCUMENTS: list[dict] = [
     },
 ]
 
+DOCUMENTS: list[dict] = [*PLAYBOOK, *STATUTES]
 
 _KIND_LABEL = {
     "regulation": "监管要素",
@@ -143,19 +148,60 @@ _KIND_LABEL = {
     "process": "作业规程",
 }
 
-# 摘录不是现行有效法规全文。effective/expiry 用于「案发日是否适用」演示。
 _DOC_META = {
     "effective_date": "2017-01-01",
     "expiry_date": None,
-    "version": "paraphrase-v1",
-    "source_note": "公开要求转述，非法规全文，synthetic/demo",
+    "version": "playbook-v2",
+    "source_note": "作业口径转述 + 现行法律规章官方文本",
+}
+
+_CN_NUM = "零〇一二三四五六七八九十百千0-9"
+_ART_HEAD = re.compile(rf"(?m)^(第[{_CN_NUM}]+条)\s*")
+_ART_LABEL = re.compile(rf"第([{_CN_NUM}]+)条")
+
+# 调查场景常用同义扩展，仅用于检索扩写，不改正文。
+_QUERY_EXPAND: dict[str, list[str]] = {
+    "排除": ["排除理由", "不作为可疑", "关闭"],
+    "误报": ["排除", "经营解释"],
+    "人工": ["人工分析", "人工识别"],
+    "尽调": ["尽职调查", "了解你的客户"],
+    "受益人": ["受益所有人"],
+    "UBO": ["受益所有人"],
+    "STR": ["可疑交易报告"],
+    "CTR": ["大额交易"],
 }
 
 
+def _cn_to_int(s: str) -> int:
+    s = (s or "").replace("〇", "零")
+    digits = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if s.isdigit():
+        return int(s)
+    if s == "十":
+        return 10
+    total = 0
+    if "百" in s:
+        i = s.index("百")
+        total += digits.get(s[:i] or "一", 1) * 100
+        s = s[i + 1 :]
+    if s.startswith("十"):
+        return total + 10 + digits.get(s[1:], 0)
+    if "十" in s:
+        i = s.index("十")
+        return total + digits.get(s[:i] or "一", 1) * 10 + digits.get(s[i + 1 :], 0)
+    return total + digits.get(s, 0)
+
+
 def _article_of(doc: dict) -> str:
-    src = doc.get("source") or ""
-    m = re.search(r"第[一二三四五六七八九十百零0-9]+条", src)
-    return m.group(0) if m else ""
+    if doc.get("article"):
+        return str(doc["article"])
+    blob = f"{doc.get('source') or ''} {doc.get('title') or ''}"
+    found = re.findall(rf"第[{_CN_NUM}]+条", blob)
+    if not found:
+        return ""
+    if len(found) == 1:
+        return found[0]
+    return f"{found[0]}至{found[-1]}"
 
 
 def _applicable(doc: dict, as_of: str) -> bool:
@@ -172,102 +218,284 @@ def _applicable(doc: dict, as_of: str) -> bool:
 
 def _tokens(text: str) -> set[str]:
     text = (text or "").lower()
-    parts = [p for p in re.split(r"[\s,，。；、/（）()「」【】：:]+", text) if len(p) >= 2]
+    parts = [p for p in re.split(r"[\s,，。；、/（）()「」【】：:#\-]+", text) if len(p) >= 2]
     hans = re.findall(r"[\u4e00-\u9fff]+", text)
     extra: list[str] = []
     for h in hans:
         extra.append(h)
         if len(h) >= 4:
             extra.extend(h[i : i + 2] for i in range(len(h) - 1))
-    ascii_words = re.findall(r"[a-z0-9\-]{3,}", text)
+    ascii_words = re.findall(r"[a-z0-9]{3,}", text)
     return {t for t in [*parts, *extra, *ascii_words] if t}
 
 
-@lru_cache(maxsize=1)
-def _indexed() -> list[dict]:
-    out = []
-    for doc in DOCUMENTS:
-        blob = " ".join([doc["id"], doc["title"], doc["body"], " ".join(doc["tags"])])
-        out.append({**doc, "_tokens": _tokens(blob)})
+def _expand_query(query: str) -> str:
+    extra: list[str] = []
+    for key, vals in _QUERY_EXPAND.items():
+        if key.lower() in query.lower() or key in query:
+            extra.extend(vals)
+    return f"{query} {' '.join(extra)}".strip()
+
+
+def _char_ngrams(text: str, n: int = 2) -> list[str]:
+    cleaned = re.sub(r"\s+", "", (text or "").lower())
+    if len(cleaned) < n:
+        return [cleaned] if cleaned else []
+    return [cleaned[i : i + n] for i in range(len(cleaned) - n + 1)]
+
+
+def _tfidf_vec(tf: Counter[str], df: Counter[str], n_docs: int) -> dict[str, float]:
+    if not tf or n_docs <= 0:
+        return {}
+    total = float(sum(tf.values())) or 1.0
+    out: dict[str, float] = {}
+    for term, cnt in tf.items():
+        idf = math.log((1 + n_docs) / (1 + df.get(term, 0))) + 1.0
+        out[term] = (cnt / total) * idf
     return out
 
 
+def _cosine(a: dict[str, float], b: dict[str, float]) -> float:
+    if not a or not b:
+        return 0.0
+    if len(a) > len(b):
+        a, b = b, a
+    dot = sum(v * b.get(k, 0.0) for k, v in a.items())
+    if dot <= 0:
+        return 0.0
+    na = math.sqrt(sum(v * v for v in a.values()))
+    nb = math.sqrt(sum(v * v for v in b.values()))
+    if na <= 0 or nb <= 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _snippet(text: str, limit: int = 360) -> str:
+    body = (text or "").strip()
+    if len(body) <= limit:
+        return body
+    return body[: limit - 1].rstrip() + "…"
+
+
+def _split_articles(body: str) -> list[tuple[str, int, str]]:
+    """返回 (条款标签, 条款号, 正文含标签)。"""
+    text = (body or "").strip()
+    if not text:
+        return []
+    parts = _ART_HEAD.split(text)
+    if len(parts) < 3:
+        return []
+    out: list[tuple[str, int, str]] = []
+    i = 1
+    while i < len(parts) - 1:
+        head, chunk = parts[i], parts[i + 1]
+        m = _ART_LABEL.fullmatch(head)
+        if not m:
+            i += 2
+            continue
+        n = _cn_to_int(m.group(1))
+        content = chunk.strip()
+        if n and content:
+            out.append((head, n, f"{head}\n{content}"))
+        i += 2
+    return out
+
+
+def _chunk_document(doc: dict) -> list[dict]:
+    """官方规章按条切块；作业摘录保持整篇。"""
+    if doc.get("data_note") != "official-statute":
+        return [{**doc, "parent_id": doc["id"], "chunk_kind": "doc"}]
+    articles = _split_articles(doc.get("body") or "")
+    if not articles:
+        return [{**doc, "parent_id": doc["id"], "chunk_kind": "doc"}]
+    chunks: list[dict] = []
+    for label, num, body in articles:
+        chunks.append(
+            {
+                **doc,
+                "id": f"{doc['id']}-a{num}",
+                "parent_id": doc["id"],
+                "chunk_kind": "article",
+                "article": label,
+                "article_no": num,
+                "title": f"{doc['title']} · {label}",
+                "body": body,
+                "source": f"{doc.get('source') or ''}{label}",
+            }
+        )
+    return chunks
+
+
+@lru_cache(maxsize=1)
+def _search_units() -> list[dict]:
+    units: list[dict] = []
+    for doc in DOCUMENTS:
+        units.extend(_chunk_document(doc))
+    return units
+
+
+@lru_cache(maxsize=1)
+def _hybrid_index() -> dict:
+    units = _search_units()
+    n_docs = len(units)
+    df: Counter[str] = Counter()
+    prepared: list[dict] = []
+    for unit in units:
+        blob = " ".join(
+            [
+                unit["id"],
+                unit.get("parent_id") or "",
+                unit["title"],
+                unit["body"],
+                " ".join(unit.get("tags") or []),
+                unit.get("article") or "",
+            ]
+        )
+        grams = _char_ngrams(blob, 2)
+        tf = Counter(grams)
+        df.update(tf.keys())
+        prepared.append(
+            {
+                **unit,
+                "_tokens": _tokens(blob),
+                "_tf": tf,
+            }
+        )
+    for row in prepared:
+        row["_vec"] = _tfidf_vec(row.pop("_tf"), df, n_docs)
+        row["_norm"] = math.sqrt(sum(v * v for v in row["_vec"].values())) or 1.0
+    return {"units": prepared, "df": df, "n_docs": n_docs}
+
+
 def corpus_size() -> int:
+    """目录条目数（章/篇），供健康检查展示。"""
     return len(DOCUMENTS)
 
 
+def search_unit_count() -> int:
+    return len(_search_units())
+
+
+def retrieval_mode() -> str:
+    return "hybrid-keyword-tfidf"
+
+
+def _doc_view(d: dict, *, as_of: str = "") -> dict:
+    return {
+        "id": d["id"],
+        "parent_id": d.get("parent_id") or d["id"],
+        "chunk_kind": d.get("chunk_kind") or "doc",
+        "kind": d["kind"],
+        "kind_label": _KIND_LABEL.get(d["kind"], d["kind"]),
+        "title": d["title"],
+        "source": d["source"],
+        "tags": d["tags"],
+        "body": d["body"],
+        "article": _article_of(d),
+        "article_no": d.get("article_no"),
+        "effective_date": d.get("effective_date") or _DOC_META["effective_date"],
+        "expiry_date": d.get("expiry_date") if "expiry_date" in d else _DOC_META["expiry_date"],
+        "version": d.get("version") or _DOC_META["version"],
+        "data_note": d.get("data_note") or "synthetic-paraphrase",
+        "as_of": as_of,
+    }
+
+
 def list_knowledge() -> list[dict]:
-    return [
-        {
-            "id": d["id"],
-            "kind": d["kind"],
-            "kind_label": _KIND_LABEL.get(d["kind"], d["kind"]),
-            "title": d["title"],
-            "source": d["source"],
-            "tags": d["tags"],
-            "body": d["body"],
-            "article": _article_of(d),
-            "effective_date": _DOC_META["effective_date"],
-            "expiry_date": _DOC_META["expiry_date"],
-            "version": _DOC_META["version"],
-            "data_note": "synthetic-paraphrase",
-        }
-        for d in DOCUMENTS
-    ]
+    return [_doc_view(d) for d in DOCUMENTS]
+
+
+def get_knowledge(doc_id: str) -> dict | None:
+    key = str(doc_id or "").strip()
+    if not key:
+        return None
+    for d in DOCUMENTS:
+        if d["id"] == key:
+            return _doc_view(d)
+    for u in _search_units():
+        if u["id"] == key:
+            return _doc_view(u)
+    return None
 
 
 def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_of: str = "") -> list[dict]:
-    q_tokens = _tokens(query)
-    ranked: list[tuple[float, dict]] = []
-    for doc in _indexed():
+    """关键词重叠 + 字符二元组 TF-IDF 余弦的混合检索；规章按条切块。"""
+    expanded = _expand_query(query)
+    q_tokens = _tokens(expanded)
+    q_tf = Counter(_char_ngrams(expanded, 2))
+    index = _hybrid_index()
+    q_vec = _tfidf_vec(q_tf, index["df"], index["n_docs"])
+
+    ranked: list[tuple[float, float, float, dict]] = []
+    for doc in index["units"]:
         if kind and doc["kind"] != kind:
             continue
-        if not _applicable({**doc, **_DOC_META}, as_of):
+        if not _applicable(doc, as_of):
             continue
         overlap = q_tokens & doc["_tokens"]
-        tag_hit = sum(1 for t in doc["tags"] if t.lower() in query or t in overlap)
-        if not overlap and not tag_hit:
-            continue
-        score = len(overlap) + tag_hit * 2
+        tag_hit = sum(1 for t in doc["tags"] if t.lower() in query or t in overlap or t in expanded)
+        kw = float(len(overlap) + tag_hit * 2)
         if doc["title"] in query or any(t in query for t in doc["tags"] if len(t) >= 2):
-            score += 3
-        ranked.append((score, doc))
-    ranked.sort(key=lambda x: (-x[0], x[1]["id"]))
+            kw += 3
+        # 查询里直接点名条款号时抬升对应切块
+        art = doc.get("article") or ""
+        if art and art in query:
+            kw += 6
+        if doc.get("article_no") and re.search(rf"(?:第)?{doc['article_no']}条", query):
+            kw += 4
+        vec = _cosine(q_vec, doc["_vec"])
+        if kw <= 0 and vec < 0.08:
+            continue
+        # 融合：关键词主导精确命中，向量补语义邻近
+        score = kw + 12.0 * vec
+        ranked.append((score, kw, vec, doc))
+
+    ranked.sort(key=lambda x: (-x[0], x[3]["id"]))
     hits = []
-    for score, doc in ranked[:top_k]:
+    for score, kw, vec, doc in ranked[:top_k]:
         hits.append(
             {
-                "id": doc["id"],
-                "kind": doc["kind"],
-                "kind_label": _KIND_LABEL.get(doc["kind"], doc["kind"]),
-                "title": doc["title"],
-                "source": doc["source"],
-                "snippet": doc["body"],
-                "score": score,
-                "article": _article_of(doc),
-                "effective_date": _DOC_META["effective_date"],
-                "as_of": as_of,
-                "data_note": "synthetic-paraphrase",
+                **_doc_view(doc, as_of=as_of),
+                "snippet": _snippet(doc["body"]),
+                "score": round(score, 4),
+                "score_keyword": round(kw, 4),
+                "score_vector": round(vec, 4),
+                "retrieval": retrieval_mode(),
             }
         )
     return hits
 
 
 def retrieve_for_alert(alert_type: str, industry: str, as_of: str = "") -> list[dict]:
-    """按告警类型和行业各检索一截，再补监管要素，去重后给 Agent 引用。"""
-    seen: set[str] = set()
+    """按告警类型和行业检索，并优先覆盖 STR 人工分析 / 反洗钱法核心义务条款。"""
+    seen_ids: set[str] = set()
+    seen_parents: set[str] = set()
     merged: list[dict] = []
-    queries = [
-        (f"{alert_type} {industry} 调查要点", None),
-        (alert_type, "typology"),
-        (industry, "industry"),
-        ("可疑交易报告要素 排除理由 人工签发 补正", "regulation"),
-        ("质疑复核 确认偏误", "process"),
-    ]
-    for q, kind in queries:
-        for hit in search_knowledge(q, kind=kind, top_k=2, as_of=as_of):
-            if hit["id"] in seen or hit["score"] < 3:
+
+    def _take(hits: list[dict], *, min_score: float = 2.5) -> None:
+        for hit in hits:
+            if hit["id"] in seen_ids or hit["score"] < min_score:
                 continue
-            seen.add(hit["id"])
+            parent = hit.get("parent_id") or hit["id"]
+            # 同一规章篇目只保留一条最高分切块，给类型学/作业摘录留位
+            if hit.get("chunk_kind") == "article" and parent in seen_parents:
+                continue
+            seen_ids.add(hit["id"])
+            seen_parents.add(parent)
             merged.append(hit)
-    return merged[:8]
+
+    queries = [
+        (f"{alert_type} {industry} 调查要点", None, 2),
+        (alert_type, "typology", 2),
+        (industry, "industry", 2),
+        ("可疑交易 人工分析 排除理由 第十四条", "regulation", 3),
+        ("反洗钱法 第三十五条 可疑交易报告", "regulation", 2),
+        ("尽职调查 受益所有人 保存十年", "regulation", 2),
+        ("可疑交易报告要素 补正 人工签发", "regulation", 2),
+        ("质疑复核 确认偏误", "process", 1),
+    ]
+    for q, kind, k in queries:
+        _take(search_knowledge(q, kind=kind, top_k=k, as_of=as_of))
+        if len(merged) >= 10:
+            break
+    return merged[:10]

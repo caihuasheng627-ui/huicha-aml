@@ -36,6 +36,9 @@ DOCUMENTS: list[dict] = [
         "source": "人民银行关于可疑交易报告补正时限的执行要求（转述）",
         "tags": ["补正", "五日", "要素", "质量"],
         "body": "监测中心认为要素不全或填写错误的，可退回补正。机构一般应在五个工作日内补正。调查工作台的价值是先把要素和证据编号写全，降低补正。",
+        # 条款级生效日晚于库默认值：案发日早于此日时不应被引用。
+        "effective_date": "2021-03-01",
+        "version": "paraphrase-v1-corr-2021",
     },
     {
         "id": "KB-REG-05",
@@ -144,6 +147,7 @@ _KIND_LABEL = {
 }
 
 # 摘录不是现行有效法规全文。effective/expiry 用于「案发日是否适用」演示。
+# 全局值为缺省回退；DOCUMENTS 条目可覆盖条款级日期/版本。
 _DOC_META = {
     "effective_date": "2017-01-01",
     "expiry_date": None,
@@ -158,11 +162,22 @@ def _article_of(doc: dict) -> str:
     return m.group(0) if m else ""
 
 
+def _meta_of(doc: dict) -> dict:
+    """条款级字段优先，缺省回退到全局 _DOC_META。"""
+    return {
+        "effective_date": doc.get("effective_date") or _DOC_META["effective_date"],
+        "expiry_date": doc["expiry_date"] if "expiry_date" in doc else _DOC_META["expiry_date"],
+        "version": doc.get("version") or _DOC_META["version"],
+        "source_note": doc.get("source_note") or _DOC_META["source_note"],
+    }
+
+
 def _applicable(doc: dict, as_of: str) -> bool:
     if not as_of:
         return True
-    start = doc.get("effective_date") or _DOC_META["effective_date"]
-    end = doc.get("expiry_date")
+    meta = _meta_of(doc)
+    start = meta["effective_date"]
+    end = meta["expiry_date"]
     if start and as_of < start:
         return False
     if end and as_of > end:
@@ -197,23 +212,26 @@ def corpus_size() -> int:
 
 
 def list_knowledge() -> list[dict]:
-    return [
-        {
-            "id": d["id"],
-            "kind": d["kind"],
-            "kind_label": _KIND_LABEL.get(d["kind"], d["kind"]),
-            "title": d["title"],
-            "source": d["source"],
-            "tags": d["tags"],
-            "body": d["body"],
-            "article": _article_of(d),
-            "effective_date": _DOC_META["effective_date"],
-            "expiry_date": _DOC_META["expiry_date"],
-            "version": _DOC_META["version"],
-            "data_note": "synthetic-paraphrase",
-        }
-        for d in DOCUMENTS
-    ]
+    out = []
+    for d in DOCUMENTS:
+        meta = _meta_of(d)
+        out.append(
+            {
+                "id": d["id"],
+                "kind": d["kind"],
+                "kind_label": _KIND_LABEL.get(d["kind"], d["kind"]),
+                "title": d["title"],
+                "source": d["source"],
+                "tags": d["tags"],
+                "body": d["body"],
+                "article": _article_of(d),
+                "effective_date": meta["effective_date"],
+                "expiry_date": meta["expiry_date"],
+                "version": meta["version"],
+                "data_note": "synthetic-paraphrase",
+            }
+        )
+    return out
 
 
 def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_of: str = "") -> list[dict]:
@@ -222,7 +240,7 @@ def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_
     for doc in _indexed():
         if kind and doc["kind"] != kind:
             continue
-        if not _applicable({**doc, **_DOC_META}, as_of):
+        if not _applicable(doc, as_of):
             continue
         overlap = q_tokens & doc["_tokens"]
         tag_hit = sum(1 for t in doc["tags"] if t.lower() in query or t in overlap)
@@ -235,6 +253,7 @@ def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_
     ranked.sort(key=lambda x: (-x[0], x[1]["id"]))
     hits = []
     for score, doc in ranked[:top_k]:
+        meta = _meta_of(doc)
         hits.append(
             {
                 "id": doc["id"],
@@ -245,7 +264,9 @@ def search_knowledge(query: str, *, kind: str | None = None, top_k: int = 4, as_
                 "snippet": doc["body"],
                 "score": score,
                 "article": _article_of(doc),
-                "effective_date": _DOC_META["effective_date"],
+                "effective_date": meta["effective_date"],
+                "expiry_date": meta["expiry_date"],
+                "version": meta["version"],
                 "as_of": as_of,
                 "data_note": "synthetic-paraphrase",
             }

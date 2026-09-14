@@ -40,6 +40,9 @@ SET_FILES = {
     "independent": "independent_set.json",
     "nopolarity": "independent_set_nopolarity.json",
     "blind": "blind_set.json",
+    "blind_struct": "struct_set.json",
+    "struct": "struct_set.json",
+    "real": "real_holdout.json",
 }
 
 CONFIDENCE_BINS = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.01))
@@ -366,6 +369,7 @@ def evaluate_independent(
         if scored
         else 0.0,
         "source": payload.get("source"),
+        "data_note": payload.get("data_note"),
         "caveat": payload.get("caveat"),
         "run_log": run_path.relative_to(ROOT).as_posix(),
         "baselines": baselines,
@@ -584,7 +588,7 @@ def render_validity_md(comparison: dict) -> list[str]:
     cells = comparison.get("cells") or {}
     if not cells:
         return []
-    lines = ["## 有效性消融（主集 / 去极性 / 盲区）", "", f"- {comparison.get('note')}", ""]
+    lines = ["## 有效性消融（主集 / 去极性 / 盲区 / 结构盲区）", "", f"- {comparison.get('note')}", ""]
     keys = [
         ("macro_f1", "Macro-F1"),
         ("exclude_recall", "exclude 召回"),
@@ -619,7 +623,7 @@ def update_results_md(result: dict, ablation: dict | None = None) -> None:
     if json_path.exists():
         data = json.loads(json_path.read_text(encoding="utf-8"))
         extra = []
-        for key in ("independent_ablation", "nopolarity_ablation", "blind_ablation"):
+        for key in ("independent_ablation", "nopolarity_ablation", "blind_ablation", "blind_struct_ablation"):
             if key in data and data[key] and key == "independent_ablation" and ablation:
                 continue
             if data.get(key):
@@ -674,6 +678,18 @@ RESULT_KEEP_KEYS = [
 ]
 
 
+DEEPSEEK_RESULT_MODEL = "deepseek-v4-flash-0731"
+
+
+def _result_source_key(result: dict) -> str:
+    """非 DeepSeek 跑分单独分槽，避免覆盖已有百炼 deepseek 数字。"""
+    src = str(result.get("source") or "unknown")
+    model = str(result.get("model") or "")
+    if model and model != DEEPSEEK_RESULT_MODEL:
+        return f"{src}__{model}"
+    return src
+
+
 def update_results_json(result: dict) -> dict | None:
     """按 source×prompt 分槽保存，换集不覆盖旧消融。返回当前 source 的 prompt 消融（若有）。"""
     path = Path(__file__).parent / "RESULTS.json"
@@ -687,7 +703,7 @@ def update_results_json(result: dict) -> dict | None:
         )
         data["independent_real_model_v1_deprecated"] = old
     slim = {k: result[k] for k in RESULT_KEEP_KEYS if k in result}
-    src = str(result.get("source") or "unknown")
+    src = _result_source_key(result)
     by_source = data.get("runs_by_source") or {}
     if not by_source and data.get("independent_real_model_runs"):
         by_source = {"narrative_vignette_v3_rules_layer": dict(data["independent_real_model_runs"])}
@@ -695,22 +711,29 @@ def update_results_json(result: dict) -> dict | None:
     src_runs[str(result.get("prompt"))] = slim
     by_source[src] = src_runs
     data["runs_by_source"] = by_source
-    data["independent_real_model"] = slim
     if src == "narrative_vignette_v3_rules_layer":
+        data["independent_real_model"] = slim
         data["independent_real_model_runs"] = src_runs
         ablation = build_ablation(src_runs)
         if ablation:
             data["independent_ablation"] = ablation
     else:
+        if "__" not in src:
+            data["independent_real_model"] = slim
         ablation = build_ablation(src_runs)
+        base_src = src.split("__", 1)[0]
         slot = {
             "narrative_vignette_v3_rules_layer_nopolarity": "nopolarity_ablation",
             "narrative_vignette_blind_holdout": "blind_ablation",
-        }.get(src)
-        if slot and ablation:
-            data[slot] = ablation
+            "narrative_vignette_blind_struct": "blind_struct_ablation",
+        }.get(base_src)
+        if slot:
+            if src != base_src:
+                slot = f"{slot}__{src.split('__', 1)[1]}"
+            if ablation:
+                data[slot] = ablation
     data["validity_comparison"] = {
-        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 hold-out；同一模型与后处理。",
+        "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；按模型分槽，禁止跨模型混比。",
         "cells": {
             source: {p: _flatten_for_ablation(run) for p, run in runs.items()}
             for source, runs in sorted(by_source.items())
@@ -736,7 +759,7 @@ def main() -> dict:
         "--set",
         dest="set_name",
         default="v3",
-        help="数据集：v3 / nopolarity / blind，或 json 文件名。默认 independent_set.json",
+        help="数据集：v3 / nopolarity / blind / blind_struct / real，或 json 文件名。默认 independent_set.json",
     )
     args = parser.parse_args()
     if args.rerender:
@@ -769,7 +792,12 @@ def main() -> dict:
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return out
     result = evaluate_independent(limit=args.limit, prompt_kind=args.prompt, set_name=args.set_name)
-    if not args.no_write:
+    placeholder = str(result.get("data_note") or "") == "placeholder" or str(result.get("source") or "").startswith(
+        "real_holdout"
+    )
+    if placeholder and not args.no_write:
+        print("skip RESULTS write: real/placeholder hold-out 不写入主表", flush=True)
+    if not args.no_write and not placeholder:
         ablation = update_results_json(result)
         update_results_md(result, ablation)
     printable = {k: v for k, v in result.items() if k != "by_tag"}

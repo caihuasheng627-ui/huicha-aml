@@ -1,0 +1,642 @@
+{
+  "data_note": "placeholder",
+  "split": "real_holdout",
+  "variant": "real",
+  "source": "real_holdout_placeholder",
+  "n": 5,
+  "n_unique": 5,
+  "judge_input_contract": "enrich_judge(alert, customer, findings, transactions, baseline, kb_hits, allowed_evidence)；不传 missing_evidence",
+  "caveat": "真实 hold-out 槽位。placeholder 为手写样例，不是生产案件，禁止写入 RESULTS 主表，禁止写成准确率。",
+  "cases": [
+    {
+      "case_id": "PH-0001",
+      "gold": "exclude",
+      "tag": "placeholder",
+      "annotation_reason": "占位：薪酬批次可闭合",
+      "gold_support_ids": [
+        "IX-PH-0001-01",
+        "IX-PH-0001-02"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PH-0001-01",
+        "IX-PH-0001-02"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "197b85e459719899d5d99925cd784e4552d158e48f2ecda2828d77da7fb856d5",
+      "vignette": {
+        "alert_type": "大额薪酬代发",
+        "industry": "制造业",
+        "summary": "企业向在册员工批量代发薪酬",
+        "alert": {
+          "id": "PH-0001",
+          "alert_type": "大额薪酬代发",
+          "upstream": "real-holdout",
+          "account_id": "ACC-5BD796",
+          "customer_id": "C-0001",
+          "amount": 260000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0001",
+          "name": "华辰示例公司",
+          "kind": "enterprise",
+          "industry": "制造业",
+          "opened_at": "2020-01-15",
+          "kyc_level": "普通",
+          "summary": "企业向在册员工批量代发薪酬"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "企业向在册员工批量代发薪酬",
+            "evidence_ids": [
+              "TX-PH-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额薪酬代发」生成告警。",
+            "evidence_ids": [
+              "TX-PH-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "对私合计与在册人数应发额一致",
+            "evidence_ids": [
+              "IX-PH-0001-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "发薪窗口与花名册抽检一致",
+            "evidence_ids": [
+              "IX-PH-0001-02"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PH-0001-01",
+            "from_account": "ACC-5BD796",
+            "to_account": "ACC-PEER1",
+            "amount": 260000.0,
+            "occurred_at": "2026-06-12 10:30:00",
+            "channel": "转账",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "制造业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 260000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-5BD796",
+          "C-0001",
+          "IX-PH-0001-01",
+          "IX-PH-0001-02",
+          "TX-PH-0001-01"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PH-0001-01",
+            "text": "对私合计与在册人数应发额一致"
+          },
+          {
+            "id": "IX-PH-0001-02",
+            "text": "发薪窗口与花名册抽检一致"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "PH-0002",
+      "gold": "observe",
+      "tag": "placeholder",
+      "annotation_reason": "占位：缺材料无异常节奏",
+      "gold_support_ids": [
+        "IX-PH-0002-01",
+        "IX-PH-0002-02"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PH-0002-01",
+        "IX-PH-0002-02"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "7208f9e39241193d8e3a2b4d1f9a1956cea5051fd58f38db18806f1a85ed44ac",
+      "vignette": {
+        "alert_type": "大额转账待核",
+        "industry": "个人-受雇",
+        "summary": "职员账户单笔对公转出，书面用途未齐",
+        "alert": {
+          "id": "PH-0002",
+          "alert_type": "大额转账待核",
+          "upstream": "real-holdout",
+          "account_id": "ACC-BDC7D2",
+          "customer_id": "C-0002",
+          "amount": 180000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0002",
+          "name": "李**",
+          "kind": "individual",
+          "industry": "个人-受雇",
+          "opened_at": "2020-01-15",
+          "kyc_level": "普通",
+          "summary": "职员账户单笔对公转出，书面用途未齐"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "职员账户单笔对公转出，书面用途未齐",
+            "evidence_ids": [
+              "TX-PH-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额转账待核」生成告警。",
+            "evidence_ids": [
+              "TX-PH-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "客户仅口头说明货款",
+            "evidence_ids": [
+              "IX-PH-0002-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "对手工商存续但书面凭证未交",
+            "evidence_ids": [
+              "IX-PH-0002-02"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PH-0002-01",
+            "from_account": "ACC-BDC7D2",
+            "to_account": "ACC-PEER1",
+            "amount": 180000.0,
+            "occurred_at": "2026-06-12 10:30:00",
+            "channel": "转账",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-受雇",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 180000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-BDC7D2",
+          "C-0002",
+          "IX-PH-0002-01",
+          "IX-PH-0002-02",
+          "TX-PH-0002-01"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PH-0002-01",
+            "text": "客户仅口头说明货款"
+          },
+          {
+            "id": "IX-PH-0002-02",
+            "text": "对手工商存续但书面凭证未交"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "PH-0003",
+      "gold": "suggest_report",
+      "tag": "placeholder",
+      "annotation_reason": "占位：出借账户",
+      "gold_support_ids": [
+        "IX-PH-0003-01",
+        "IX-PH-0003-02"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PH-0003-01",
+        "IX-PH-0003-02"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "107f3d051ea65f116774df5cd7af5c503f42f111a73187a89b5c76380038ae2d",
+      "vignette": {
+        "alert_type": "大额对私转出",
+        "industry": "个人-灵活就业",
+        "summary": "客户承认出借账户后资金转出",
+        "alert": {
+          "id": "PH-0003",
+          "alert_type": "大额对私转出",
+          "upstream": "real-holdout",
+          "account_id": "ACC-17F51B",
+          "customer_id": "C-0003",
+          "amount": 350000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0003",
+          "name": "王**",
+          "kind": "individual",
+          "industry": "个人-灵活就业",
+          "opened_at": "2020-01-15",
+          "kyc_level": "普通",
+          "summary": "客户承认出借账户后资金转出"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "客户承认出借账户后资金转出",
+            "evidence_ids": [
+              "TX-PH-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额对私转出」生成告警。",
+            "evidence_ids": [
+              "TX-PH-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "客户承认把账户借给不认识的人",
+            "evidence_ids": [
+              "IX-PH-0003-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "对手无法指认",
+            "evidence_ids": [
+              "IX-PH-0003-02"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PH-0003-01",
+            "from_account": "ACC-17F51B",
+            "to_account": "ACC-PEER1",
+            "amount": 350000.0,
+            "occurred_at": "2026-06-12 10:30:00",
+            "channel": "转账",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-灵活就业",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 350000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-17F51B",
+          "C-0003",
+          "IX-PH-0003-01",
+          "IX-PH-0003-02",
+          "TX-PH-0003-01"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PH-0003-01",
+            "text": "客户承认把账户借给不认识的人"
+          },
+          {
+            "id": "IX-PH-0003-02",
+            "text": "对手无法指认"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "PH-0004",
+      "gold": "exclude",
+      "tag": "placeholder",
+      "annotation_reason": "占位：分红可闭合",
+      "gold_support_ids": [
+        "IX-PH-0004-01",
+        "IX-PH-0004-02"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PH-0004-01",
+        "IX-PH-0004-02"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "f9a6051cb72f95eeaf20daeaede896ab2f92197e95b458efabfb4f0af1745e58",
+      "vignette": {
+        "alert_type": "大额分红入账",
+        "industry": "个人-教师",
+        "summary": "派息户入账且公告可核",
+        "alert": {
+          "id": "PH-0004",
+          "alert_type": "大额分红入账",
+          "upstream": "real-holdout",
+          "account_id": "ACC-96C9F6",
+          "customer_id": "C-0004",
+          "amount": 90000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0004",
+          "name": "赵**",
+          "kind": "individual",
+          "industry": "个人-教师",
+          "opened_at": "2020-01-15",
+          "kyc_level": "普通",
+          "summary": "派息户入账且公告可核"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "派息户入账且公告可核",
+            "evidence_ids": [
+              "TX-PH-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额分红入账」生成告警。",
+            "evidence_ids": [
+              "TX-PH-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "对手为派息户且公告文号可核",
+            "evidence_ids": [
+              "IX-PH-0004-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "到账后未拆转",
+            "evidence_ids": [
+              "IX-PH-0004-02"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PH-0004-01",
+            "from_account": "ACC-96C9F6",
+            "to_account": "ACC-PEER1",
+            "amount": 90000.0,
+            "occurred_at": "2026-06-12 10:30:00",
+            "channel": "转账",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-教师",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 90000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-96C9F6",
+          "C-0004",
+          "IX-PH-0004-01",
+          "IX-PH-0004-02",
+          "TX-PH-0004-01"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PH-0004-01",
+            "text": "对手为派息户且公告文号可核"
+          },
+          {
+            "id": "IX-PH-0004-02",
+            "text": "到账后未拆转"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "PH-0005",
+      "gold": "observe",
+      "tag": "placeholder",
+      "annotation_reason": "占位：赠与待补证",
+      "gold_support_ids": [
+        "IX-PH-0005-01",
+        "IX-PH-0005-02"
+      ],
+      "gold_contradict_ids": [],
+      "gold_evidence_ids": [
+        "IX-PH-0005-01",
+        "IX-PH-0005-02"
+      ],
+      "rule_finding_codes": [
+        "alert-trigger"
+      ],
+      "fingerprint": "034fd87f8aa52a8b94da18f6b439cb3f7d561a2a722455c6da44a5b1f05804e4",
+      "vignette": {
+        "alert_type": "大额亲友转入待核",
+        "industry": "个人-教师",
+        "summary": "亲友转入但亲属证明未交",
+        "alert": {
+          "id": "PH-0005",
+          "alert_type": "大额亲友转入待核",
+          "upstream": "real-holdout",
+          "account_id": "ACC-DBBC30",
+          "customer_id": "C-0005",
+          "amount": 120000.0,
+          "created_at": "2026-06-12 08:30:00"
+        },
+        "customer": {
+          "id": "C-0005",
+          "name": "陈**",
+          "kind": "individual",
+          "industry": "个人-教师",
+          "opened_at": "2020-01-15",
+          "kyc_level": "普通",
+          "summary": "亲友转入但亲属证明未交"
+        },
+        "findings": [
+          {
+            "code": "alert-brief",
+            "title": "线索摘要",
+            "detail": "亲友转入但亲属证明未交",
+            "evidence_ids": [
+              "TX-PH-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "alert-trigger",
+            "title": "上游监测命中",
+            "detail": "检测系统因「大额亲友转入待核」生成告警。",
+            "evidence_ids": [
+              "TX-PH-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录1",
+            "detail": "客户称亲属赠与但未交关系证明",
+            "evidence_ids": [
+              "IX-PH-0005-01"
+            ],
+            "polarity": "context"
+          },
+          {
+            "code": "case-note",
+            "title": "调查记录2",
+            "detail": "月度薪酬稳定",
+            "evidence_ids": [
+              "IX-PH-0005-02"
+            ],
+            "polarity": "context"
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-PH-0005-01",
+            "from_account": "ACC-DBBC30",
+            "to_account": "ACC-PEER1",
+            "amount": 120000.0,
+            "occurred_at": "2026-06-12 10:30:00",
+            "channel": "转账",
+            "remark": "转账"
+          }
+        ],
+        "baseline": {
+          "industry": "个人-教师",
+          "sample_in_count": 0,
+          "sample_out_count": 1,
+          "sample_in_sum": 0,
+          "sample_out_sum": 120000.0,
+          "avg_in_ticket": 0,
+          "peer_typical_monthly_in": 100000,
+          "peer_typical_ticket": 20000,
+          "peer_note": "真实 hold-out 样本，同业区间仅作占位",
+          "in_sum_vs_peer": null
+        },
+        "graph": {
+          "nodes": [],
+          "edges": []
+        },
+        "kb_hits": [],
+        "watch_hits": [],
+        "allowed_evidence": [
+          "ACC-DBBC30",
+          "C-0005",
+          "IX-PH-0005-01",
+          "IX-PH-0005-02",
+          "TX-PH-0005-01"
+        ],
+        "candidate_evidence": [
+          {
+            "id": "IX-PH-0005-01",
+            "text": "客户称亲属赠与但未交关系证明"
+          },
+          {
+            "id": "IX-PH-0005-02",
+            "text": "月度薪酬稳定"
+          }
+        ]
+      }
+    }
+  ]
+}

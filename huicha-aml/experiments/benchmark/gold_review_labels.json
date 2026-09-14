@@ -1,0 +1,29 @@
+{
+  "reviewer": "experiment-author-pass-1",
+  "reviewer_role": "实验作者首轮盲评（不是独立调查员；仅作流程与边界标记，不得写成外部一致率）",
+  "honesty": "作者知道族的设计意图，本轮不是独立复核。档位与现行 gold 一致；把观察族标成 boundary，供分栏 Macro-F1，不改 gold。",
+  "reviews": [
+    {"review_id": "main:payroll_batch", "label": "exclude", "boundary": false, "note": "对私批次与在册薪酬勾稽，干扰点可解释"},
+    {"review_id": "main:insurance_claim", "label": "exclude", "boundary": false, "note": "持牌险企来款且金额勾稽"},
+    {"review_id": "main:gov_subsidy", "label": "exclude", "boundary": false, "note": "财政专户批次可核，无二次拆转"},
+    {"review_id": "main:escrow_release", "label": "exclude", "boundary": false, "note": "监管放款与网签双方一致"},
+    {"review_id": "main:inheritance_partial", "label": "observe", "boundary": true, "note": "无异常节奏但口述用途变更；实务可能有人升上报，属观察/上报边界"},
+    {"review_id": "main:purpose_docs_gap", "label": "observe", "boundary": true, "note": "单笔大额缺书面用途，对手可核；边界但维持观察"},
+    {"review_id": "main:atm_smurf", "label": "suggest_report", "boundary": false, "note": "多点取现后回流外转，无生活解释"},
+    {"review_id": "main:invoice_circular", "label": "suggest_report", "boundary": false, "note": "互开票无物流、当日闭环"},
+    {"review_id": "main:crypto_onramp", "label": "suggest_report", "boundary": false, "note": "现金入账后对接兑换商"},
+    {"review_id": "main:nested_shell_loan", "label": "suggest_report", "boundary": false, "note": "无完整放款材料的层叠过桥"},
+    {"review_id": "main:crowdfund_layering", "label": "suggest_report", "boundary": false, "note": "分散入账后短时收口到个人"},
+    {"review_id": "blind:seasonal_stock", "label": "exclude", "boundary": false, "note": "旺季备货与进货清单勾稽"},
+    {"review_id": "blind:equity_transfer", "label": "exclude", "boundary": false, "note": "股权价款与工商变更勾稽"},
+    {"review_id": "blind:court_award", "label": "exclude", "boundary": false, "note": "法院执行专户与裁定金额一致"},
+    {"review_id": "blind:demolition_comp", "label": "exclude", "boundary": false, "note": "征收补偿与决定书勾稽"},
+    {"review_id": "blind:dual_pledge", "label": "suggest_report", "boundary": false, "note": "货权重复融资，多户放款后转出"},
+    {"review_id": "blind:wager_proxy", "label": "suggest_report", "boundary": false, "note": "客户承认代收竞猜结算"},
+    {"review_id": "blind:fx_split", "label": "suggest_report", "boundary": false, "note": "贴线连汇且单证对不上"},
+    {"review_id": "blind:staff_pass", "label": "suggest_report", "boundary": false, "note": "员工户代收货款后转控制人"},
+    {"review_id": "blind:shell_payroll", "label": "suggest_report", "boundary": false, "note": "代发后转回出资方，无真实用工"},
+    {"review_id": "blind:first_large", "label": "observe", "boundary": true, "note": "新户首笔大额、对手可查；关注点强但仍应先补证"},
+    {"review_id": "blind:docs_pending", "label": "observe", "boundary": true, "note": "与 inheritance_partial 同构的继承材料缺口"}
+  ]
+}

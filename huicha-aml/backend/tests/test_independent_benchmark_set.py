@@ -12,9 +12,11 @@ BENCH = ROOT / "experiments" / "benchmark"
 SET_PATH = BENCH / "independent_set.json"
 NOPOL_PATH = BENCH / "independent_set_nopolarity.json"
 BLIND_PATH = BENCH / "blind_set.json"
+STRUCT_PATH = BENCH / "struct_set.json"
 
 sys.path.insert(0, str(BENCH))
 from blind_families import JUDGE_V3_EXEMPLARS  # noqa: E402
+from struct_families import STRUCT_FORBIDDEN_RULES  # noqa: E402
 
 LEAK_TOKENS = ("叙事族", "关键线索", "干扰线索", "合成", "占位", "synthetic", "gold", "annotation_reason")
 
@@ -129,3 +131,42 @@ def test_blind_set_avoids_judge_v3_exemplars():
         assert "归集" not in (vig["baseline"].get("peer_note") or "")
         assert "阈值" not in (vig["baseline"].get("peer_note") or "")
         assert "存入" not in (vig["baseline"].get("peer_note") or "")
+
+
+def _scan_blind_fields(vig: dict) -> str:
+    scanned = {k: vig[k] for k in BLIND_SCAN_KEYS if k in vig}
+    return json.dumps(scanned, ensure_ascii=False)
+
+
+def test_blind_struct_set_avoids_exemplars_and_structural_rules():
+    payload = _load(STRUCT_PATH)
+    assert payload["variant"] == "blind_struct"
+    _assert_unique_no_leak(payload)
+    assert payload["n"] >= 200
+    for case in payload["cases"]:
+        vig = case["vignette"]
+        blob = _scan_blind_fields(vig)
+        for token in JUDGE_V3_EXEMPLARS:
+            assert token not in blob, f"{case['case_id']} {case['tag']} 含例举词 {token}"
+        for f in vig["findings"]:
+            if f["code"] in ("case-note", "alert-brief"):
+                for token in JUDGE_V3_EXEMPLARS:
+                    assert token not in (f.get("detail") or ""), (case["case_id"], f["code"], token)
+        for t in vig["transactions"]:
+            for token in JUDGE_V3_EXEMPLARS:
+                assert token not in (t.get("remark") or ""), (case["case_id"], t["remark"], token)
+            hour = str(t.get("occurred_at") or "")[11:13]
+            if t.get("from_account") == vig["alert"]["account_id"]:
+                assert hour < "21" and hour >= "06", (case["case_id"], t["occurred_at"])
+        note = vig["baseline"].get("peer_note") or ""
+        for token in ("过桥", "归集", "阈值", "存入", "财政", "监管账户"):
+            assert token not in note, (case["case_id"], note, token)
+        codes = set(case["rule_finding_codes"])
+        assert codes == {"alert-trigger"}, (case["case_id"], case["tag"], codes)
+        for code in STRUCT_FORBIDDEN_RULES:
+            assert code not in codes
+        # 企业案不得达到 funnel 阈值
+        if vig["customer"]["kind"] == "enterprise":
+            acc = vig["alert"]["account_id"]
+            in_accounts = {t["from_account"] for t in vig["transactions"] if t["to_account"] == acc}
+            assert len(in_accounts) < 4, (case["case_id"], len(in_accounts))

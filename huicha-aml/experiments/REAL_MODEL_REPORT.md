@@ -170,7 +170,12 @@ confidence 仍偏「几个档位值」（去重取值 7–9 个），但 v3 的�
 | `benchmark/runs/20260912T144147Z_judge_v2.jsonl` · `benchmark/runs/20260912T151253Z_judge_v3.jsonl` | 主集逐条 raw |
 | `benchmark/blind_set.json` · `runs/20260912T161440Z_blind_judge_v3.jsonl` · `runs/20260912T165213Z_blind_judge_v2.jsonl` | 盲区 hold-out |
 | `benchmark/independent_set_nopolarity.json` · `runs/20260912T173531Z_nopolarity_judge_v2.jsonl` · `runs/20260912T183509Z_nopolarity_judge_v3.jsonl` | 去极性消融 |
-| `RESULTS.json` → `runs_by_source` · `validity_comparison` | 三集 × 两 prompt |
+| `RESULTS.json` → `runs_by_source` · `validity_comparison` | 主集 / 去极性 / 盲区 / 结构盲区 |
+| `benchmark/struct_set.json` · `runs/20260912T235835Z_blind_struct_judge_v{2,3}.jsonl` | 结构盲区 hold-out |
+| `benchmark/boundary_review.md` · `gold_review_sheet.md` · `gold_review_score.json` | 观察边界裁定与 22 族复核 |
+| `benchmark/real_holdout.json` · `import_real_cases.py` | 真实 hold-out 接口（占位 5 条） |
+| `runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl` | judge_v4 消融（主集/盲区；结构盲区因欠费中断） |
+| `runs/20260914T074816Z_blind_struct_judge_v{3,4}.jsonl` | 官方 deepseek-chat 结构盲区补跑 |
 | `backend/tests/test_independent_benchmark_set.py` | 数据集不变量（含盲区禁词、去极性） |
 
 ---
@@ -209,3 +214,126 @@ v3 几乎不依赖叙事项上的 support/counter 标签（差值 <0.001）；v2
 1. **API 与协议成立**；词面重合把主集 v3 从「真实泛化」抬到了 0.97，盲区把这个水分挤到 0.93，方向没变。  
 2. **v3 相对 v2 的贡献是真的**：两套集上排除召回都是 0→≈1，observe 率从 67–77% 降到 14–16%。  
 3. **不能对外说 93% 生产能力**；下一步仍是调查员标注的真实 hold-out，以及观察族偏严（继承/新户首笔）要不要改标准。
+
+---
+
+## 10. 边界可信与 hold-out 铺路（不改默认产品行为）
+
+默认 `prompt_version("judge")` 仍是 **`judge_v3`**。下面 5 步只扩实验面；`judge_v4` 仅消融。
+
+### 10.1 结构盲区集（`struct_set.json`，n=220）
+
+`--variant blind_struct`：禁词与盲区相同，但流水不触发 `structuring` / `funnel` / `night-out` / `layering`，规则层只留 `alert-trigger`。上报信号只在叙事项和对手关系（同一受益人空壳、出借账户、地下汇兑摊位、同址新设、重复收据号）。
+
+读数约定：同一集上 `judge_v3` Macro-F1 **< 0.70** 说明此前高分依赖规则层结构话术；**≥ 0.85** 才谈得上跨结构泛化。keyword 基线预期很低。
+
+真实百炼 v2/v3 全量数字见跑完后的 §10.6；未跑完前不得把本集写成已测准。
+
+### 10.2 观察 / 上报边界裁定（不改 gold）
+
+主集 + 盲区 `judge_v3` 观察族判错 **16** 条，全部是 observe→`suggest_report`：
+
+| 族 | 条数 | 裁定 |
+| --- | ---: | --- |
+| `inheritance_partial` | 6 | 金标不偏松。口述用途变更 + 缺公证书，流水无异常节奏，实务应先补证 |
+| `docs_pending` | 6 | 同上 |
+| `first_large` | 4 | 新户首笔大额、对手可查；部分 raw 还编造「快进快出/拆分」 |
+| `purpose_docs_gap` | 0 | 本批无错 |
+
+**不改 gold，不重算主表。** 该边界写进 `judge_v4`：口头陈述不一致不得单独升上报档。逐条对照见 `benchmark/boundary_review.md`。
+
+### 10.3 金标复核（22 族）
+
+`gold_review_sheet.md` 不带 gold/prompt。`gold_review_labels.json` 是**实验作者首轮**（不是独立调查员），档位与 gold 22/22 一致，主动把 4 个观察族标成 boundary。
+
+按族切已有跑分（`macro_f1_present` = 只对 support>0 的档位取宏平均）：
+
+| 跑次 | 全体 | clear 族 | boundary 观察族 |
+| --- | ---: | ---: | ---: |
+| 主集 judge_v3 | 0.9662 | **1.0000**（n=191，acc=1.0） | 0.9268（n=44，acc=0.8636） |
+| 盲区 judge_v3 | 0.9286 | **0.9969**（n=178，acc=0.9944） | 0.8529（n=39，acc=0.7436） |
+| 主集 judge_v2 | 0.3867 | 0.3824（acc=0.3368） | 0.9885（acc=0.9773） |
+| 盲区 judge_v2 | 0.4259 | 0.4226（acc=0.4034） | 1.0000（acc=1.0） |
+
+v3 的剩余误差几乎全在观察/上报边界族；clear 族接近饱和。v2 在观察族「全对」只因为它几乎永远输出 observe。作者自洽率 1.0 **不能**写成外部一致率。
+
+### 10.4 `judge_v4` 草案（仅消融）
+
+抽象判据：凭证勾稽、观察窗 T 小时内 N 账户余额归零、对手可核、材料缺口是否阻碍闭合。删除 v3 例举类型学名词。新增：口头陈述不一致只记疑点，不自动升档。
+
+`prompt_version("judge")` **保持 judge_v3**。切默认的条件：主集、盲区、结构盲区三套上 v4 均不低于 v3，且观察族偏严减少。在此之前 PR 不得把「影响线上行为」勾成已确认。
+
+### 10.5 真实 hold-out 接口
+
+`import_real_cases.py`：脱敏 CSV → `real_holdout.json`；`benchmark.py --set real`。占位 5 条 `data_note=placeholder`，**不写 RESULTS 主表**。字段校验与去标识见 `backend/tests/test_real_holdout.py`。
+
+### 10.6 结构盲区真实跑（`struct_set.json` × v2/v3）
+
+模型 `deepseek-v4-flash-0731`，`cached=False`。日志：`runs/20260912T235835Z_blind_struct_judge_v3.jsonl` · `...judge_v2.jsonl`。
+
+| 方法 | Macro-F1 | exclude 召回 | report 召回 | observe 预测率 | keyword 基线 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| keyword_match | 0.1673 | 0 | 0.10 | ≈0.95 | — |
+| judge_v2 | 0.4027 | 0.0256 | 0.60 | 0.7156 | 0.17 |
+| judge_v3 | **0.9630** | 1.00 | 0.9898 | 0.1613 | 0.17 |
+
+混淆（v3，n_scored=217，parse_failures=3）：exclude 80/80；observe 34/39（`kin_gift_gap` 5 条偏严上报）；report 97/98（`reused_voucher` 1 条降观察）。无 exclude↔report 对角。
+
+**读数**：0.963 ≥ 0.85，且 keyword 只有 0.17。去掉规则层结构话术后，v3 相对 v2 的贡献仍然在（排除 0.03→1.0，observe 率 72%→16%）。此前主集/盲区高分**不是**靠 `structuring/funnel/night-out/layering` 的规则层措辞撑起来的。剩余误差仍是观察族偏严（亲友赠与缺证明），与 §10.2 同构。
+
+仍是合成对照，11 个族级金标，禁止写成生产能力。
+
+### 10.7 `judge_v4` 消融（默认仍为 `judge_v3`）
+
+模型 `deepseek-v4-flash-0731`，`cached=False`。日志：`runs/20260913T003147Z_v3_judge_v4.jsonl` · `...blind_judge_v4.jsonl`。结构盲区 v4 在开跑后全部 HTTP 400 `Arrearage`（账号欠费），**没有有效数字**，不得用失败 jsonl 填表。
+
+| 集 | v3 Macro-F1 | v4 Macro-F1 | v3 observe 召回 | v4 observe 召回 | v4 相对 v3 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 主集 | **0.9662** | 0.9480 | 0.8636 | 0.8372 | 低于 v3；`inheritance_partial` 偏严 6→7；parse_failures 5→10 |
+| 盲区 | 0.9286 | **0.9940** | 0.7436 | **1.0000** | 观察族 10 条偏严清零；仅 `fx_split` 1 条降观察 |
+| 结构盲区 | 0.9630 | — | 0.8718 | — | 未跑成（欠费） |
+
+切默认条件是「三套都不低于 v3，且观察偏严减少」。主集未达标，结构盲区缺失，主集观察族偏严没有变好。**不提议切换线上默认。**
+
+盲区上的 0.99 说明「口头陈述不一致不得单独升档」这条约束在 *docs_pending / first_large* 上有效，但还不能外推到主集继承族，更不能在欠费中断后写成全面胜利。默认继续 `judge_v3`。
+
+---
+
+## 11. 换 `glm-5.2` 续跑（未完成）
+
+意图：用智谱 GLM-5.2 补结构盲区 × `judge_v4`，并做同模型 v3/v4 对照。产品默认模型**仍是** `deepseek-v4-flash-0731`。
+
+已做：
+
+- `ZHIPU_API_KEY` / `BIGMODEL_API_KEY` 走 `https://open.bigmodel.cn/api/paas/v4`，默认模型 `glm-5.2`，`enable_thinking=false`。
+- `RESULTS.json` 按 `source__{model}` 分槽，GLM 数字不会覆盖 DeepSeek 主表。
+- 百炼同账号直接改 `DASHSCOPE_MODEL=glm-5.2` 仍返回 HTTP 400 `Arrearage`（2026-09-13 复测）。
+
+**没有 GLM-5.2 有效跑分。** 环境里没有 `ZHIPU_API_KEY`。恢复百炼账单或提供智谱密钥后，再跑：
+
+```bash
+export ZHIPU_API_KEY=...
+unset HUICHA_LLM_STUB
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v3 --limit 5 --no-write
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v3
+python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v4
+```
+
+跨模型不得与 DeepSeek 的 0.96 / 0.99 混比。
+
+---
+
+## 12. 官方 DeepSeek `deepseek-chat`（结构盲区补跑）
+
+百炼欠费期间改走官方 `api.deepseek.com`，模型 `deepseek-chat`（不是百炼 `deepseek-v4-flash-0731`）。`cached=False`，parse_failures=0。结果槽：`narrative_vignette_blind_struct__deepseek-chat`。
+
+| prompt | Macro-F1 | exclude 召回 | observe 召回 | report 召回 | observe 预测率 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| judge_v3 | **0.8776** | 0.9625（77/80） | 1.00（40/40） | 0.79（79/100） | 0.2909 |
+| judge_v4 | 0.8661 | 0.8500（68/80） | 1.00（40/40） | 0.86（86/100） | 0.3000 |
+
+v3 上报漏在 `fake_project` / `reused_voucher`（各 9 条降观察）；v4 上报召回略升，但排除档更不敢判（`land_rent` 5 条、`tuition_refund` 4 条降观察）。**同模型上 v4 不低于 v3 不成立**，仍不切默认。
+
+不得与百炼 flash 的结构盲区 0.96 混比：那是另一个模型。keyword 基线仍约 0.17，两条都明显高于它。
+
+日志：`runs/20260914T074816Z_blind_struct_judge_v3.jsonl` · `...judge_v4.jsonl`。

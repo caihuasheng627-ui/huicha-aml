@@ -49,6 +49,11 @@ EXTRA_PEER = {
     "跨境电商": {"typical_monthly_in": 600_000, "typical_ticket": 25_000, "note": "跨境零售入账分散、出账对接物流与平台结算"},
     "房地产": {"typical_monthly_in": 800_000, "typical_ticket": 150_000, "note": "房企账户可见售房回款与拆迁、土地相关一次性大额"},
     "个人-灵活就业": {"typical_monthly_in": 20_000, "typical_ticket": 8_000, "note": "灵活就业账户以劳务与代收代付为主，大额需核背景"},
+    "教育培训": {"typical_monthly_in": 80_000, "typical_ticket": 12_000, "note": "培训与院校账户可见学费收付与退学退费，退费应与学籍变动勾稽"},
+    "个人-教师": {"typical_monthly_in": 18_000, "typical_ticket": 12_000, "note": "教师账户以薪酬为主，偶发持股分红或亲友往来需核书面依据"},
+    "个人-医护": {"typical_monthly_in": 22_000, "typical_ticket": 10_000, "note": "医护账户以薪酬与单位互助报销为主，大额支出需核用途凭证"},
+    "物流仓储": {"typical_monthly_in": 900_000, "typical_ticket": 80_000, "note": "仓储物流以运费与仓租收付为主，对手应能对应运单或仓单"},
+    "种植合作社": {"typical_monthly_in": 280_000, "typical_ticket": 50_000, "note": "种植合作社收入以农产品销售与地租为主，租金应按决议批次到账"},
 }
 
 CUSTOMER_SUMMARY = {
@@ -66,6 +71,11 @@ CUSTOMER_SUMMARY = {
     "跨境电商": "跨境电商企业客户，账户用于平台货款与物流费用收付。",
     "房地产": "房地产企业客户，账户用于售房回款与项目支出。",
     "个人-灵活就业": "个人客户，灵活就业，账户以劳务收入与代收代付为主。",
+    "教育培训": "教育培训相关个人或机构客户，账户可见学费与退费往来。",
+    "个人-教师": "教师个人客户，账户以薪酬入账为主。",
+    "个人-医护": "医护个人客户，账户以薪酬与互助报销为主。",
+    "物流仓储": "物流仓储企业客户，账户用于运费与仓储费收付。",
+    "种植合作社": "种植合作社客户，账户用于农产品销售与地租收付。",
 }
 
 ENTERPRISE_PREFIX = ["华辰", "鼎泰", "瑞和", "恒远", "盛邦", "中孚", "宏图", "远洲", "启明", "锦程", "凯达", "润泽"]
@@ -79,6 +89,9 @@ ENTERPRISE_SUFFIX = {
     "建筑工程": ["建筑工程有限公司", "建设集团有限公司"],
     "跨境电商": ["跨境零售有限公司", "电子商务有限公司"],
     "房地产": ["房地产开发有限公司", "置业有限公司"],
+    "物流仓储": ["物流有限公司", "仓储有限公司"],
+    "种植合作社": ["种植专业合作社", "养殖专业合作社"],
+    "教育培训": ["教育咨询有限公司", "培训有限公司"],
 }
 SURNAMES = ["王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴", "徐", "孙", "马", "朱", "胡", "郭", "林", "何"]
 
@@ -919,17 +932,53 @@ VARIANTS = {
         "id_prefix": "BLD",
         "caveat_extra": "叙事文本不含 judge_v3 判定标准中例举的任何类型学词；类型学形态在例举之外。规则层 finding 文本为产品输出，不受禁词约束。",
     },
+    # 消融 3：结构盲区——禁词同盲区，且流水不触发 structuring/funnel/night-out/layering
+    "blind_struct": {
+        "file": "struct_set.json",
+        "source": "narrative_vignette_blind_struct",
+        "data_note": "synthetic-blind-struct-v1",
+        "n": 220,
+        "seed": SEED + 19,
+        "note_polarity": True,
+        "id_prefix": "BST",
+        "caveat_extra": "叙事禁词与盲区集相同；流水刻意不触发 structuring/funnel/night-out/layering，规则层只留 alert-trigger。上报信号只在叙事项与对手关系。用于测 Judge 是否依赖规则层结构话术。",
+    },
 }
+
+
+def _families_for(variant: str) -> list[dict]:
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    if variant == "blind":
+        from blind_families import BLIND_FAMILIES  # noqa: E402
+
+        return BLIND_FAMILIES
+    if variant == "blind_struct":
+        from struct_families import STRUCT_FAMILIES  # noqa: E402
+
+        return STRUCT_FAMILIES
+    return FAMILIES
+
+
+def _assert_struct_rules(cases: list[dict]) -> None:
+    from struct_families import STRUCT_FORBIDDEN_RULES  # noqa: E402
+
+    for case in cases:
+        codes = set(case.get("rule_finding_codes") or [])
+        bad = codes & set(STRUCT_FORBIDDEN_RULES)
+        if bad:
+            raise RuntimeError(f"{case['case_id']} {case['tag']} 触发了结构规则 {sorted(bad)}")
+        extra = codes - {"alert-trigger"}
+        if extra:
+            raise RuntimeError(f"{case['case_id']} {case['tag']} 规则层多出 {sorted(extra)}")
+        if "alert-trigger" not in codes:
+            raise RuntimeError(f"{case['case_id']} {case['tag']} 缺少 alert-trigger")
 
 
 def build_payload(variant: str) -> dict:
     spec = VARIANTS[variant]
-    families = FAMILIES
-    if variant == "blind":
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from blind_families import BLIND_FAMILIES  # noqa: E402
-
-        families = BLIND_FAMILIES
+    families = _families_for(variant)
     cases = build_cases(
         spec["n"],
         families=families,
@@ -937,9 +986,17 @@ def build_payload(variant: str) -> dict:
         note_polarity=spec["note_polarity"],
         id_prefix=spec["id_prefix"],
     )
+    if variant == "blind_struct":
+        _assert_struct_rules(cases)
+    split = {
+        "v3": "independent",
+        "nopolarity": "independent",
+        "blind": "blind_holdout",
+        "blind_struct": "blind_struct_holdout",
+    }.get(variant, "independent")
     return {
         "data_note": spec["data_note"],
-        "split": "independent" if variant != "blind" else "blind_holdout",
+        "split": split,
         "variant": variant,
         "source": spec["source"],
         "seed": spec["seed"],

@@ -1,0 +1,450 @@
+{
+  "agreement": {
+    "reviewer": "experiment-author-pass-1",
+    "reviewer_role": "实验作者首轮盲评（不是独立调查员；仅作流程与边界标记，不得写成外部一致率）",
+    "n": 22,
+    "agree_n": 22,
+    "agreement": 1.0,
+    "boundary_families": [
+      "docs_pending",
+      "first_large",
+      "inheritance_partial",
+      "purpose_docs_gap"
+    ],
+    "clear_families": [
+      "atm_smurf",
+      "court_award",
+      "crowdfund_layering",
+      "crypto_onramp",
+      "demolition_comp",
+      "dual_pledge",
+      "equity_transfer",
+      "escrow_release",
+      "fx_split",
+      "gov_subsidy",
+      "insurance_claim",
+      "invoice_circular",
+      "nested_shell_loan",
+      "payroll_batch",
+      "seasonal_stock",
+      "shell_payroll",
+      "staff_pass",
+      "wager_proxy"
+    ],
+    "honesty": "作者知道族的设计意图，本轮不是独立复核。档位与现行 gold 一致；把观察族标成 boundary，供分栏 Macro-F1，不改 gold。"
+  },
+  "disagreements": [],
+  "boundary_rows": [
+    {
+      "review_id": "main:inheritance_partial",
+      "tag": "inheritance_partial",
+      "set": "main",
+      "gold": "observe",
+      "reviewer": "observe",
+      "agree": true,
+      "boundary": true,
+      "note": "无异常节奏但口述用途变更；实务可能有人升上报，属观察/上报边界"
+    },
+    {
+      "review_id": "main:purpose_docs_gap",
+      "tag": "purpose_docs_gap",
+      "set": "main",
+      "gold": "observe",
+      "reviewer": "observe",
+      "agree": true,
+      "boundary": true,
+      "note": "单笔大额缺书面用途，对手可核；边界但维持观察"
+    },
+    {
+      "review_id": "blind:first_large",
+      "tag": "first_large",
+      "set": "blind",
+      "gold": "observe",
+      "reviewer": "observe",
+      "agree": true,
+      "boundary": true,
+      "note": "新户首笔大额、对手可查；关注点强但仍应先补证"
+    },
+    {
+      "review_id": "blind:docs_pending",
+      "tag": "docs_pending",
+      "set": "blind",
+      "gold": "observe",
+      "reviewer": "observe",
+      "agree": true,
+      "boundary": true,
+      "note": "与 inheritance_partial 同构的继承材料缺口"
+    }
+  ],
+  "by_run": {
+    "main_judge_v3": {
+      "all": {
+        "n": 235,
+        "macro_f1": 0.9662,
+        "macro_f1_present": 0.9662,
+        "accuracy": 0.9745,
+        "label_dist": {
+          "exclude": 88,
+          "observe": 44,
+          "suggest_report": 103
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 88
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 0.8636,
+            "f1": 0.9268,
+            "support": 44
+          },
+          "suggest_report": {
+            "precision": 0.945,
+            "recall": 1.0,
+            "f1": 0.9717,
+            "support": 103
+          }
+        }
+      },
+      "clear": {
+        "n": 191,
+        "macro_f1": 0.6667,
+        "macro_f1_present": 1.0,
+        "accuracy": 1.0,
+        "label_dist": {
+          "exclude": 88,
+          "suggest_report": 103
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 88
+          },
+          "observe": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 103
+          }
+        }
+      },
+      "boundary": {
+        "n": 44,
+        "macro_f1": 0.3089,
+        "macro_f1_present": 0.9268,
+        "accuracy": 0.8636,
+        "label_dist": {
+          "observe": 44
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 0.8636,
+            "f1": 0.9268,
+            "support": 44
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        }
+      }
+    },
+    "blind_judge_v3": {
+      "all": {
+        "n": 217,
+        "macro_f1": 0.9286,
+        "macro_f1_present": 0.9286,
+        "accuracy": 0.9493,
+        "label_dist": {
+          "exclude": 80,
+          "suggest_report": 98,
+          "observe": 39
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.9875,
+            "f1": 0.9937,
+            "support": 80
+          },
+          "observe": {
+            "precision": 0.9667,
+            "recall": 0.7436,
+            "f1": 0.8406,
+            "support": 39
+          },
+          "suggest_report": {
+            "precision": 0.9074,
+            "recall": 1.0,
+            "f1": 0.9515,
+            "support": 98
+          }
+        }
+      },
+      "clear": {
+        "n": 178,
+        "macro_f1": 0.6646,
+        "macro_f1_present": 0.9969,
+        "accuracy": 0.9944,
+        "label_dist": {
+          "exclude": 80,
+          "suggest_report": 98
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.9875,
+            "f1": 0.9937,
+            "support": 80
+          },
+          "observe": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 98
+          }
+        }
+      },
+      "boundary": {
+        "n": 39,
+        "macro_f1": 0.2843,
+        "macro_f1_present": 0.8529,
+        "accuracy": 0.7436,
+        "label_dist": {
+          "observe": 39
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 0.7436,
+            "f1": 0.8529,
+            "support": 39
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        }
+      }
+    },
+    "main_judge_v2": {
+      "all": {
+        "n": 237,
+        "macro_f1": 0.3867,
+        "macro_f1_present": 0.3867,
+        "accuracy": 0.4557,
+        "label_dist": {
+          "exclude": 88,
+          "observe": 44,
+          "suggest_report": 105
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 88
+          },
+          "observe": {
+            "precision": 0.2515,
+            "recall": 0.9773,
+            "f1": 0.4,
+            "support": 44
+          },
+          "suggest_report": {
+            "precision": 0.9848,
+            "recall": 0.619,
+            "f1": 0.7602,
+            "support": 105
+          }
+        }
+      },
+      "clear": {
+        "n": 193,
+        "macro_f1": 0.2549,
+        "macro_f1_present": 0.3824,
+        "accuracy": 0.3368,
+        "label_dist": {
+          "exclude": 88,
+          "suggest_report": 105
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 88
+          },
+          "observe": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.619,
+            "f1": 0.7647,
+            "support": 105
+          }
+        }
+      },
+      "boundary": {
+        "n": 44,
+        "macro_f1": 0.3295,
+        "macro_f1_present": 0.9885,
+        "accuracy": 0.9773,
+        "label_dist": {
+          "observe": 44
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 0.9773,
+            "f1": 0.9885,
+            "support": 44
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        }
+      }
+    },
+    "blind_judge_v2": {
+      "all": {
+        "n": 216,
+        "macro_f1": 0.4259,
+        "macro_f1_present": 0.4259,
+        "accuracy": 0.5139,
+        "label_dist": {
+          "exclude": 79,
+          "suggest_report": 97,
+          "observe": 40
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 79
+          },
+          "observe": {
+            "precision": 0.2759,
+            "recall": 1.0,
+            "f1": 0.4324,
+            "support": 40
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.732,
+            "f1": 0.8452,
+            "support": 97
+          }
+        }
+      },
+      "clear": {
+        "n": 176,
+        "macro_f1": 0.2817,
+        "macro_f1_present": 0.4226,
+        "accuracy": 0.4034,
+        "label_dist": {
+          "exclude": 79,
+          "suggest_report": 97
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 79
+          },
+          "observe": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.732,
+            "f1": 0.8452,
+            "support": 97
+          }
+        }
+      },
+      "boundary": {
+        "n": 40,
+        "macro_f1": 0.3333,
+        "macro_f1_present": 1.0,
+        "accuracy": 1.0,
+        "label_dist": {
+          "observe": 40
+        },
+        "per_class": {
+          "exclude": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          },
+          "observe": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 40
+          },
+          "suggest_report": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 0
+          }
+        }
+      }
+    }
+  },
+  "note": "clear/boundary 是按族切已有跑分，不是新的人工标注集。不一致自动标 boundary；复核人也可主动标 boundary。"
+}

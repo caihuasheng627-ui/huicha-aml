@@ -58,8 +58,15 @@ py experiments\benchmark.py --real --prompt judge_v2
 # 有效性：盲区 hold-out / 去极性（不改产品默认）
 py experiments\benchmark\build_independent_set.py --variant blind
 py experiments\benchmark\build_independent_set.py --variant nopolarity
+py experiments\benchmark\build_independent_set.py --variant blind_struct
 py experiments\benchmark.py --real --set blind --prompt judge_v3
 py experiments\benchmark.py --real --set nopolarity --prompt judge_v2
+py experiments\benchmark.py --real --set blind_struct --prompt judge_v3
+py experiments\benchmark.py --real --set blind_struct --prompt judge_v2
+# 换 GLM-5.2（智谱密钥；或百炼恢复后 DASHSCOPE_MODEL=glm-5.2）
+# $env:ZHIPU_API_KEY="..."
+# 结果写入 runs_by_source[<source>__glm-5.2]，不覆盖 deepseek 槽
+py experiments\benchmark.py --real --set blind_struct --prompt judge_v4
 ```
 
 ## 5. 读哪些数

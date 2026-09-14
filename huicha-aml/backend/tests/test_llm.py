@@ -119,7 +119,7 @@ def test_chat_timeout_becomes_runtime_error(monkeypatch):
         raise TimeoutError("timed out")
 
     monkeypatch.setattr(llm_mod.urllib.request, "urlopen", boom)
-    with pytest.raises(RuntimeError, match="百炼网络错误"):
+    with pytest.raises(RuntimeError, match="模型网络错误"):
         chat([{"role": "user", "content": "hi"}])
 
 
@@ -141,7 +141,7 @@ def test_chat_http_error_becomes_runtime_error(monkeypatch):
         )
 
     monkeypatch.setattr(llm_mod.urllib.request, "urlopen", boom)
-    with pytest.raises(RuntimeError, match="百炼调用失败"):
+    with pytest.raises(RuntimeError, match="模型调用失败"):
         chat([{"role": "user", "content": "hi"}])
 
 

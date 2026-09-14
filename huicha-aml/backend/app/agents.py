@@ -10,7 +10,7 @@ from .checklist import attach_checklist, enrich_counterparties
 from .decision import apply_guardrails, decision_claims, normalize_judge, rule_baseline, verify_judge
 from .evidence import build_evidence_graph, source_ids_of
 from .knowledge import retrieve_for_alert
-from .llm import enrich_challenger, enrich_full_report, enrich_judge, enrich_report_reason, llm_model
+from .llm import enrich_challenger, enrich_full_report, enrich_judge, enrich_report_reason, llm_model, llm_provider_label
 from .predicates import case_facts
 from .logging_util import audit, warning
 from .privacy import PrivacyMap
@@ -658,7 +658,7 @@ def _run_investigation_v3(
         "llm": {
             "judge": use_challenger,
             "reporter": use_challenger,
-            "provider": "阿里云百炼 / DashScope",
+            "provider": llm_provider_label(),
             "model": llm_model(),
             "masked": True,
             "fact_retry": fact_retry,
@@ -1046,7 +1046,7 @@ def _run_investigation_inner(
         {
             "role": "Reporter",
             "title": "监管要素草稿 + 事实回查",
-            "content": f"理由由百炼 {llm_model()} 生成（脱敏进模）；事实不匹配不可签发。",
+            "content": f"理由由 {llm_provider_label()} {llm_model()} 生成（脱敏进模）；事实不匹配不可签发。",
             "items": [
                 f"建议结论：{CONCLUSION_LABEL[conclusion]}（规则分 {score:.2f}，非校准准确率）",
                 f"打分：底分 {base_score:.2f} + 规则先验 {rule_prior_v:+.2f} + 模型delta {llm_delta:+.2f}",
@@ -1164,7 +1164,7 @@ def _run_investigation_inner(
         "llm": {
             "challenger": use_challenger,
             "reporter": True,
-            "provider": "阿里云百炼 / DashScope",
+            "provider": llm_provider_label(),
             "model": llm_model(),
             "masked": True,
             "fact_retry": fact_retry,

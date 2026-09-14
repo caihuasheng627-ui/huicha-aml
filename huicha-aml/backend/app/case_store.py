@@ -146,27 +146,36 @@ def persist_human_decision(
 
 
 def seed_prompt_versions(db: Session) -> None:
+    from sqlalchemy import select
+
     from .models import PromptVersion, Regulation
     from .knowledge import _DOC_META, _article_of, list_knowledge
 
     for key, body in PROMPTS.items():
         if not db.get(PromptVersion, key):
             db.add(PromptVersion(id=key, body=body))
+    keep_ids: set[str] = set()
     for doc in list_knowledge():
-        if db.get(Regulation, doc["id"]):
-            continue
-        db.add(
-            Regulation(
-                regulation_id=doc["id"],
-                title=doc["title"],
-                article=doc.get("article") or _article_of(doc),
-                content=doc.get("body") or "",
-                effective_date=doc.get("effective_date") or _DOC_META["effective_date"],
-                expiry_date=doc.get("expiry_date") or "",
-                topic=doc.get("kind") or "",
-                keywords=",".join(doc.get("tags") or []),
-                source=doc.get("source") or "",
-                version=doc.get("version") or _DOC_META["version"],
-                data_note="synthetic",
-            )
+        keep_ids.add(doc["id"])
+        row = db.get(Regulation, doc["id"])
+        payload = dict(
+            title=doc["title"],
+            article=doc.get("article") or _article_of(doc),
+            content=doc.get("body") or "",
+            effective_date=doc.get("effective_date") or _DOC_META["effective_date"],
+            expiry_date=doc.get("expiry_date") or "",
+            topic=doc.get("kind") or "",
+            keywords=",".join(doc.get("tags") or []),
+            source=doc.get("source") or "",
+            version=doc.get("version") or _DOC_META["version"],
+            data_note=doc.get("data_note") or "synthetic",
         )
+        if row:
+            for key, value in payload.items():
+                setattr(row, key, value)
+            continue
+        db.add(Regulation(regulation_id=doc["id"], **payload))
+    # 同步删除已下架的旧编号，避免 SQLite 残留过期摘录。
+    for row in db.scalars(select(Regulation)).all():
+        if row.regulation_id not in keep_ids:
+            db.delete(row)

@@ -104,7 +104,7 @@ cd ../frontend
 npm install
 ```
 
-复制 `backend/.env.example` → `.env`，填写百炼 `DASHSCOPE_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Judge/Reporter 走内置 stub（不是百炼）。
+复制 `backend/.env.example` → `.env`，填写 `DEEPSEEK_API_KEY`。无密钥时可将 `HUICHA_LLM_STUB=1`，Judge/Reporter 走内置 stub。
 
 ## 12. Usage
 
@@ -138,7 +138,7 @@ huicha-aml/
 
 1. 数据全部为**合成数据**；模板精标与规则同源，不能写成准确率。
 2. 竞赛/研究原型：SQLite 文件库，无银行 SSO，无生产级权限模型。
-3. 知识库约十余条公开要求**转述**，检索是关键词重叠，不是向量检索。
+3. 知识库含 **2024 年修订《反洗钱法》全文**（按章目录、按条检索）及 2025 年配套规章官方条款，另有作业口径转述；检索为**关键词重叠 + 字符二元组 TF-IDF 余弦**混合，不是向量数据库。
 4. LLM 输出必须人工审核；Agent 不得自动报送。
 5. 实验结果只对当前机制验证/Benchmark 设置有效。
 6. 能力指标（Accuracy 等）**Not evaluated yet**，未做真人对照效率实验。

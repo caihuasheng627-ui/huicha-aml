@@ -18,14 +18,21 @@ def render_report(
     outflow,
     use_challenger,
     kb_hits,
+    sampling=None,
 ) -> dict:
     in_sum = round(sum(t["amount"] for t in inflow), 2)
     out_sum = round(sum(t["amount"] for t in outflow), 2)
-    sample_ids = "、".join(t["id"] for t in (inflow + outflow)[:6]) or "（无交易）"
+    sample = list((sampling or {}).get("sample") or [])
+    summary = (sampling or {}).get("summary") or {}
+    sample_ids = "、".join(t["id"] for t in (sample or (inflow + outflow))[:8]) or "（无交易）"
+    window_note = ""
+    if summary.get("total"):
+        window_note = f"窗口内共 {summary['total']} 笔，进模 {summary.get('sampled') or len(sample)} 笔。"
     behavior = (
         f"客户{customer['name']}（客户号 {customer['id']}，账户 {alert['account_id']}）"
         f"于告警日 {alert['created_at']} 触发「{alert['alert_type']}」。"
         f"近窗流入 {len(inflow)} 笔合计{yuan(in_sum)}，流出 {len(outflow)} 笔合计{yuan(out_sum)}。"
+        f"{window_note}"
         f"行业登记为{customer['industry']}，开户日期 {customer['opened_at']}。"
         f"上游来源：{alert['upstream']}。"
     )

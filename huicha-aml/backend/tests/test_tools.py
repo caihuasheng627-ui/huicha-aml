@@ -1,4 +1,4 @@
-from app.tools import ALLOWED_TOOLS, plan_tool_names, search_regulation
+from app.tools import ALLOWED_TOOLS, alert_window, get_transactions, plan_tool_names, search_regulation
 
 
 WRITE_TOOLS = {"update_transaction", "delete_customer", "file_str", "set_risk_rule"}
@@ -45,3 +45,38 @@ def test_accounts_and_timeline_from_db(client):
     assert "search_regulation" in tools
     times = [row["time"] for row in r.json()["timeline"]]
     assert any(t and t.startswith("2026-09-10 09:01") for t in times)
+
+
+def test_transaction_window_excludes_old_and_keeps_alert_cluster(client):
+    from app.database import SessionLocal
+    from app.models import Transaction
+
+    db = SessionLocal()
+    try:
+        if not db.get(Transaction, "TX-H-OLD"):
+            db.add(
+                Transaction(
+                    id="TX-H-OLD",
+                    from_account="POS-OLD",
+                    to_account="6222-H-7701",
+                    amount=1,
+                    occurred_at="2020-01-01 10:00:00",
+                    channel="POS",
+                    remark="窗口外",
+                )
+            )
+            db.commit()
+        win = alert_window({"created_at": "2026-09-10 08:20:00"})
+        rows = get_transactions(
+            db,
+            "6222-H-7701",
+            window_start=win["start"],
+            window_end=win["end"],
+        )
+        ids = {t["id"] for t in rows}
+        assert "TX-H-OLD" not in ids
+        assert any(i.startswith("TX-H-CASH") for i in ids)
+        all_rows = get_transactions(db, "6222-H-7701")
+        assert "TX-H-OLD" in {t["id"] for t in all_rows}
+    finally:
+        db.close()

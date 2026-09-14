@@ -19,6 +19,7 @@ from .report_draft import apply_full_text, apply_reason, render_report
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL, aggregate, counterfactual, score_to_level
 from .schema import InvestigationPlan, PlanStep, RegulationCite, StructuredReport
 from .tool_audit import bind_tool_context, reset_tool_context, tool
+from .sampler import compact_findings_for_llm, select_for_judge, visible_evidence_ids
 from .tools import (
     ALLOWED_TOOLS,
     collect_bundle,
@@ -111,9 +112,16 @@ def _collect_stage(db: Session, alert_id: str) -> dict:
         peers = get_related_accounts(db, account_id, txs=txs)
         if len(peers) <= 4:
             seen = {t["id"] for t in txs}
+            win = bundle.get("tx_window") or {}
             for p in peers:
-                for extra in get_transactions(db, p["account_id"]):
+                for extra in get_transactions(
+                    db,
+                    p["account_id"],
+                    window_start=win.get("start") or "",
+                    window_end=win.get("end") or "",
+                ):
                     if extra["id"] not in seen:
+                        extra["source"] = "peer"
                         seen.add(extra["id"])
                         txs.append(extra)
             txs.sort(key=lambda t: t.get("occurred_at") or "")
@@ -278,12 +286,27 @@ def _run_investigation_v3(
     )
     findings = analyst["findings"]
     baseline_result = rule_baseline(analyst)
+    sampling = select_for_judge(
+        alert=alert,
+        account_id=account_id,
+        txs=txs,
+        findings=findings,
+        baseline=baseline,
+    )
+    sample_txs = sampling["sample"]
+    llm_findings = compact_findings_for_llm(findings)
     ev_graph = build_evidence_graph(alert["id"], bundle, kb_hits)
     allowed_evidence = sorted(
         source_ids_of(ev_graph)
         | {t["id"] for t in txs}
         | {customer["id"], alert["account_id"]}
         | {e for f in findings for e in f.get("evidence_ids", [])}
+    )
+    prompt_allowed = visible_evidence_ids(
+        sample=sample_txs,
+        clusters=sampling["clusters"],
+        findings=llm_findings,
+        extra=[customer["id"], alert["account_id"], *[h["id"] for h in kb_hits if h.get("id")]],
     )
     # 报告回查时，告警号与证据号是本案已知引用，不应被拆成数字片段误报。
     bundle["facts"]["ref_ids"] = sorted(set(bundle["facts"].get("ref_ids") or []) | {alert["id"]} | set(allowed_evidence))
@@ -293,18 +316,20 @@ def _run_investigation_v3(
     fallback_reason = ""
     allowed_set = set(allowed_evidence)
 
-    def _judge_once(prior_issues: list[dict] | None) -> tuple[dict, dict, dict]:
+    def _judge_once(prior_issues: list[dict] | None, transactions=None, findings_for_llm=None, allowed_for_prompt=None) -> tuple[dict, dict, dict]:
         raw, usage = enrich_judge(
             db=db,
             privacy=privacy,
             alert=alert,
             customer=customer,
-            findings=findings,
-            transactions=txs,
+            findings=findings_for_llm if findings_for_llm is not None else llm_findings,
+            transactions=transactions if transactions is not None else sample_txs,
             baseline=baseline,
             kb_hits=kb_hits,
-            allowed_evidence=allowed_evidence,
+            allowed_evidence=allowed_for_prompt if allowed_for_prompt is not None else prompt_allowed,
             prior_issues=prior_issues,
+            tx_clusters=sampling["clusters"],
+            tx_summary=sampling["summary"],
         )
         decision = normalize_judge(raw, known_ids=allowed_set)
         return decision, verify_judge(decision, allowed_evidence=allowed_set), usage
@@ -401,22 +426,26 @@ def _run_investigation_v3(
                 continue
             cf_findings.append({**f, "evidence_ids": kept_ids})
         try:
+            cf_llm_findings = compact_findings_for_llm(cf_findings)
+            cf_sample = [t for t in sample_txs if t.get("id") not in removed_ids]
             raw_cf, _ = enrich_judge(
                 db=db,
                 privacy=privacy,
                 alert=alert,
                 customer=customer,
-                findings=cf_findings,
-                transactions=[t for t in txs if t.get("id") not in removed_ids],
+                findings=cf_llm_findings,
+                transactions=cf_sample,
                 baseline=baseline,
                 kb_hits=kb_hits,
-                allowed_evidence=[e for e in allowed_evidence if e not in removed_ids],
+                allowed_evidence=[e for e in prompt_allowed if e not in removed_ids],
                 prior_issues=[
                     {
                         "kind": "counterfactual",
                         "message": f"移除指标「{(key_finding or {}).get('title') or key_id}」及其证据后重新判断",
                     }
                 ],
+                tx_clusters=sampling["clusters"],
+                tx_summary=sampling["summary"],
             )
             cf_judge = normalize_judge(raw_cf, known_ids=cf_allowed)
             cf_valid = verify_judge(cf_judge, allowed_evidence=cf_allowed)
@@ -455,6 +484,7 @@ def _run_investigation_v3(
         analyst["outflow"],
         use_challenger,
         kb_hits,
+        sampling=sampling,
     )
     reporter_usage: dict = {}
     fact_retry = False
@@ -465,7 +495,7 @@ def _run_investigation_v3(
             "customer": {k: customer.get(k) for k in ("id", "name", "industry", "opened_at")},
             "alert": {k: alert.get(k) for k in ("id", "alert_type", "account_id", "created_at")},
             "judge": {k: v for k, v in judge.items() if k != "sanitized_missing_evidence"},
-            "findings": findings,
+            "findings": llm_findings,
             "evidence_ids": list(
                 dict.fromkeys(
                     [
@@ -476,6 +506,7 @@ def _run_investigation_v3(
             )[:12],
             "regulation_ids": [h["id"] for h in kb_hits if h.get("kind") == "regulation"],
             "template": report["full_text"],
+            "transaction_summary": sampling["summary"],
         }
         try:
             full_text, reporter_usage = enrich_full_report(
@@ -541,8 +572,15 @@ def _run_investigation_v3(
         {
             "role": "Collector",
             "title": "证据归集",
-            "content": f"已调取 {len(txs)} 笔交易、{len(kb_hits)} 条知识、{len(tool_trace)} 次工具调用。",
-            "items": [f"工具：{name}" for name in planned],
+            "content": (
+                f"窗口内 {sampling['summary']['total']} 笔，进模 {sampling['summary']['sampled']} 笔，"
+                f"其余按 {len(sampling['clusters'])} 个簇汇总；知识 {len(kb_hits)} 条、工具 {len(tool_trace)} 次。"
+            ),
+            "items": [
+                f"工具：{name}" for name in planned
+            ] + [
+                f"抽数：{sampling['summary']['omitted']} 笔未进模，簇合计 {sampling['summary']['in_count']} 入 / {sampling['summary']['out_count']} 出",
+            ],
         },
         {
             "role": "Analyst",
@@ -621,6 +659,7 @@ def _run_investigation_v3(
         "steps": steps,
         "tool_trace": tool_trace,
         "findings": findings,
+        "sampling": sampling,
         "judge": judge,
         "judge_validation": judge_validation,
         "judge_repaired": judge_repaired,
@@ -704,7 +743,10 @@ def _run_investigation_v3(
         "structured_report": StructuredReport(
             case_overview=f"{alert['title']} / {alert['id']}",
             customer_profile=customer.get("summary") or customer["name"],
-            transaction_summary=f"流入{len(analyst['inflow'])} 流出{len(analyst['outflow'])}",
+            transaction_summary=(
+                f"流入{len(analyst['inflow'])} 流出{len(analyst['outflow'])}；"
+                f"窗口{sampling['summary']['total']}笔/进模{sampling['summary']['sampled']}笔"
+            ),
             suspicious_patterns=[f["title"] for f in findings],
             evidence_ids=judge.get("supporting_evidence_ids") or [],
             counter_evidence_ids=judge.get("contradicting_evidence_ids") or [],

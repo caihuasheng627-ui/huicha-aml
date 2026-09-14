@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -200,15 +202,58 @@ def search_regulation(query: str, as_of: str = "") -> list[dict]:
     return search_knowledge(query, kind="regulation", top_k=6, as_of=as_of)
 
 
+def _parse_alert_ts(value: str) -> datetime | None:
+    text = (value or "").strip().replace("T", " ")
+    if not text:
+        return None
+    try:
+        if len(text) >= 19:
+            return datetime.strptime(text[:19], "%Y-%m-%d %H:%M:%S")
+        if len(text) >= 10:
+            return datetime.strptime(text[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+    return None
+
+
+def alert_window(alert: dict | None, *, before_days: int | None = None, after_days: int = 7) -> dict:
+    """告警中心窗口。created_at 为空时 start/end 为空，表示不加日期过滤。"""
+    created = (alert or {}).get("created_at") or ""
+    ts = _parse_alert_ts(created)
+    if ts is None:
+        return {"start": "", "end": ""}
+    days = before_days
+    if days is None:
+        raw = os.environ.get("HUICHA_TX_WINDOW_DAYS", "90")
+        try:
+            days = int(raw)
+        except ValueError:
+            days = 90
+    start = ts - timedelta(days=max(days, 0))
+    end = ts + timedelta(days=max(after_days, 0))
+    return {
+        "start": start.strftime("%Y-%m-%d %H:%M:%S"),
+        "end": end.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
 @tool("get_transactions")
-def get_transactions(db: Session, account_id: str, limit: int = 80) -> list[dict]:
-    rows = (
-        db.query(Transaction)
-        .filter((Transaction.from_account == account_id) | (Transaction.to_account == account_id))
-        .order_by(Transaction.occurred_at.asc())
-        .limit(limit)
-        .all()
+def get_transactions(
+    db: Session,
+    account_id: str,
+    limit: int = 2000,
+    *,
+    window_start: str = "",
+    window_end: str = "",
+) -> list[dict]:
+    q = db.query(Transaction).filter(
+        (Transaction.from_account == account_id) | (Transaction.to_account == account_id)
     )
+    if window_start:
+        q = q.filter(Transaction.occurred_at >= window_start)
+    if window_end:
+        q = q.filter(Transaction.occurred_at <= window_end)
+    rows = q.order_by(Transaction.occurred_at.asc()).limit(limit).all()
     return [
         {
             "id": t.id,
@@ -406,7 +451,15 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
     alert = get_alert(db, alert_id)
     planned = tool_names or plan_tool_names(alert.get("alert_type") or "")
     customer = get_customer(db, alert["customer_id"])
-    txs = get_transactions(db, alert["account_id"])
+    win = alert_window(alert)
+    txs = get_transactions(
+        db,
+        alert["account_id"],
+        window_start=win.get("start") or "",
+        window_end=win.get("end") or "",
+    )
+    for t in txs:
+        t["source"] = "subject"
     if "get_baseline" in planned:
         baseline = get_baseline(db, alert["customer_id"], alert["account_id"], txs=txs, customer=customer)
     else:
@@ -453,6 +506,7 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
         "watch_hits": watch_hits,
         "facts": facts,
         "planned_tools": planned,
+        "tx_window": {**win, "total_in_window": len(txs)},
     }
 
 

@@ -1,17 +1,18 @@
 import { Drawer, Tag } from "antd";
 import BrandLogo from "./BrandLogo.jsx";
+import { ApproachComparison } from "./CasePanels.jsx";
 
 const STEPS = [
   ["选告警", "左栏「待办告警」按示例 / 正常数据切换，也可按客户名、告警类型或编号搜索。"],
-  ["生成草稿", "中栏点「开始调查」。流水线按规划 → 取证 → 指标 → Judge → 核验 → 护栏 → 报告推进，全过程可见。"],
-  ["读三方对照", "「判断来源对照」并排给出规则对照、AI Judge 建议和政策护栏后结论。三者不相加，分歧须由人裁决。"],
+  ["生成草稿", "中栏点「开始调查」。流水线按规划 → 取证 → 指标 → 慧查agent → 核验 → 护栏 → 报告推进，全过程可见。"],
+  ["读三方对照", "「判断来源对照」并排给出规则对照、慧查agent 建议和政策护栏后结论。三者不相加，分歧须由人裁决。"],
   ["回溯证据", "点报告里的证据编号、法规依据或图谱节点，右栏会定位到对应流水、客户资料与制度摘录。"],
   ["人工签发", "登录后填写调查员意见，再选「签发结论」「修改后采纳」或「驳回重查」。系统不会自动报送。"],
 ];
 
 const PANELS = [
   ["左栏", "待办告警队列、筛选与反馈闭环统计。"],
-  ["中栏", "案件舞台：指标卡、三方对照、Judge 面板、风险因子、时间线、反事实、法规依据、调查过程、报告草稿与待补证清单。底部是签发区。"],
+  ["中栏", "案件舞台：指标卡、三方对照、慧查agent 面板、风险因子、时间线、反事实、法规依据、调查过程、报告草稿与待补证清单。底部是签发区。"],
   ["右栏", "证据与关联：客户 KYC 卡、资金图谱、证据分组、制度与类型学、交易流水和操作审计。"],
 ];
 
@@ -23,12 +24,12 @@ const CONCLUSIONS = [
 
 const BLOCKERS = [
   ["事实回查未通过", "报告里出现了本案证据范围之外的账号、金额或编号，签发按钮锁定，须重跑或人工修改。"],
-  ["Judge 证据契约未通过", "理由缺引用、引用了工具范围外的编号，或建议上报却没有支持证据，整份 AI 建议作废，只保留规则对照。"],
+  ["慧查agent 证据契约未通过", "理由缺引用、引用了工具范围外的编号，或建议上报却没有支持证据，整份 AI 建议作废，只保留规则对照。"],
 ];
 
 const SWITCHES = [
-  ["AI 调查 Judge", "正常模式下默认启用。只影响下一次重跑，不会改写已打开的历史草稿。"],
-  ["实验模式", "开启后才能关闭 Judge 做消融对照，用于验证「有无 AI Judge」的差异。"],
+  ["慧查agent", "正常模式下默认启用。只影响下一次重跑，不会改写已打开的历史草稿。"],
+  ["实验模式", "开启后才能关闭慧查agent 做消融对照，用于验证「有无慧查agent」的差异。"],
   ["幻觉演示", "实验模式专用，故意注入不实表述，用来演示事实回查与签发拦截确实生效。"],
 ];
 
@@ -60,7 +61,15 @@ export default function SystemManual({ open, onClose, health }) {
         </div>
 
         <section className="manual-sec">
-          <h4>一、五步走完一个案子</h4>
+          <h4>一、和普通 AI 有什么不同</h4>
+          <p className="manual-note" style={{ marginTop: 0 }}>
+            同样可以接大模型，但循证慧查把「慧查agent」关在证据、护栏和人工签发之内——对照表如下，工作台只展示本案调查结果。
+          </p>
+          <ApproachComparison />
+        </section>
+
+        <section className="manual-sec">
+          <h4>二、五步走完一个案子</h4>
           <ol className="manual-steps">
             {STEPS.map(([name, desc]) => (
               <li key={name}>
@@ -72,7 +81,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>二、三栏分别看什么</h4>
+          <h4>三、三栏分别看什么</h4>
           <dl className="manual-dl">
             {PANELS.map(([name, desc]) => (
               <div key={name}>
@@ -84,7 +93,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>三、结论三档</h4>
+          <h4>四、结论三档</h4>
           <ul className="manual-list">
             {CONCLUSIONS.map(([name, tone, desc]) => (
               <li key={name}>
@@ -99,7 +108,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>四、什么情况下不能签发</h4>
+          <h4>五、什么情况下不能签发</h4>
           <ul className="manual-list">
             {BLOCKERS.map(([name, desc]) => (
               <li key={name}>
@@ -112,7 +121,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>五、顶栏策略开关</h4>
+          <h4>六、顶栏策略开关</h4>
           <dl className="manual-dl">
             {SWITCHES.map(([name, desc]) => (
               <div key={name}>
@@ -124,7 +133,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>六、快捷操作</h4>
+          <h4>七、快捷操作</h4>
           <dl className="manual-dl">
             {KEYS.map(([name, desc]) => (
               <div key={name}>
@@ -136,7 +145,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>七、运行环境</h4>
+          <h4>八、运行环境</h4>
           <div className="manual-chips">
             <Tag>版本 {health?.version || "—"}</Tag>
             <Tag color={health?.llm && health.llm !== "off" ? "blue" : "red"}>
@@ -150,7 +159,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>八、诚实边界</h4>
+          <h4>九、诚实边界</h4>
           <ul className="manual-limits">
             {(health?.limitations || []).map((x) => (
               <li key={x}>{x}</li>

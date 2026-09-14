@@ -37,7 +37,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { ApproachComparison, CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
+import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 import SystemManual from "./SystemManual.jsx";
@@ -248,13 +248,13 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation }) {
       </div>
       <ul>
         <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score ?? 0).toFixed(2)}</em></li>
-        <li><span>AI Judge</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>慧查agent</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
         <li><span>政策护栏后</span><em>{label}</em></li>
         <li><span>AI 自评把握度</span><em>{ablation ? "—" : Number(judge?.confidence ?? 0).toFixed(2)}</em></li>
       </ul>
       <div className="hint" style={{ margin: "6px 0 0" }}>
         {ablation
-          ? "本案为 Judge OFF 消融结果，仅展示规则对照。"
+          ? "本案为慧查agent 关闭后的消融结果，仅展示规则对照。"
           : same
             ? "AI 与规则对照一致，没有加权合成。把握度是「对结论有多确定」，不是风险高低。"
             : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。把握度不是风险分。"}
@@ -668,10 +668,10 @@ export default function App() {
 
       <div className="toolbar">
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
-          {experimentMode ? "实验模式：用于 AI Judge 消融实验" : "证据 Judge · 已启用"}
+          {experimentMode ? "实验模式：用于慧查agent 消融实验" : "慧查agent · 已启用"}
         </span>
         <label title="仅影响下一次重跑，不会改写已打开的历史草稿">
-          AI 调查 Judge
+          慧查agent
           <Switch
             size="small"
             checked={nextChallengerEnabled}
@@ -783,7 +783,7 @@ export default function App() {
           banner
           showIcon
           message="未配置模型密钥"
-          description="Judge/Reporter 需要 DEEPSEEK_API_KEY、DASHSCOPE_API_KEY 或 ZHIPU_API_KEY。也可设 HUICHA_LLM_STUB=1 走内置 stub。"
+          description="慧查agent / Reporter 需要 DEEPSEEK_API_KEY、DASHSCOPE_API_KEY 或 ZHIPU_API_KEY。也可设 HUICHA_LLM_STUB=1 走内置 stub。"
         />
       )}
       {needsToken && (
@@ -953,7 +953,7 @@ export default function App() {
                 {!user && <Tag color="default">未登录 · 不可签发</Tag>}
                 {inv && caseChallengerEnabled && (
                   <>
-                    <Tag color="green">证据 Judge 已参与本次调查</Tag>
+                    <Tag color="green">慧查agent 已参与本次调查</Tag>
                     <Tag>自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Tag>
                   </>
                 )}
@@ -976,32 +976,25 @@ export default function App() {
                 <span>
                   当前运行策略：
                   {experimentMode
-                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} AI Judge`
-                    : "正常模式 · 下次重跑默认启用 AI Judge"}
+                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} 慧查agent`
+                    : "正常模式 · 下次重跑默认启用慧查agent"}
                 </span>
                 {inv && (
                   <span>
                     本案历史结果：
                     {caseChallengerEnabled
-                      ? "生成时已启用 AI Judge"
+                      ? "生成时已启用慧查agent"
                       : "生成时未启用（消融结果，不是当前系统关闭）"}
                   </span>
                 )}
               </div>
-              {inv && (
-                <ApproachComparison
-                  validation={inv.judge_validation}
-                  guardrails={inv.policy_guardrails}
-                  factIssues={inv.fact_issues}
-                />
-              )}
               {inv && caseChallengerEnabled === false && (
                 <Alert
                   type="warning"
                   showIcon
                   style={{ marginBottom: 12 }}
                   message="本案为消融结果"
-                  description="本案生成时未启用 AI Judge，当前只展示规则对照的历史调查结果。顶部开关只代表下一次重跑策略，不会改写这份草稿。"
+                  description="本案生成时未启用慧查agent，当前只展示规则对照的历史调查结果。顶部开关只代表下一次重跑策略，不会改写这份草稿。"
                 />
               )}
               {inv && (
@@ -1039,10 +1032,10 @@ export default function App() {
                   </Divider>
                   <Timeline
                     items={inv.steps.map((s) => {
-                      const defaultOpen = ["Analyst", "Judge", "Skeptic", "Reporter"].includes(s.role);
+                      const defaultOpen = ["Analyst", "Judge", "慧查agent", "Skeptic", "Reporter"].includes(s.role);
                       const opened = openSteps[s.role] ?? defaultOpen;
                       return {
-                        color: s.role === "Judge" && inv.use_challenger === false ? "gray" : "blue",
+                        color: (s.role === "Judge" || s.role === "慧查agent") && inv.use_challenger === false ? "gray" : "blue",
                         children: (
                           <div className="step" style={{ border: "none", paddingLeft: 0, margin: 0 }}>
                             <button

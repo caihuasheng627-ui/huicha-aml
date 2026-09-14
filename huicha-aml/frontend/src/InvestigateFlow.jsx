@@ -33,9 +33,9 @@ const PIPELINE = [
   },
   {
     id: "challenger",
-    role: "Judge",
+    role: "慧查agent",
     title: "研判",
-    caption: "AI 输出完整建议与证据引用",
+    caption: "输出完整建议与证据引用",
     dwell: 1600,
     linger: false,
     ticks: ["区分支持与反向证据", "识别缺失材料", "输出三档建议"],
@@ -225,7 +225,7 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
     <div className={`theater${failed ? " is-error" : ""}`} role="status" aria-live="polite">
       <div className="theater-hd">
         <strong>{failed ? "调查中断" : "正在生成调查草稿"}</strong>
-        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 证据 Judge · 规则护栏 · 人做决策"}</span>
+        <span>{failed ? "本轮未写入签发结论" : "只读工具 · 慧查agent · 规则护栏 · 人做决策"}</span>
       </div>
 
       <div className="theater-path" aria-hidden="true">

@@ -35,7 +35,7 @@ def render_report(
             f"{c.get('claim') or c['title']}(Δ{c.get('delta', 0):+.2f}): {c['detail']}" for c in challenger
         )
     else:
-        challenge = "本轮未启用 AI Judge，仅保留规则对照。"
+        challenge = "本轮未启用慧查agent，仅保留规则对照。"
     cite_reg = "、".join(h["id"] for h in kb_hits if h["kind"] == "regulation") or "KB-REG-03"
     cite_all = "、".join(h["id"] for h in kb_hits[:5]) or "（无）"
     if conclusion == "exclude":

@@ -347,7 +347,7 @@ def investigate(
             {
                 "summary": (
                     f"生成调查草稿，建议结论「{result['conclusion_label']}」，"
-                    f"AI Judge{'开启' if use_challenger else '关闭'}，"
+                    f"慧查agent{'开启' if use_challenger else '关闭'}，"
                     f"{'实验模式' if experiment_mode else '正常模式'}，"
                     f"幻觉演示{'开启' if inject_hallucination else '关闭'}。{tools}"
                 ),

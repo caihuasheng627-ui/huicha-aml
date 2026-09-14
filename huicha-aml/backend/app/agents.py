@@ -333,7 +333,7 @@ def _run_investigation_v3(
                 "contradicting_evidence_ids": [
                     e for f in findings if f.get("polarity") == "counter" for e in f.get("evidence_ids", [])
                 ][:8],
-                "missing_evidence": ["AI Judge 调用失败，须人工完整复核"],
+                "missing_evidence": ["慧查agent 调用失败，须人工完整复核"],
                 "rationale": [],
                 "next_actions": ["人工复核规则对照与原始证据"],
             }
@@ -343,7 +343,7 @@ def _run_investigation_v3(
                 "citation_count": 0,
                 "invalid_ids": [],
                 "score_kind": "fallback",
-                "reason": "AI Judge 失败，已降级为规则对照",
+                "reason": "慧查agent 失败，已降级为规则对照",
             }
     else:
         judge = {
@@ -356,9 +356,9 @@ def _run_investigation_v3(
             "contradicting_evidence_ids": [
                 e for f in findings if f.get("polarity") == "counter" for e in f.get("evidence_ids", [])
             ][:8],
-            "missing_evidence": ["AI Judge 已关闭，当前仅展示规则对照"],
+            "missing_evidence": ["慧查agent 已关闭，当前仅展示规则对照"],
             "rationale": [],
-            "next_actions": ["启用 AI Judge 或由调查员人工研判"],
+            "next_actions": ["启用慧查agent 或由调查员人工研判"],
         }
         judge_validation = {
             "passed": True,
@@ -366,7 +366,7 @@ def _run_investigation_v3(
             "citation_count": 0,
             "invalid_ids": [],
             "score_kind": "rule_only_ablation",
-            "reason": "实验模式：AI Judge 已关闭",
+            "reason": "实验模式：慧查agent 已关闭",
         }
 
     guardrails = apply_guardrails(judge, watch_hits=watch_hits)
@@ -525,7 +525,7 @@ def _run_investigation_v3(
     plan = [
         f"按告警类型选择只读工具：{'、'.join(planned)}",
         "从流水、KYC、图谱和知识库提取支持/反向/缺失证据",
-        "AI Judge 输出完整三档建议与逐条引用",
+        "慧查agent 输出完整三档建议与逐条引用",
         "Skeptic 校验证据契约并执行一次关键证据反事实",
         "政策护栏只作否决或升级，不参与加权",
         "Reporter 生成四段全文并做事实回查",
@@ -590,7 +590,7 @@ def _run_investigation_v3(
         "recommendation": recommendation,
         "recommendation_label": RECO_LABEL[recommendation],
         "risk_level": risk_level,
-        "note": "最终建议来自通过证据契约的 AI Judge；规则分仅作对照，护栏仅作政策边界。",
+        "note": "最终建议来自通过证据契约的慧查agent；规则分仅作对照，护栏仅作政策边界。",
     }
     evidence = [
         {
@@ -635,7 +635,7 @@ def _run_investigation_v3(
         "challenger_run": {
             "enabled": use_challenger,
             "ablation": not use_challenger,
-            "label": "AI Judge",
+            "label": "慧查agent",
             "initial_score": baseline_result["score"],
             "initial_conclusion": baseline_result["conclusion"],
             "initial_label": CONCLUSION_LABEL[baseline_result["conclusion"]],
@@ -728,7 +728,7 @@ def _run_investigation_v3(
             "elements_filled": sum(1 for e in report["elements"] if (e.get("value") or "").strip()),
             "elements_total": len(report["elements"]),
             "evidence_linkable": True,
-            "note": "规则对照与 AI Judge 并排呈现，分歧交由调查员裁决。",
+            "note": "规则对照与慧查agent 并排呈现，分歧交由调查员裁决。",
         },
     }
     attach_checklist(

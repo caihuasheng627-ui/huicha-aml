@@ -190,7 +190,7 @@ v3 集（下节）逐项修复了上述问题；v3 集上 `judge_v2` 的重跑�
 
 ## 有效性消融（主集 / 去极性 / 盲区 / 结构盲区）
 
-- 跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；同一模型与后处理。
+- 跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；按模型分槽，禁止跨模型混比。
 
 ### `narrative_vignette_blind_holdout`
 
@@ -209,6 +209,15 @@ v3 集（下节）逐项修复了上述问题；v3 集上 `judge_v2` 的重跑�
 | exclude 召回 | 0.0256 | 1.0000 |
 | suggest_report 召回 | 0.6000 | 0.9898 |
 | observe 预测率 | 0.7156 | 0.1613 |
+
+### `narrative_vignette_blind_struct__deepseek-chat`
+
+| 指标 | `judge_v3` | `judge_v4` |
+| --- | --- | --- |
+| Macro-F1 | 0.8776 | 0.8661 |
+| exclude 召回 | 0.9625 | 0.8500 |
+| suggest_report 召回 | 0.7900 | 0.8600 |
+| observe 预测率 | 0.2909 | 0.3000 |
 
 ### `narrative_vignette_v3_rules_layer`
 

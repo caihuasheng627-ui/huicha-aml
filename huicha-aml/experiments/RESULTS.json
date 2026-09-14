@@ -9197,10 +9197,1286 @@
         },
         "observe_pred_rate": 0.7156
       }
+    },
+    "narrative_vignette_blind_struct__deepseek-chat": {
+      "judge_v3": {
+        "label": "独立集 / 真实模型 / 产品 Judge 流水线",
+        "protocol": "enrich_judge(db=None) → normalize_judge → verify_judge → apply_guardrails",
+        "prompt": "judge_v3",
+        "split": "blind_struct_holdout",
+        "variant": "blind_struct",
+        "set_file": "struct_set.json",
+        "model": "deepseek-chat",
+        "n": 220,
+        "n_unique_dataset": 220,
+        "n_scored": 220,
+        "parse_failures": 0,
+        "call_errors": 0,
+        "verify_pass_rate": 1.0,
+        "source": "narrative_vignette_blind_struct",
+        "macro_f1": 0.8776,
+        "evidence_precision": 0.8137,
+        "evidence_recall": 0.9765,
+        "evidence_scope": "仅叙事项 IX- 编号参与 P/R；TX-/KB- 引用不计入",
+        "tx_cite_rate": 1.0,
+        "evidence_support": {
+          "evidence_precision": 0.8137,
+          "evidence_recall": 0.9765,
+          "evidence_f1": 0.8877,
+          "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+        },
+        "evidence_contradict": {
+          "evidence_precision": 0.3293,
+          "evidence_recall": 0.5567,
+          "evidence_f1": 0.4138,
+          "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+        },
+        "confidence": {
+          "n": 220,
+          "histogram": {
+            "[0.0,0.2)": 0,
+            "[0.2,0.4)": 0,
+            "[0.4,0.6)": 64,
+            "[0.6,0.8)": 62,
+            "[0.8,1.0]": 94
+          },
+          "distinct_values": 8,
+          "mean": 0.6752,
+          "stdev": 0.1814,
+          "min": 0.42,
+          "max": 0.9,
+          "mean_by_gold": {
+            "exclude": 0.8383,
+            "observe": 0.42,
+            "suggest_report": 0.6468
+          },
+          "mean_by_pred": {
+            "exclude": 0.8545,
+            "observe": 0.42,
+            "suggest_report": 0.7071
+          },
+          "value_counts_top": {
+            "0.42": 64,
+            "0.86": 48,
+            "0.82": 32,
+            "0.72": 32,
+            "0.62": 29,
+            "0.88": 13
+          }
+        },
+        "missing_evidence": {
+          "by_pred": {
+            "exclude": {
+              "n": 77,
+              "with_missing_n": 0,
+              "with_missing_ratio": 0.0,
+              "avg_missing_len": 0.0
+            },
+            "observe": {
+              "n": 64,
+              "with_missing_n": 64,
+              "with_missing_ratio": 1.0,
+              "avg_missing_len": 2.969
+            },
+            "suggest_report": {
+              "n": 79,
+              "with_missing_n": 75,
+              "with_missing_ratio": 0.9494,
+              "avg_missing_len": 2.709
+            }
+          },
+          "observe_with_missing_ratio": 1.0,
+          "sanitized_id_like_n": 0
+        },
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 77,
+              "observe": 3,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 40,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 21,
+              "suggest_report": 79
+            }
+          },
+          "other": 0
+        },
+        "baselines": {
+          "always_suggest_report": {
+            "n": 220,
+            "accuracy": 0.4545,
+            "macro_f1": 0.2083,
+            "false_positive_rate": 1.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 0.4545,
+                "recall": 1.0,
+                "f1": 0.625,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 80
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 40
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 100
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "keyword_match": {
+            "n": 220,
+            "accuracy": 0.2273,
+            "macro_f1": 0.1673,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.1905,
+                "recall": 1.0,
+                "f1": 0.32,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.1,
+                "f1": 0.1818,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 80,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 90,
+                  "suggest_report": 10
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "note": "无信息/弱规则基线，用于锚定真实模型分数高低；不是产品准确率。"
+        },
+        "by_tag": {
+          "fake_project": {
+            "n": 20,
+            "macro_f1": 0.2366,
+            "accuracy": 0.55,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 9,
+                  "suggest_report": 11
+                }
+              },
+              "other": 0
+            }
+          },
+          "hawala_desk": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 1,
+                  "suggest_report": 19
+                }
+              },
+              "other": 0
+            }
+          },
+          "kin_gift_gap": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "observe",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "land_rent": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 20,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "listed_dividend": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 19,
+                  "observe": 1,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "medical_pool": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 19,
+                  "observe": 1,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "mule_lend": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 20
+                }
+              },
+              "other": 0
+            }
+          },
+          "reused_voucher": {
+            "n": 20,
+            "macro_f1": 0.2366,
+            "accuracy": 0.55,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 9,
+                  "suggest_report": 11
+                }
+              },
+              "other": 0
+            }
+          },
+          "tuition_refund": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 19,
+                  "observe": 1,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "ubo_twins": {
+            "n": 20,
+            "macro_f1": 0.3158,
+            "accuracy": 0.9,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 2,
+                  "suggest_report": 18
+                }
+              },
+              "other": 0
+            }
+          },
+          "vehicle_docs_gap": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "observe",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          }
+        },
+        "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v3.jsonl",
+        "honesty": "不是生产准确率；须人工签发。由 jsonl 回放汇总。",
+        "caveat": "与 seed_extended 规则模板不同源的组合采样合成集；流水按叙事族真实结构生成并经产品 analyst_rules.analyze() 产出规则层 findings；不向 Judge 传 missing_evidence；输入已去除家族名/关键干扰前缀/合成占位字样；annotation_reason 仅元数据；不是人工专家标注；禁止写成生产准确率。叙事禁词与盲区集相同；流水刻意不触发 structuring/funnel/night-out/layering，规则层只留 alert-trigger。上报信号只在叙事项与对手关系。用于测 Judge 是否依赖规则层结构话术。",
+        "legacy_note": "回放已有真实调用，不调模型。",
+        "classification": {
+          "n": 220,
+          "accuracy": 0.8909,
+          "macro_f1": 0.8776,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.9625,
+              "f1": 0.9809,
+              "support": 80
+            },
+            "observe": {
+              "precision": 0.625,
+              "recall": 1.0,
+              "f1": 0.7692,
+              "support": 40
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.79,
+              "f1": 0.8827,
+              "support": 100
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 77,
+                "observe": 3,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 40,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 21,
+                "suggest_report": 79
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 80,
+            "observe": 40,
+            "suggest_report": 100
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "observe_pred_rate": 0.2909
+      },
+      "judge_v4": {
+        "label": "独立集 / 真实模型 / 产品 Judge 流水线",
+        "protocol": "enrich_judge(db=None) → normalize_judge → verify_judge → apply_guardrails",
+        "prompt": "judge_v4",
+        "split": "blind_struct_holdout",
+        "variant": "blind_struct",
+        "set_file": "struct_set.json",
+        "model": "deepseek-chat",
+        "n": 220,
+        "n_unique_dataset": 220,
+        "n_scored": 220,
+        "parse_failures": 0,
+        "call_errors": 0,
+        "verify_pass_rate": 1.0,
+        "source": "narrative_vignette_blind_struct",
+        "macro_f1": 0.8661,
+        "evidence_precision": 0.8208,
+        "evidence_recall": 0.9294,
+        "evidence_scope": "仅叙事项 IX- 编号参与 P/R；TX-/KB- 引用不计入",
+        "tx_cite_rate": 1.0,
+        "evidence_support": {
+          "evidence_precision": 0.8208,
+          "evidence_recall": 0.9294,
+          "evidence_f1": 0.8717,
+          "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+        },
+        "evidence_contradict": {
+          "evidence_precision": 0.3226,
+          "evidence_recall": 0.6186,
+          "evidence_f1": 0.424,
+          "note": "在独立合成集候选证据上计算；不是生产证据召回率。"
+        },
+        "confidence": {
+          "n": 220,
+          "histogram": {
+            "[0.0,0.2)": 0,
+            "[0.2,0.4)": 0,
+            "[0.4,0.6)": 66,
+            "[0.6,0.8)": 56,
+            "[0.8,1.0]": 98
+          },
+          "distinct_values": 7,
+          "mean": 0.6715,
+          "stdev": 0.1817,
+          "min": 0.42,
+          "max": 0.88,
+          "mean_by_gold": {
+            "exclude": 0.7831,
+            "observe": 0.42,
+            "suggest_report": 0.6828
+          },
+          "mean_by_pred": {
+            "exclude": 0.8472,
+            "observe": 0.42,
+            "suggest_report": 0.7256
+          },
+          "value_counts_top": {
+            "0.42": 66,
+            "0.86": 53,
+            "0.82": 41,
+            "0.62": 30,
+            "0.72": 26,
+            "0.88": 3
+          }
+        },
+        "missing_evidence": {
+          "by_pred": {
+            "exclude": {
+              "n": 68,
+              "with_missing_n": 0,
+              "with_missing_ratio": 0.0,
+              "avg_missing_len": 0.0
+            },
+            "observe": {
+              "n": 66,
+              "with_missing_n": 66,
+              "with_missing_ratio": 1.0,
+              "avg_missing_len": 3.0
+            },
+            "suggest_report": {
+              "n": 86,
+              "with_missing_n": 83,
+              "with_missing_ratio": 0.9651,
+              "avg_missing_len": 2.895
+            }
+          },
+          "observe_with_missing_ratio": 1.0,
+          "sanitized_id_like_n": 0
+        },
+        "confusion_matrix": {
+          "labels": [
+            "exclude",
+            "observe",
+            "suggest_report"
+          ],
+          "matrix": {
+            "exclude": {
+              "exclude": 68,
+              "observe": 12,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 40,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 14,
+              "suggest_report": 86
+            }
+          },
+          "other": 0
+        },
+        "baselines": {
+          "always_suggest_report": {
+            "n": 220,
+            "accuracy": 0.4545,
+            "macro_f1": 0.2083,
+            "false_positive_rate": 1.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 0.4545,
+                "recall": 1.0,
+                "f1": 0.625,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 80
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 40
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 100
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "keyword_match": {
+            "n": 220,
+            "accuracy": 0.2273,
+            "macro_f1": 0.1673,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.1905,
+                "recall": 1.0,
+                "f1": 0.32,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.1,
+                "f1": 0.1818,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 80,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 90,
+                  "suggest_report": 10
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "note": "无信息/弱规则基线，用于锚定真实模型分数高低；不是产品准确率。"
+        },
+        "by_tag": {
+          "fake_project": {
+            "n": 20,
+            "macro_f1": 0.2963,
+            "accuracy": 0.8,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 4,
+                  "suggest_report": 16
+                }
+              },
+              "other": 0
+            }
+          },
+          "hawala_desk": {
+            "n": 20,
+            "macro_f1": 0.2963,
+            "accuracy": 0.8,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 4,
+                  "suggest_report": 16
+                }
+              },
+              "other": 0
+            }
+          },
+          "kin_gift_gap": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "observe",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "land_rent": {
+            "n": 20,
+            "macro_f1": 0.2857,
+            "accuracy": 0.75,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 15,
+                  "observe": 5,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "listed_dividend": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 19,
+                  "observe": 1,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "medical_pool": {
+            "n": 20,
+            "macro_f1": 0.3158,
+            "accuracy": 0.9,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 18,
+                  "observe": 2,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "mule_lend": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 20
+                }
+              },
+              "other": 0
+            }
+          },
+          "reused_voucher": {
+            "n": 20,
+            "macro_f1": 0.2857,
+            "accuracy": 0.75,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 5,
+                  "suggest_report": 15
+                }
+              },
+              "other": 0
+            }
+          },
+          "tuition_refund": {
+            "n": 20,
+            "macro_f1": 0.2963,
+            "accuracy": 0.8,
+            "gold": "exclude",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 16,
+                  "observe": 4,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          },
+          "ubo_twins": {
+            "n": 20,
+            "macro_f1": 0.3248,
+            "accuracy": 0.95,
+            "gold": "suggest_report",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 1,
+                  "suggest_report": 19
+                }
+              },
+              "other": 0
+            }
+          },
+          "vehicle_docs_gap": {
+            "n": 20,
+            "macro_f1": 0.3333,
+            "accuracy": 1.0,
+            "gold": "observe",
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            }
+          }
+        },
+        "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v4.jsonl",
+        "honesty": "不是生产准确率；须人工签发。由 jsonl 回放汇总。",
+        "caveat": "与 seed_extended 规则模板不同源的组合采样合成集；流水按叙事族真实结构生成并经产品 analyst_rules.analyze() 产出规则层 findings；不向 Judge 传 missing_evidence；输入已去除家族名/关键干扰前缀/合成占位字样；annotation_reason 仅元数据；不是人工专家标注；禁止写成生产准确率。叙事禁词与盲区集相同；流水刻意不触发 structuring/funnel/night-out/layering，规则层只留 alert-trigger。上报信号只在叙事项与对手关系。用于测 Judge 是否依赖规则层结构话术。",
+        "legacy_note": "回放已有真实调用，不调模型。",
+        "classification": {
+          "n": 220,
+          "accuracy": 0.8818,
+          "macro_f1": 0.8661,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.85,
+              "f1": 0.9189,
+              "support": 80
+            },
+            "observe": {
+              "precision": 0.6061,
+              "recall": 1.0,
+              "f1": 0.7547,
+              "support": 40
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.86,
+              "f1": 0.9247,
+              "support": 100
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 68,
+                "observe": 12,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 40,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 14,
+                "suggest_report": 86
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 80,
+            "observe": 40,
+            "suggest_report": 100
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "observe_pred_rate": 0.3
+      }
     }
   },
   "validity_comparison": {
-    "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；同一模型与后处理。",
+    "note": "跨数据集对比：v3 主集 / 去极性 / 盲区 / 结构盲区；按模型分槽，禁止跨模型混比。",
     "cells": {
       "narrative_vignette_blind_holdout": {
         "judge_v3": {
@@ -9377,6 +10653,78 @@
               "exclude": 0,
               "observe": 40,
               "suggest_report": 60
+            }
+          }
+        }
+      },
+      "narrative_vignette_blind_struct__deepseek-chat": {
+        "judge_v3": {
+          "prompt": "judge_v3",
+          "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v3.jsonl",
+          "n_scored": 220,
+          "macro_f1": 0.8776,
+          "accuracy": 0.8909,
+          "evidence_precision": 0.8137,
+          "evidence_recall": 0.9765,
+          "verify_pass_rate": 1.0,
+          "parse_failures": 0,
+          "confidence_distinct": 8,
+          "confidence_stdev": 0.1814,
+          "observe_with_missing_ratio": 1.0,
+          "exclude_recall": 0.9625,
+          "observe_recall": 1.0,
+          "suggest_report_recall": 0.79,
+          "observe_pred_rate": 0.2909,
+          "confusion_matrix": {
+            "exclude": {
+              "exclude": 77,
+              "observe": 3,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 40,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 21,
+              "suggest_report": 79
+            }
+          }
+        },
+        "judge_v4": {
+          "prompt": "judge_v4",
+          "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v4.jsonl",
+          "n_scored": 220,
+          "macro_f1": 0.8661,
+          "accuracy": 0.8818,
+          "evidence_precision": 0.8208,
+          "evidence_recall": 0.9294,
+          "verify_pass_rate": 1.0,
+          "parse_failures": 0,
+          "confidence_distinct": 7,
+          "confidence_stdev": 0.1817,
+          "observe_with_missing_ratio": 1.0,
+          "exclude_recall": 0.85,
+          "observe_recall": 1.0,
+          "suggest_report_recall": 0.86,
+          "observe_pred_rate": 0.3,
+          "confusion_matrix": {
+            "exclude": {
+              "exclude": 68,
+              "observe": 12,
+              "suggest_report": 0
+            },
+            "observe": {
+              "exclude": 0,
+              "observe": 40,
+              "suggest_report": 0
+            },
+            "suggest_report": {
+              "exclude": 0,
+              "observe": 14,
+              "suggest_report": 86
             }
           }
         }
@@ -9830,6 +11178,85 @@
             "exclude": 0,
             "observe": 1,
             "suggest_report": 97
+          }
+        }
+      }
+    }
+  },
+  "blind_struct_ablation__deepseek-chat": {
+    "note": "同一 independent_set.json、同一模型、同一后处理；唯一变量为 judge prompt 版本。",
+    "prompts": [
+      "judge_v3",
+      "judge_v4"
+    ],
+    "rows": {
+      "judge_v3": {
+        "prompt": "judge_v3",
+        "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v3.jsonl",
+        "n_scored": 220,
+        "macro_f1": 0.8776,
+        "accuracy": 0.8909,
+        "evidence_precision": 0.8137,
+        "evidence_recall": 0.9765,
+        "verify_pass_rate": 1.0,
+        "parse_failures": 0,
+        "confidence_distinct": 8,
+        "confidence_stdev": 0.1814,
+        "observe_with_missing_ratio": 1.0,
+        "exclude_recall": 0.9625,
+        "observe_recall": 1.0,
+        "suggest_report_recall": 0.79,
+        "observe_pred_rate": 0.2909,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 77,
+            "observe": 3,
+            "suggest_report": 0
+          },
+          "observe": {
+            "exclude": 0,
+            "observe": 40,
+            "suggest_report": 0
+          },
+          "suggest_report": {
+            "exclude": 0,
+            "observe": 21,
+            "suggest_report": 79
+          }
+        }
+      },
+      "judge_v4": {
+        "prompt": "judge_v4",
+        "run_log": "experiments/benchmark/runs/20260914T074816Z_blind_struct_judge_v4.jsonl",
+        "n_scored": 220,
+        "macro_f1": 0.8661,
+        "accuracy": 0.8818,
+        "evidence_precision": 0.8208,
+        "evidence_recall": 0.9294,
+        "verify_pass_rate": 1.0,
+        "parse_failures": 0,
+        "confidence_distinct": 7,
+        "confidence_stdev": 0.1817,
+        "observe_with_missing_ratio": 1.0,
+        "exclude_recall": 0.85,
+        "observe_recall": 1.0,
+        "suggest_report_recall": 0.86,
+        "observe_pred_rate": 0.3,
+        "confusion_matrix": {
+          "exclude": {
+            "exclude": 68,
+            "observe": 12,
+            "suggest_report": 0
+          },
+          "observe": {
+            "exclude": 0,
+            "observe": 40,
+            "suggest_report": 0
+          },
+          "suggest_report": {
+            "exclude": 0,
+            "observe": 14,
+            "suggest_report": 86
           }
         }
       }

@@ -319,3 +319,20 @@ python3 experiments/benchmark.py --real --set blind_struct --prompt judge_v4
 ```
 
 跨模型不得与 DeepSeek 的 0.96 / 0.99 混比。
+
+---
+
+## 12. 官方 DeepSeek `deepseek-chat`（结构盲区补跑）
+
+百炼欠费期间改走官方 `api.deepseek.com`，模型 `deepseek-chat`（不是百炼 `deepseek-v4-flash-0731`）。`cached=False`，parse_failures=0。结果槽：`narrative_vignette_blind_struct__deepseek-chat`。
+
+| prompt | Macro-F1 | exclude 召回 | observe 召回 | report 召回 | observe 预测率 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| judge_v3 | **0.8776** | 0.9625（77/80） | 1.00（40/40） | 0.79（79/100） | 0.2909 |
+| judge_v4 | 0.8661 | 0.8500（68/80） | 1.00（40/40） | 0.86（86/100） | 0.3000 |
+
+v3 上报漏在 `fake_project` / `reused_voucher`（各 9 条降观察）；v4 上报召回略升，但排除档更不敢判（`land_rent` 5 条、`tuition_refund` 4 条降观察）。**同模型上 v4 不低于 v3 不成立**，仍不切默认。
+
+不得与百炼 flash 的结构盲区 0.96 混比：那是另一个模型。keyword 基线仍约 0.17，两条都明显高于它。
+
+日志：`runs/20260914T074816Z_blind_struct_judge_v3.jsonl` · `...judge_v4.jsonl`。

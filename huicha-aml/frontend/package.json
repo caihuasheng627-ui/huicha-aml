@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node src/graphLayout.test.mjs && node src/workstation.test.mjs"
   },
   "dependencies": {
     "antd": "^5.24.0",

@@ -43,10 +43,10 @@ import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 import SystemManual from "./SystemManual.jsx";
 import {
-  DONE_STATUSES,
-  TODO_STATUSES,
   displayName,
+  isDoneStatus,
   isReviewer,
+  isTodoStatus,
   persistLabMode,
   readLabMode,
 } from "./workstation.js";
@@ -575,6 +575,11 @@ export default function App() {
       await decide(current, decision, note);
       await open(current);
       await loadList();
+      if (!labMode) {
+        if (decision === "submit" && !isReviewer(user)) setQueueKind("done");
+        if ((decision === "confirm" || decision === "modify") && isReviewer(user)) setQueueKind("done");
+        if (decision === "reject") setQueueKind("todo");
+      }
       const done = { submit: "已提交复核", confirm: "复核意见已写入审计", modify: "修改后签发已记录", reject: "已退回" };
       message.success(done[decision] || `处置意见已由 ${user.name} 写入审计`);
       if (contestMode) setContestStep("sign");
@@ -711,12 +716,12 @@ export default function App() {
 
   const demoCount = alerts.filter((a) => a.demo_tag).length;
   const normalCount = alerts.filter((a) => !a.demo_tag).length;
-  const todoCount = alerts.filter((a) => TODO_STATUSES.has(a.status || "pending")).length;
-  const doneCount = alerts.filter((a) => DONE_STATUSES.has(a.status)).length;
+  const todoCount = alerts.filter((a) => isTodoStatus(a.status, user)).length;
+  const doneCount = alerts.filter((a) => isDoneStatus(a.status, user)).length;
   const queue = alerts
     .filter((a) => {
       if (labMode) return queueKind === "demo" ? Boolean(a.demo_tag) : !a.demo_tag;
-      return queueKind === "done" ? DONE_STATUSES.has(a.status) : TODO_STATUSES.has(a.status || "pending");
+      return queueKind === "done" ? isDoneStatus(a.status, user) : isTodoStatus(a.status, user);
     })
     .filter((a) => !q || `${a.title}${a.customer_name}${a.alert_type}${a.id}${a.case_no || ""}`.includes(q));
 
@@ -982,7 +987,7 @@ export default function App() {
               ? queueKind === "demo"
                 ? "路演示例案，带 A/B/C/F/L 标签。"
                 : "其余合成告警，不是路演脚本。"
-              : "调查员提交复核，合规岗签发。系统不自动报送。"}
+              : "调查员提交后进入已办；合规岗待办只看待复核件。系统不自动报送。"}
           </div>
           {labMode && feedback && feedback.decisions && (
             <div className="hint" style={{ marginBottom: 8 }}>

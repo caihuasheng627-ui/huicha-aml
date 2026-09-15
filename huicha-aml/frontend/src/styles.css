@@ -181,6 +181,12 @@ body {
   color: var(--brand-blue);
   border-color: #bcd0e4;
 }
+.ghost-btn.lab-toggle.on {
+  border-color: var(--brand-gold);
+  color: var(--brand-blue);
+  background: #fffbeb;
+  font-weight: 600;
+}
 @media (max-width: 860px) {
   .manual-btn { display: none; }
 }
@@ -468,12 +474,47 @@ body {
   margin-bottom: 6px;
   line-height: 1.4;
 }
+.case-no {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #f7f8fa;
+  vertical-align: middle;
+}
+.welcome-note {
+  margin: 12px auto 0;
+  max-width: 36em;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
 .queue-item .m {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 8px;
   font-size: 13px;
   color: var(--muted);
+}
+.queue-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.queue-tags .ant-tag {
+  margin: 0;
+  border-radius: 999px;
+  padding: 0 8px;
+  line-height: 20px;
+  font-size: 12px;
 }
 
 .metric-board {
@@ -1396,16 +1437,38 @@ body {
 
 /* Signature: investigation pipeline */
 .queue-filter {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 0;
   margin-bottom: 10px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #eef1f5;
+}
+.queue-filter-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--brand-blue);
+  box-shadow: 0 1px 4px rgba(15, 39, 68, 0.18);
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.queue-filter.is-right .queue-filter-thumb {
+  transform: translateX(100%);
 }
 .queue-filter button {
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
+  position: relative;
+  z-index: 1;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   color: var(--muted);
   font-family: inherit;
   font-size: 12px;
@@ -1415,13 +1478,16 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.16s ease;
+  transition: color 0.2s ease;
 }
 .queue-filter button.on {
-  border-color: var(--brand-blue);
-  background: var(--brand-blue);
+  border-color: transparent;
+  background: transparent;
   color: #fff;
-  box-shadow: 0 1px 3px rgba(15, 39, 68, 0.12);
+  box-shadow: none;
+}
+.queue-filter button:not(.on):hover {
+  color: var(--text);
 }
 .queue-filter em {
   font-style: normal;
@@ -1432,6 +1498,9 @@ body {
 .queue-filter button:focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue-filter-thumb { transition: none; }
 }
 
 .pipeline-rail {

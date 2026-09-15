@@ -58,17 +58,17 @@ def test_export_is_draft_not_filing(client, auth_headers):
     assert "进模脱敏" in text
 
 
+from tests.conftest import dual_confirm
+
+
 def test_export_reflects_human_sign(client, auth_headers):
     client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
-    ok = client.post(
-        "/api/alerts/ALT-A-20260910/decide",
-        json={"decision": "confirm", "note": "同意排除"},
-        headers=auth_headers,
-    )
+    ok, _ = dual_confirm(client, "ALT-A-20260910", note="同意排除")
     assert ok.status_code == 200
     text = client.get("/api/alerts/ALT-A-20260910/export", headers=auth_headers).text
     assert "已记录签发" in text
     assert "同意排除" in text
-    assert "陈析（002183）" in text
+    assert "李审（002201）" in text
+    assert "陈析" in text
     assert "否（本文件仅为草稿）" not in text
     assert "CLOSE" in text or "排除" in text

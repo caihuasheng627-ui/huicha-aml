@@ -76,27 +76,22 @@ def test_layering_demo_chain(client):
     )
 
 
+from tests.conftest import dual_confirm
+
+
 def test_agent_cannot_auto_report(client, auth_headers):
     client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
-    d = client.post(
-        "/api/alerts/ALT-B-20260910/decide",
-        json={"decision": "confirm", "note": ""},
-        headers=auth_headers,
-    )
+    d, _ = dual_confirm(client, "ALT-B-20260910")
     assert d.status_code == 200
     body = d.json()
     assert body["final_action"] == "human_only"
     assert "自动报送" in body["note"]
-    assert body["signed_by_name"] == "陈析"
+    assert body["signed_by_name"] == "李审"
 
 
 def test_observe_confirm_is_monitoring_not_filing(client, auth_headers):
     client.post("/api/alerts/ALT-F-20260910/investigate", params={"use_challenger": True})
-    d = client.post(
-        "/api/alerts/ALT-F-20260910/decide",
-        json={"decision": "confirm", "note": ""},
-        headers=auth_headers,
-    )
+    d, _ = dual_confirm(client, "ALT-F-20260910")
     assert d.status_code == 200
     assert d.json()["status"] == "monitoring"
     detail = client.get("/api/alerts/ALT-F-20260910").json()

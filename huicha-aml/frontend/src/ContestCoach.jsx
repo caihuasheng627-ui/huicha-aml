@@ -17,7 +17,7 @@ const STEPS = [
   {
     id: "sign",
     title: "3 人工负责",
-    talk: "登录后点「签发结论」。审计出现签发人。系统不会自动报送。",
+    talk: "先用陈析提交复核，再登录李审点「同意签发」。审计出现签发人。系统不会自动报送。",
   },
 ];
 
@@ -60,10 +60,12 @@ export default function ContestCoach({
           </p>
         )}
         {hasDraft && selected ? <p className="contest-ok">已点回 {selected}</p> : null}
-        {user && signed?.human_decision ? (
+        {user && (signed?.human_decision === "confirm" || signed?.human_decision === "modify") ? (
           <p className="contest-ok">
             已签发 · {signed.signed_by_name || user.name} · 不是已报送
           </p>
+        ) : user && signed?.human_decision === "submit" ? (
+          <p className="contest-ok">已提交复核，请登录合规岗签发</p>
         ) : null}
       </div>
       <div className="contest-coach-actions">

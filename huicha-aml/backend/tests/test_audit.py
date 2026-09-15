@@ -12,15 +12,18 @@ def test_investigate_writes_audit_chain(client):
 def test_human_decision_audited(client, auth_headers):
     import json
 
+    from tests.conftest import dual_confirm
+
     client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
-    client.post("/api/alerts/ALT-A-20260910/decide", json={"decision": "confirm", "note": "人签"}, headers=auth_headers)
+    dual_confirm(client, "ALT-A-20260910", note="人签")
     d = client.get("/api/cases/ALT-A-20260910").json()
     assert d["human_decision"] == "confirm"
-    assert d["signed_by_id"] == "002183"
-    assert d["signed_by_name"] == "陈析"
+    assert d["signed_by_id"] == "002201"
+    assert d["signed_by_name"] == "李审"
+    assert d["submitted_by_name"] == "陈析"
     row = [a for a in d["audit"] if a["action"] == "decide"][-1]
     detail = json.loads(row["detail"])
     assert detail["human_decision"] == "confirm"
     assert detail["challenger_enabled"] is True
     assert "人签" in detail["summary"]
-    assert any("陈析" in a["actor"] for a in d["audit"] if a["action"] == "decide")
+    assert any("李审" in a["actor"] for a in d["audit"] if a["action"] == "decide")

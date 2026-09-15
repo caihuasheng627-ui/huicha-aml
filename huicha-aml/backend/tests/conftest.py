@@ -20,6 +20,23 @@ def login_headers(client, staff_id="002183", password="aml123"):
     return {"X-Huicha-Session": r.json()["token"]}
 
 
+def dual_confirm(client, alert_id, note=""):
+    inv = login_headers(client)
+    rev = login_headers(client, "002201", "aml123")
+    submitted = client.post(
+        f"/api/alerts/{alert_id}/decide",
+        json={"decision": "submit", "note": note},
+        headers=inv,
+    )
+    assert submitted.status_code == 200, submitted.text
+    signed = client.post(
+        f"/api/alerts/{alert_id}/decide",
+        json={"decision": "confirm", "note": note},
+        headers=rev,
+    )
+    return signed, rev
+
+
 @pytest.fixture()
 def auth_headers(client):
     return login_headers(client)
@@ -79,14 +96,16 @@ def client(monkeypatch):
         if "完整四段调查底稿" in sys:
             data = json.loads(user)
             ids = "、".join(data.get("evidence_ids", [])[:4])
+            regs = "、".join(data.get("regulation_ids", [])[:5])
             conclusion = data["conclusion_label"]
+            cite = f"依据 {regs}。" if regs else ""
             return (
                 "\n".join(
                     [
                         f"【资金交易及客户行为】已核对证据 {ids}。",
                         f"【疑点分析】形成{conclusion}初步建议，证据 {ids}。",
                         f"【反证与缺失证据】已核查反向材料，证据 {ids}。",
-                        f"【结论与理由】{conclusion}。须人工签发，不可自动报送，证据 {ids}。",
+                        f"【结论与理由】{conclusion}。{cite}须人工签发，不可自动报送，证据 {ids}。",
                     ]
                 ),
                 usage,

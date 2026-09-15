@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { displayName, maskAccount } from "./workstation.js";
 
 export function clickSource(e) {
   const raw = String(e?.raw_reference || "");
@@ -50,7 +51,7 @@ export function TxTimeline({ rows, onSelect }) {
               {String(t.time || "").slice(5, 16)}
             </button>
             <span>
-              {t.from_account} → {t.to_account}
+              {maskAccount(t.from_account)} → {maskAccount(t.to_account)}
             </span>
             <b>{t.amount != null ? Number(t.amount).toLocaleString() : ""}</b>
           </li>
@@ -87,7 +88,9 @@ const KIND = { enterprise: "对公", individual: "个人" };
 export function CustomerCard({ customer, accountId, selected, onSelect }) {
   if (!customer?.id) return null;
   const active = selected === customer.id || selected === accountId;
-  const accounts = customer.accounts?.length ? customer.accounts.join("、") : accountId || "—";
+  const accounts = (customer.accounts?.length ? customer.accounts : accountId ? [accountId] : [])
+    .map((id) => maskAccount(id))
+    .join("、") || "—";
   return (
     <div
       id={`ev-${customer.id}`}
@@ -100,7 +103,7 @@ export function CustomerCard({ customer, accountId, selected, onSelect }) {
       }}
     >
       <div className="kyc-hd">
-        <b>{customer.name || customer.id}</b>
+        <b>{displayName(customer.name) || customer.id}</b>
         <code>{customer.id}</code>
       </div>
       <dl className="kyc-dl">
@@ -131,8 +134,8 @@ export function CustomerCard({ customer, accountId, selected, onSelect }) {
           </dd>
         </div>
       </dl>
-      {customer.summary ? <p className="kyc-sum">{customer.summary}</p> : null}
-      <p className="kyc-note">合成档案摘要，不是尽调原件。开户申请、受益所有人、回访记录未入库。</p>
+      {customer.summary ? <p className="kyc-sum">{displayName(customer.summary)}</p> : null}
+      <p className="kyc-note">档案摘要。开户申请、受益所有人、回访记录如需原件，请走补证。</p>
     </div>
   );
 }
@@ -186,7 +189,7 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
 
   return (
     <div className="v2-panel">
-      <div className="v2-hd">证据分组（synthetic）</div>
+      <div className="v2-hd">证据分组</div>
       <div className="v2-hd sub">客户与账户</div>
       {profiles.slice(0, 6).map((e) => (
         <Row key={e.evidence_id} e={e} kind="profile" />

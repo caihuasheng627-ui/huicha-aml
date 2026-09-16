@@ -1,11 +1,13 @@
 import json
+import queue
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -344,6 +346,28 @@ def investigate(
         raise HTTPException(502, str(e)) from e
     except RuntimeError as e:
         raise HTTPException(502, str(e)) from e
+    _finalize_investigation(
+        db,
+        alert,
+        result,
+        use_challenger=use_challenger,
+        inject_hallucination=inject_hallucination,
+        experiment_mode=experiment_mode,
+    )
+    db.commit()
+    return result
+
+
+def _finalize_investigation(
+    db: Session,
+    alert: Alert,
+    result: dict,
+    *,
+    use_challenger: bool,
+    inject_hallucination: bool,
+    experiment_mode: bool,
+) -> None:
+    alert_id = alert.id
     inv = get_investigation(db, alert_id)
     blob = json.dumps(result, ensure_ascii=False)
     if inv:
@@ -424,8 +448,82 @@ def investigate(
                 ensure_ascii=False,
             ),
         )
-    db.commit()
-    return result
+
+
+def _sse_pack(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/alerts/{alert_id}/investigate/stream")
+def investigate_stream(
+    alert_id: str,
+    use_challenger: bool = True,
+    inject_hallucination: bool = False,
+    experiment_mode: bool = False,
+    db: Session = Depends(get_db),
+):
+    alert = db.get(Alert, alert_id)
+    if not alert:
+        raise HTTPException(404, "告警不存在")
+    events: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        session = SessionLocal()
+        try:
+            row = session.get(Alert, alert_id)
+            if not row:
+                events.put({"event": "error", "detail": "告警不存在"})
+                return
+
+            def emit(event: dict) -> None:
+                events.put(event)
+
+            result = run_investigation(
+                session,
+                alert_id,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+                emit=emit,
+            )
+            _finalize_investigation(
+                session,
+                row,
+                result,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+            )
+            session.commit()
+            events.put({"event": "done", "payload": result})
+        except PrivacyLeakError as exc:
+            session.rollback()
+            events.put({"event": "error", "detail": str(exc)})
+        except RuntimeError as exc:
+            session.rollback()
+            events.put({"event": "error", "detail": str(exc)})
+        except Exception as exc:
+            session.rollback()
+            events.put({"event": "error", "detail": str(exc)})
+        finally:
+            session.close()
+            events.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def generate():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            event = item.get("event") or "message"
+            yield _sse_pack(event, item)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class DecideBody(BaseModel):

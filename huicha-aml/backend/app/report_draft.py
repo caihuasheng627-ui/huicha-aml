@@ -94,7 +94,7 @@ def apply_abstain_tone(report: dict, conclusion: str) -> None:
     """弃权时改写结论段：保留 AI 倾向，不再把三档结论写成可直接签发表述。"""
     label = CONCLUSION_LABEL.get(conclusion) or conclusion or "未知"
     reason = (
-        f"系统已弃权：以上仅为 AI 倾向档（倾向「{label}」），未形成可直接签发结论，须调查员说明后提交。"
+        f"系统已弃权：以上仅为 AI 倾向档（倾向「{label}」），未形成可直接签发结论，须人工签发，提交复核须调查员说明。"
     )
     report["reason"] = reason
     rebuilt: list[str] = []

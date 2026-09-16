@@ -112,6 +112,13 @@ def normalize_judge(raw: dict, *, known_ids: set[str] | None = None) -> dict:
     return result
 
 
+def _cites_tx_pattern(row: dict) -> bool:
+    ids = [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
+    args = row.get("args") if isinstance(row.get("args"), dict) else {}
+    extra = _as_str_list(args.get("tx_ids"))
+    return any(str(item).startswith("TX-") for item in (*ids, *extra))
+
+
 def verify_judge(
     decision: dict,
     *,
@@ -120,7 +127,7 @@ def verify_judge(
     case_id: str = "",
     evidence_case: dict[str, str] | None = None,
 ) -> dict:
-    """每个实质理由必须有本案引用；失败谓词与伪造引用一样使整份建议不可采纳。"""
+    """每个实质理由必须有本案引用；失败谓词、缺谓词的交易模式理由与伪造引用一样使整份建议不可采纳。"""
     issues: list[dict] = []
     cited: list[str] = []
     for key in ("supporting_evidence_ids", "contradicting_evidence_ids"):
@@ -165,6 +172,14 @@ def verify_judge(
                 )
         else:
             row["validation"] = None
+            if _cites_tx_pattern(row):
+                issues.append(
+                    {
+                        "kind": "missing_predicate",
+                        "index": index,
+                        "message": "交易模式理由缺少可执行谓词",
+                    }
+                )
     invalid = [evidence_id for evidence_id in cited if evidence_id not in allowed_evidence]
     if invalid:
         issues.append(

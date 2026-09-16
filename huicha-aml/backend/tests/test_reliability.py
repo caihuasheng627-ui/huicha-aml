@@ -34,6 +34,17 @@ def test_hard_citation_and_fallback_abstain():
     )
     assert any(r["code"] == "predicate_failed" for r in pred["reasons"])
 
+    missing = compute_reliability(
+        use_challenger=True,
+        judge={"disposition": "suggest_report", "confidence": 0.8},
+        judge_validation={"passed": False, "issues": [{"kind": "missing_predicate"}]},
+        baseline={"conclusion": "suggest_report"},
+        counterfactual={"performed": False},
+        evidence_sufficiency={"verified": True, "necessary_ids": []},
+    )
+    assert any(r["code"] == "missing_predicate" and r["severity"] == "hard" for r in missing["reasons"])
+    assert not any(r["code"] == "citation_failed" for r in missing["reasons"])
+
 
 def test_cf_invalid_is_hard():
     result = compute_reliability(

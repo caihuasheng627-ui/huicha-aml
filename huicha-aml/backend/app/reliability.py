@@ -15,6 +15,7 @@ HARD_CITATION = {
     "invalid_output",
 }
 HARD_PREDICATE = {"predicate_failed"}
+HARD_MISSING_PREDICATE = {"missing_predicate"}
 
 
 def _reason(code: str, severity: str, message: str) -> dict:
@@ -51,7 +52,9 @@ def compute_reliability(
     elif not validation.get("passed", True):
         if kinds & HARD_PREDICATE:
             reasons.append(_reason("predicate_failed", "hard", "可执行谓词未通过核验，不能直接签发"))
-        if kinds & HARD_CITATION or not (kinds & HARD_PREDICATE):
+        if kinds & HARD_MISSING_PREDICATE:
+            reasons.append(_reason("missing_predicate", "hard", "交易模式理由缺少可执行谓词，不能直接签发"))
+        if kinds & HARD_CITATION or not (kinds & (HARD_PREDICATE | HARD_MISSING_PREDICATE)):
             reasons.append(_reason("citation_failed", "hard", "证据契约未通过，不能直接签发"))
 
     if counterfactual.get("performed") and counterfactual.get("validated") is False:

@@ -92,9 +92,17 @@ def test_disallowed_predicate_args_fail():
     assert any("允许集合" in (i.get("message") or "") for i in result["issues"])
 
 
-def test_missing_predicate_is_not_hard_fail():
+def test_missing_predicate_on_tx_rationale_fails():
     decision = normalize_judge(_judge())
     result = verify_judge(decision, allowed_evidence=ALLOWED, facts=FACTS)
+    assert result["passed"] is False
+    assert any(i["kind"] == "missing_predicate" for i in result["issues"])
+    assert verified_claims_from_judge(decision) == []
+
+
+def test_kyc_rationale_without_predicate_is_allowed():
+    decision = normalize_judge(_judge(ids=["EV-KYC-01"], text="KYC 等级为关注"))
+    result = verify_judge(decision, allowed_evidence={"EV-KYC-01"}, facts=FACTS)
     assert result["passed"] is True
     assert verified_claims_from_judge(decision) == []
 

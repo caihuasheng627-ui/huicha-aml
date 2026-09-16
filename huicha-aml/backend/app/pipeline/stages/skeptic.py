@@ -77,6 +77,7 @@ class SkepticStage:
                 findings=findings,
                 verified_claims=verified_claims,
                 run_round=run_round,
+                baseline=state.baseline_result,
             )
         elif judge_validation.get("passed"):
             sufficiency["minimal_sufficient_set"] = list(

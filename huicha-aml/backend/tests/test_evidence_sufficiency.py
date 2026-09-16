@@ -52,3 +52,24 @@ def test_budget_exhausted_sets_verified_false():
     assert sufficiency["budget_exhausted"] is True
     assert sufficiency["verified"] is False
     assert sufficiency["rounds"] <= MAX_ROUNDS
+
+
+def test_cf_abstain_marks_cluster_necessary():
+    judge = _judge(["TX-1", "TX-2"])
+    findings = _findings([["TX-1"], ["TX-2"]])
+
+    def run_round(_removed, _message):
+        return {
+            "judge": {"disposition": "suggest_report", "confidence": 0.4},
+            "validation": {"passed": True, "issues": []},
+        }
+
+    sufficiency, _ = search_minimal_set(
+        judge=judge,
+        findings=findings,
+        verified_claims=[],
+        run_round=run_round,
+        baseline={"conclusion": "exclude"},
+    )
+    assert "TX-1" in sufficiency["necessary_ids"]
+    assert "TX-1" not in sufficiency["redundant_ids"]

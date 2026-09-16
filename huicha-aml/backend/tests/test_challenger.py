@@ -392,21 +392,19 @@ def test_judge_missing_evidence_ids_are_sanitized(client, monkeypatch):
     assert data["can_sign"] is True
 
 
-def test_tx_rationale_missing_predicate_triggers_repair(client, monkeypatch):
-    calls: list[list] = []
-
+def test_tx_rationale_missing_predicate_is_bound_from_snapshot(client, monkeypatch):
     def fake_enrich(**kwargs):
         prior = kwargs.get("prior_issues") or []
-        calls.append(prior)
-        if any(isinstance(p, dict) and p.get("kind") == "missing_predicate" for p in prior):
+        if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
             return _cf_aware_judge(kwargs)
         return _valid_judge("TX-B-IN-01"), {}
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
-    assert data["judge_repaired"] is True
     assert data["judge_validation"]["passed"] is True
-    assert any(any(isinstance(p, dict) and p.get("kind") == "missing_predicate" for p in batch) for batch in calls)
+    assert data["verified_claims"]
+    assert data["verified_claims"][0]["score_kind"] == "predicate_verified"
+    assert data["can_sign"] is True
 
 
 def test_alert_id_in_report_is_not_flagged_by_fact_check(client, monkeypatch):
@@ -472,36 +470,13 @@ def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
     assert data["can_sign"] is True
 
 
-def test_false_predicate_is_repaired_on_second_round(client, monkeypatch):
-    calls: list[list] = []
+def test_false_predicate_is_rebound_from_snapshot(client, monkeypatch):
+    ids = ["TX-L-01", "TX-L-02", "TX-L-03"]
 
     def fake_enrich(**kwargs):
         prior = kwargs.get("prior_issues") or []
-        calls.append(prior)
         if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
             return _cf_aware_judge(kwargs)
-        ids = ["TX-L-01", "TX-L-02", "TX-L-03"]
-        if not any(isinstance(p, dict) and p.get("kind") == "predicate_failed" for p in prior):
-            return (
-                {
-                    "disposition": "suggest_report",
-                    "confidence": 0.8,
-                    "typologies": ["layering"],
-                    "supporting_evidence_ids": ids,
-                    "contradicting_evidence_ids": [],
-                    "missing_evidence": [],
-                    "rationale": [
-                        {
-                            "text": "金额递增",
-                            "evidence_ids": ids,
-                            "predicate": "amount_monotonic_increasing",
-                            "args": {"tx_ids": ids},
-                        }
-                    ],
-                    "next_actions": [],
-                },
-                {},
-            )
         return (
             {
                 "disposition": "suggest_report",
@@ -512,9 +487,9 @@ def test_false_predicate_is_repaired_on_second_round(client, monkeypatch):
                 "missing_evidence": [],
                 "rationale": [
                     {
-                        "text": "连续过桥",
+                        "text": "金额递增",
                         "evidence_ids": ids,
-                        "predicate": "consecutive_transfer_chain",
+                        "predicate": "amount_monotonic_increasing",
                         "args": {"tx_ids": ids},
                     }
                 ],
@@ -525,12 +500,10 @@ def test_false_predicate_is_repaired_on_second_round(client, monkeypatch):
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-L-20260910/investigate").json()
-    assert data["judge_repaired"] is True
     assert data["judge_validation"]["passed"] is True
     assert data["verified_claims"]
     assert data["verified_claims"][0]["predicate"] == "consecutive_transfer_chain"
     assert data["can_sign"] is True
-    assert any(any(isinstance(p, dict) and p.get("kind") == "predicate_failed" for p in batch) for batch in calls)
 
 
 def test_counterfactual_syncs_predicate_args_with_removed_ids(client, monkeypatch):

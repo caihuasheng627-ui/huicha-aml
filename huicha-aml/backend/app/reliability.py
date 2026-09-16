@@ -44,7 +44,9 @@ def compute_reliability(
     counterfactual = counterfactual or {}
     sufficiency = evidence_sufficiency or {}
     reasons: list[dict] = []
-    issues = validation.get("issues") or []
+    issues = validation.get("hard_issues")
+    if issues is None:
+        issues = validation.get("issues") or []
     kinds = {str(item.get("kind") or "") for item in issues if isinstance(item, dict)}
 
     if fallback_reason or validation.get("score_kind") == "fallback":

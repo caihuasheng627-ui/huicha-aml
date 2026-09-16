@@ -6,7 +6,7 @@ import re
 
 from .analyst_rules import score_to_conclusion
 from .checklist import material_gap_titles
-from .predicates import _as_str_list
+from .predicates import _as_str_list, pick_true_predicate
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
 from .schema import JudgeDecision, JudgeRationale, ValidationResult
 from .validator import validate_claim
@@ -112,11 +112,102 @@ def normalize_judge(raw: dict, *, known_ids: set[str] | None = None) -> dict:
     return result
 
 
-def _cites_tx_pattern(row: dict) -> bool:
-    ids = [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
+HARD_CONTRACT_KINDS = {
+    "empty_rationale",
+    "uncited_rationale",
+    "invalid_citation",
+    "missing_rationale",
+    "missing_support",
+}
+ROW_PREDICATE_KINDS = {"missing_predicate", "predicate_failed"}
+
+
+def _row_evidence_ids(row: dict) -> list[str]:
+    return [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
+
+
+def _row_tx_ids(row: dict) -> list[str]:
+    ids = _row_evidence_ids(row)
     args = row.get("args") if isinstance(row.get("args"), dict) else {}
     extra = _as_str_list(args.get("tx_ids"))
-    return any(str(item).startswith("TX-") for item in (*ids, *extra))
+    return [item for item in (*ids, *extra) if str(item).startswith("TX-")]
+
+
+def _requires_predicate(row: dict) -> bool:
+    """仅纯交易模式理由强制谓词；夹带 KYC/法规/材料编号的叙述可以不填。"""
+    ids = _row_evidence_ids(row)
+    tx_ids = _row_tx_ids(row)
+    other = [item for item in ids if not str(item).startswith("TX-")]
+    return bool(tx_ids) and not other
+
+
+def _sanitize_pred_args(args: dict, allowed_evidence: set[str]) -> dict:
+    cleaned = dict(args or {})
+    if "tx_ids" in cleaned:
+        cleaned["tx_ids"] = [
+            eid
+            for eid in _as_str_list(cleaned.get("tx_ids"))
+            if eid.startswith("TX-") and eid in allowed_evidence
+        ]
+    return cleaned
+
+
+def _bind_true_predicate(
+    row: dict,
+    facts: dict | None,
+    allowed_evidence: set[str] | None = None,
+    *,
+    fallback_to_allowed: bool = True,
+) -> dict:
+    facts = facts or {}
+    cited = {eid for eid in _row_tx_ids(row) if not allowed_evidence or eid in allowed_evidence}
+    picked = pick_true_predicate(facts, cited) if cited else None
+    if not picked and fallback_to_allowed:
+        fact_txs = {str(t.get("id")) for t in (facts.get("transactions") or []) if t.get("id")}
+        allowed_tx = {
+            eid
+            for eid in (allowed_evidence or fact_txs)
+            if str(eid).startswith("TX-") and eid in fact_txs
+        }
+        if allowed_tx and allowed_tx != cited:
+            picked = pick_true_predicate(facts, allowed_tx)
+    if not picked:
+        return row
+    ids = list(row.get("evidence_ids") or [])
+    for eid in picked.get("evidence_ids") or []:
+        if eid not in ids:
+            ids.append(eid)
+    row["predicate"] = picked["predicate"]
+    row["args"] = picked["args"]
+    row["evidence_ids"] = ids
+    row["predicate_bound"] = True
+    return row
+
+
+def _execute_row_predicate(
+    row: dict,
+    *,
+    allowed_evidence: set[str],
+    facts: dict | None,
+    case_id: str,
+    evidence_case: dict[str, str] | None,
+) -> dict:
+    ids = _row_evidence_ids(row)
+    args = row.get("args") if isinstance(row.get("args"), dict) else {}
+    result = validate_claim(
+        claim=str(row.get("text") or ""),
+        evidence_ids=ids,
+        delta=0.0,
+        allowed=allowed_evidence,
+        case_id=case_id,
+        evidence_case=evidence_case,
+        predicate=str(row.get("predicate") or "").strip(),
+        args=args,
+        facts=facts,
+    )
+    row["validation"] = ValidationResult.model_validate(result).model_dump()
+    row["evidence_ids"] = result.get("evidence_ids") or ids
+    return result
 
 
 def verify_judge(
@@ -127,7 +218,7 @@ def verify_judge(
     case_id: str = "",
     evidence_case: dict[str, str] | None = None,
 ) -> dict:
-    """每个实质理由必须有本案引用；失败谓词、缺谓词的交易模式理由与伪造引用一样使整份建议不可采纳。"""
+    """引用契约仍整份否决；谓词按条核验，缺省时用快照补一条为真的谓词，有已核验主张则不因旁路失败行一票否决。"""
     issues: list[dict] = []
     cited: list[str] = []
     for key in ("supporting_evidence_ids", "contradicting_evidence_ids"):
@@ -136,7 +227,7 @@ def verify_judge(
                 cited.append(evidence_id)
     rationale = decision.get("rationale") or []
     for index, row in enumerate(rationale):
-        ids = [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
+        ids = _row_evidence_ids(row)
         if not str(row.get("text") or "").strip():
             issues.append({"kind": "empty_rationale", "index": index, "message": "理由为空"})
         if not ids:
@@ -144,35 +235,66 @@ def verify_judge(
         for evidence_id in ids:
             if evidence_id not in cited:
                 cited.append(evidence_id)
+        row["args"] = _sanitize_pred_args(row.get("args") if isinstance(row.get("args"), dict) else {}, allowed_evidence)
         predicate = str(row.get("predicate") or "").strip()
-        args = row.get("args") if isinstance(row.get("args"), dict) else {}
+        if not predicate and _row_tx_ids(row):
+            row = _bind_true_predicate(row, facts, allowed_evidence)
+            rationale[index] = row
+            row["args"] = _sanitize_pred_args(row.get("args") if isinstance(row.get("args"), dict) else {}, allowed_evidence)
+            predicate = str(row.get("predicate") or "").strip()
+            ids = _row_evidence_ids(row)
+            for evidence_id in ids:
+                if evidence_id not in cited:
+                    cited.append(evidence_id)
         if predicate:
-            result = validate_claim(
-                claim=str(row.get("text") or ""),
-                evidence_ids=ids,
-                delta=0.0,
-                allowed=allowed_evidence,
+            result = _execute_row_predicate(
+                row,
+                allowed_evidence=allowed_evidence,
+                facts=facts,
                 case_id=case_id,
                 evidence_case=evidence_case,
-                predicate=predicate,
-                args=args,
-                facts=facts,
             )
-            row["validation"] = ValidationResult.model_validate(result).model_dump()
-            row["evidence_ids"] = result.get("evidence_ids") or ids
+            if not result.get("valid"):
+                rebound = _bind_true_predicate(
+                    {**row, "predicate": None, "args": {}, "validation": None},
+                    facts,
+                    allowed_evidence,
+                    fallback_to_allowed=False,
+                )
+                rebound_pred = str(rebound.get("predicate") or "").strip()
+                if rebound_pred:
+                    rebound["args"] = _sanitize_pred_args(
+                        rebound.get("args") if isinstance(rebound.get("args"), dict) else {},
+                        allowed_evidence,
+                    )
+                    rebound_result = _execute_row_predicate(
+                        rebound,
+                        allowed_evidence=allowed_evidence,
+                        facts=facts,
+                        case_id=case_id,
+                        evidence_case=evidence_case,
+                    )
+                    if rebound_result.get("valid"):
+                        row = rebound
+                        rationale[index] = row
+                        result = rebound_result
+                        ids = _row_evidence_ids(row)
+                        for evidence_id in ids:
+                            if evidence_id not in cited:
+                                cited.append(evidence_id)
             if not result.get("valid"):
                 issues.append(
                     {
                         "kind": "predicate_failed",
                         "index": index,
-                        "predicate": predicate,
+                        "predicate": str(row.get("predicate") or predicate),
                         "evidence_ids": result.get("evidence_ids") or ids,
                         "message": result.get("reason") or f"谓词 {predicate} 未通过核验",
                     }
                 )
         else:
             row["validation"] = None
-            if _cites_tx_pattern(row):
+            if _requires_predicate(row):
                 issues.append(
                     {
                         "kind": "missing_predicate",
@@ -193,17 +315,26 @@ def verify_judge(
         issues.append({"kind": "missing_rationale", "message": "缺少结构化理由"})
     if decision.get("disposition") == "suggest_report" and not decision.get("supporting_evidence_ids"):
         issues.append({"kind": "missing_support", "message": "建议上报但没有支持证据"})
+    has_verified = any(
+        ((row.get("validation") or {}).get("valid") and (row.get("validation") or {}).get("score_kind") == "predicate_verified")
+        for row in rationale
+    )
+    hard_issues = [item for item in issues if item.get("kind") in HARD_CONTRACT_KINDS]
+    if not has_verified:
+        hard_issues.extend(item for item in issues if item.get("kind") in ROW_PREDICATE_KINDS)
     try:
         decision["rationale"] = [JudgeRationale.model_validate(row).model_dump() for row in rationale]
     except Exception:
         pass
+    passed = not hard_issues
     return {
-        "passed": not issues,
+        "passed": passed,
         "issues": issues,
+        "hard_issues": hard_issues,
         "citation_count": len(cited),
         "invalid_ids": invalid,
         "score_kind": "evidence_contract",
-        "reason": "结构化建议及逐条引用、谓词通过校验" if not issues else "Judge 输出未通过证据契约",
+        "reason": "结构化建议及逐条引用、谓词通过校验" if passed else "Judge 输出未通过证据契约",
     }
 
 

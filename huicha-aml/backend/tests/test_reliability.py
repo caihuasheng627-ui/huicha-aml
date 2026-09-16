@@ -118,6 +118,23 @@ def test_cf_not_dependent_only_for_report_without_necessary_core():
     assert exclude["stance"] == "committed"
 
 
+def test_passed_validation_does_not_hard_block_on_soft_predicate_issues():
+    result = compute_reliability(
+        use_challenger=True,
+        judge={"disposition": "suggest_report", "confidence": 0.8},
+        judge_validation={
+            "passed": True,
+            "issues": [{"kind": "predicate_failed"}],
+            "hard_issues": [],
+        },
+        baseline={"conclusion": "suggest_report"},
+        counterfactual={"performed": False},
+        evidence_sufficiency={"verified": True, "necessary_ids": ["TX-1"]},
+    )
+    assert result["stance"] == "committed"
+    assert not any(r["code"] == "predicate_failed" for r in result["reasons"])
+
+
 def test_ablation_does_not_abstain():
     result = compute_reliability(
         use_challenger=False,

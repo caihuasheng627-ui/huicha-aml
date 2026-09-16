@@ -139,7 +139,7 @@ def experiment_ablation_and_consistency(db, monkey_chat=None) -> dict:
     }
 
 
-def _stub_chat(messages, *, temperature=0.0, max_tokens=900):
+def _stub_chat(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
     from .llm import _offline_stub_chat
 
     return _offline_stub_chat(messages)

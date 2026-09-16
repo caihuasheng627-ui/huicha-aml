@@ -33,22 +33,61 @@ class JudgeStage:
         fallback_reason = ""
 
         def _judge_once(prior_issues: list[dict] | None, transactions=None, findings_for_llm=None, allowed_for_prompt=None) -> tuple[dict, dict, dict]:
-            raw, usage = ctx.deps.enrich_judge(
-                db=ctx.db,
-                privacy=privacy,
-                alert=alert,
-                customer=customer,
-                findings=findings_for_llm if findings_for_llm is not None else llm_findings,
-                transactions=transactions if transactions is not None else sample_txs,
-                baseline=baseline,
-                kb_hits=kb_hits,
-                allowed_evidence=allowed_for_prompt if allowed_for_prompt is not None else prompt_allowed,
-                prior_issues=prior_issues,
-                tx_clusters=sampling["clusters"],
-                tx_summary=sampling["summary"],
-            )
-            decision = normalize_judge(raw, known_ids=allowed_set)
-            return decision, verify_judge(decision, allowed_evidence=cite_set), usage
+            from ..toolkit import judge_tools_enabled, run_judge_with_tools
+
+            tx_in = transactions if transactions is not None else sample_txs
+            findings_in = findings_for_llm if findings_for_llm is not None else llm_findings
+            allowed_in = allowed_for_prompt if allowed_for_prompt is not None else prompt_allowed
+            if judge_tools_enabled():
+                raw, usage, extra_ids, extra_txs = run_judge_with_tools(
+                    db=ctx.db,
+                    privacy=privacy,
+                    alert=alert,
+                    customer=customer,
+                    findings=findings_in,
+                    transactions=tx_in,
+                    baseline=baseline,
+                    kb_hits=kb_hits,
+                    allowed_evidence=allowed_in,
+                    prior_issues=prior_issues,
+                    tx_clusters=sampling["clusters"],
+                    tx_summary=sampling["summary"],
+                    account_id=state.account_id,
+                    as_of=state.as_of,
+                    search_knowledge=ctx.deps.search_knowledge,
+                )
+                if extra_ids:
+                    state.allowed_evidence = sorted(set(state.allowed_evidence) | set(extra_ids))
+                    state.allowed_set = set(state.allowed_evidence)
+                    state.prompt_allowed = sorted(set(state.prompt_allowed) | set(extra_ids))
+                    state.cite_set = set(state.prompt_allowed)
+                    facts = state.bundle.get("facts") or {}
+                    facts["tx_ids"] = sorted(set(facts.get("tx_ids") or []) | {i for i in extra_ids if str(i).startswith("TX-")})
+                    facts["kb_ids"] = sorted(set(facts.get("kb_ids") or []) | {i for i in extra_ids if str(i).startswith("KB-")})
+                    state.bundle["facts"] = facts
+                if extra_txs:
+                    seen = {t.get("id") for t in state.txs}
+                    for row in extra_txs:
+                        if row.get("id") and row["id"] not in seen:
+                            state.txs.append(row)
+                            seen.add(row["id"])
+            else:
+                raw, usage = ctx.deps.enrich_judge(
+                    db=ctx.db,
+                    privacy=privacy,
+                    alert=alert,
+                    customer=customer,
+                    findings=findings_in,
+                    transactions=tx_in,
+                    baseline=baseline,
+                    kb_hits=kb_hits,
+                    allowed_evidence=allowed_in,
+                    prior_issues=prior_issues,
+                    tx_clusters=sampling["clusters"],
+                    tx_summary=sampling["summary"],
+                )
+            decision = normalize_judge(raw, known_ids=state.allowed_set)
+            return decision, verify_judge(decision, allowed_evidence=state.cite_set), usage
 
         if use_challenger:
             try:

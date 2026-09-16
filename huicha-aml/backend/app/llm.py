@@ -63,8 +63,12 @@ def require_api_key() -> str:
     return api_key
 
 
-def llm_model() -> str:
+def llm_model(role: str | None = None) -> str:
     _load_env()
+    if role:
+        override = (os.getenv(f"HUICHA_MODEL_{role.upper()}") or "").strip()
+        if override:
+            return override
     if _deepseek_key():
         return (os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip() or DEFAULT_DEEPSEEK_MODEL
     explicit = (os.getenv("DASHSCOPE_MODEL") or os.getenv("ZHIPU_MODEL") or "").strip()

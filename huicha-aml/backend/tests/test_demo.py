@@ -254,6 +254,7 @@ def test_health_reports_llm(client):
     assert body["limitations"]
     assert body["contest"]["demo_case"] == "ALT-L-20260910"
     assert "人效对照未完成" in " ".join(body["limitations"])
+    assert not any("Macro-F1" in x or "Challenger 调分" in x for x in body["limitations"])
 
 
 def test_planner_skips_watchlist_on_wholesale(client):

@@ -35,6 +35,7 @@ import {
   logout,
   runInvestigate,
   streamInvestigate,
+  shouldFallbackInvestigate,
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
@@ -61,7 +62,7 @@ const EMPTY_KEYS = [
   ["打开案例 L 多层", "5"],
   ["打开案例 H 抽数", "6"],
   ["系统说明书", "H"],
-  ["按当前策略重跑", "选中案件后点按钮"],
+  ["开始调查", "选中案件后点按钮"],
 ];
 
 function WelcomeBrief({ labMode }) {
@@ -98,7 +99,7 @@ function WelcomeBrief({ labMode }) {
   );
 }
 
-function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHot }) {
+function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHotAction }) {
   const hasDraft = Boolean(inv?.report);
   const factOk = Boolean(hasDraft && inv.can_sign);
   const decision = signed?.human_decision || "";
@@ -121,7 +122,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
     else status = "待提交复核";
   }
   return (
-    <div className={`sign-dock${contestHot ? " contest-hot" : ""}`} data-contest="sign">
+    <div className="sign-dock" data-contest="sign">
       <Input.TextArea
         id="investigator-note"
         rows={4}
@@ -133,13 +134,23 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
       <div className="sign-dock-row">
         <div className="sign-dock-actions">
           {(!user || investigator) && (
-            <Button type="primary" disabled={!canSubmit} onClick={() => onDecide("submit")}>
+            <Button
+              type="primary"
+              className={contestHotAction === "submit" ? "contest-hot" : undefined}
+              disabled={!canSubmit}
+              onClick={() => onDecide("submit")}
+            >
               提交复核
             </Button>
           )}
           {reviewer && (
             <>
-              <Button type="primary" disabled={!canConfirm} onClick={() => onDecide("confirm")}>
+              <Button
+                type="primary"
+                className={contestHotAction === "confirm" ? "contest-hot" : undefined}
+                disabled={!canConfirm}
+                onClick={() => onDecide("confirm")}
+              >
                 同意签发
               </Button>
               <Button disabled={!canModify} onClick={() => onDecide("modify")}>
@@ -203,8 +214,7 @@ const AUDIT_ACTION = {
   checklist: "补证清单",
 };
 
-const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)/;
-const TOKEN_ONE = /^(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)$/;
+import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
@@ -264,13 +274,13 @@ function auditText(x) {
 
 function ReportText({ text, issues, onSelect }) {
   const bad = new Set((issues || []).map((x) => x.token));
-  const parts = String(text || "").split(TOKEN_SPLIT);
+  const parts = splitEvidenceParts(text);
   return (
     <div className="report-box">
       {parts.map((p, i) => {
         if (!p) return null;
         if (bad.has(p)) return <mark key={i}>{p}</mark>;
-        if (TOKEN_ONE.test(p)) {
+        if (isEvidenceToken(p)) {
           return (
             <button key={i} type="button" className="token" onClick={() => onSelect(p)}>
               {p}
@@ -573,7 +583,7 @@ export default function App() {
           }
         });
       } catch (e) {
-        if (!e?.streamFailed) throw e;
+        if (!shouldFallbackInvestigate(e)) throw e;
         await runInvestigate(id, opts);
       }
       await open(id);
@@ -638,6 +648,23 @@ export default function App() {
     await logout();
     setUser(null);
     message.success("已退出登录");
+  }
+
+  async function onSwitchDemoUser() {
+    const targetId = user?.staff_id === "002183" ? "002201" : "002183";
+    setLoginLoading(true);
+    try {
+      const data = await login(targetId, "aml123");
+      setUser(data.user);
+      message.success(`已切换为${data.user.name}`);
+      loadList().catch(() => {});
+    } catch (e) {
+      loginForm.setFieldsValue({ staff_id: targetId, password: "aml123" });
+      setLoginOpen(true);
+      message.error(e.message);
+    } finally {
+      setLoginLoading(false);
+    }
   }
 
   function setLab(on) {
@@ -776,6 +803,17 @@ export default function App() {
               系统说明书
             </button>
           </Tooltip>
+          {contestMode && (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={onSwitchDemoUser}
+              disabled={loginLoading}
+              title="复用演示登录，口令 aml123"
+            >
+              切换陈析 / 李审
+            </button>
+          )}
           {user ? (
             <div className="user-chip">
               <div className="user-meta">
@@ -1021,7 +1059,7 @@ export default function App() {
               {metrics?.labeled ? ` · 模板精标 ${metrics.labeled}` : ""}
             </div>
           )}
-          {labMode && <MetricBoard metrics={metrics} feedback={feedback} />}
+          {labMode && !contestMode && <MetricBoard metrics={metrics} feedback={feedback} />}
           <Input
             size="small"
             allowClear
@@ -1289,7 +1327,9 @@ export default function App() {
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
             onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
-            contestHot={contestMode && contestStep === "sign"}
+            contestHotAction={
+              contestMode && contestStep === "sign" ? (isReviewer(user) ? "confirm" : "submit") : ""
+            }
           />
         </main>
 
@@ -1474,7 +1514,7 @@ export default function App() {
         </span>
         <span>
           队列 {metrics?.alerts ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签 {metrics?.signed ?? "—"}
-          {feedback?.rates ? `　签发率 ${Math.round((feedback.rates.confirm || 0) * 100)}%` : ""}
+          {!contestMode && feedback?.rates ? `　签发率 ${Math.round((feedback.rates.confirm || 0) * 100)}%` : ""}
         </span>
       </footer>
     </div>

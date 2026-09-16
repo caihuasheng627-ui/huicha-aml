@@ -23,7 +23,7 @@ from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .display import case_no, mask_account
 from .knowledge import corpus_size, get_knowledge, list_knowledge, retrieval_mode, search_knowledge, search_unit_count
 from .llm import llm_mode, llm_model
-from .models import Alert, AuditLog, Customer, Investigation, utcnow
+from .models import Alert, AmlCase, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
 from .security import (
     auth_mode,
@@ -85,6 +85,54 @@ def _case_status_after_decide(decision: str, conclusion: str) -> str:
 
 def get_investigation(db: Session, alert_id: str) -> Investigation | None:
     return db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+
+
+_INVESTIGATE_GUARD = threading.Lock()
+_INVESTIGATE_RUNNING: set[str] = set()
+INVESTIGATE_BUSY = "本案正在调查"
+INVESTIGATE_FAIL = "调查失败，请重试"
+
+
+def _try_begin_investigation(alert_id: str) -> None:
+    with _INVESTIGATE_GUARD:
+        if alert_id in _INVESTIGATE_RUNNING:
+            raise HTTPException(409, INVESTIGATE_BUSY)
+        _INVESTIGATE_RUNNING.add(alert_id)
+
+
+def _end_investigation(alert_id: str) -> None:
+    with _INVESTIGATE_GUARD:
+        _INVESTIGATE_RUNNING.discard(alert_id)
+
+
+def _reset_alert_for_investigate(db: Session, alert: Alert) -> Investigation | None:
+    """重跑必须覆盖 pending_review / monitoring，并清掉人工处置痕迹。"""
+    alert.status = "investigating"
+    inv = get_investigation(db, alert.id)
+    if inv:
+        inv.human_decision = ""
+        inv.human_note = ""
+        inv.signed_by_id = ""
+        inv.signed_by_name = ""
+        inv.decided_at = None
+        try:
+            payload = json.loads(inv.payload_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload.get("human_review"), dict):
+            payload["human_review"] = {}
+        v2 = payload.get("case_v2")
+        if isinstance(v2, dict):
+            v2["human_decision"] = ""
+            v2["status"] = "INVESTIGATING"
+            payload["case_v2"] = v2
+        inv.payload_json = json.dumps(payload, ensure_ascii=False)
+    rec = db.get(AmlCase, alert.id)
+    if rec:
+        rec.human_decision = ""
+        rec.status = "OPEN"
+        rec.updated_at = utcnow()
+    return inv
 
 
 @asynccontextmanager
@@ -166,9 +214,8 @@ def health():
             "SQLite 文件库，调查载荷明文存储，不是银行级加密",
             "LLM 出站经 PrivacyMap 脱敏并检漏；工作台展示受控明文",
             "知识库含现行法律规章官方条款（按条切块）+ 作业转述；混合检索（关键词 + 字符 TF-IDF），目录条数见 kb_docs，检索单元见 kb_search_units",
-            "告警为合成数据，gold_label 与规则模板同源；合成集 Macro-F1 不是生产准确率",
+            "告警为合成数据，gold_label 与规则模板同源，不是生产准确率",
             "人效对照未完成前不得填写效率提升百分比",
-            "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
     }
 
@@ -334,28 +381,34 @@ def investigate(
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "告警不存在")
+    _try_begin_investigation(alert_id)
     try:
-        result = run_investigation(
+        _reset_alert_for_investigate(db, alert)
+        db.commit()
+        try:
+            result = run_investigation(
+                db,
+                alert_id,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+            )
+        except PrivacyLeakError as e:
+            raise HTTPException(502, str(e)) from e
+        except RuntimeError as e:
+            raise HTTPException(502, str(e)) from e
+        _finalize_investigation(
             db,
-            alert_id,
+            alert,
+            result,
             use_challenger=use_challenger,
             inject_hallucination=inject_hallucination,
             experiment_mode=experiment_mode,
         )
-    except PrivacyLeakError as e:
-        raise HTTPException(502, str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(502, str(e)) from e
-    _finalize_investigation(
-        db,
-        alert,
-        result,
-        use_challenger=use_challenger,
-        inject_hallucination=inject_hallucination,
-        experiment_mode=experiment_mode,
-    )
-    db.commit()
-    return result
+        db.commit()
+        return result
+    finally:
+        _end_investigation(alert_id)
 
 
 def _finalize_investigation(
@@ -381,8 +434,7 @@ def _finalize_investigation(
     else:
         inv = Investigation(alert_id=alert_id, payload_json=blob, conclusion=result["conclusion"])
         db.add(inv)
-    if alert.status in {"pending", "closed", "ready_to_file", "modified"}:
-        alert.status = "investigating"
+    alert.status = "investigating"
     scoring = result.get("scoring") or {}
     run = result.get("challenger_run") or {}
     validator = result.get("validator_result") or {}
@@ -465,6 +517,7 @@ def investigate_stream(
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "告警不存在")
+    _try_begin_investigation(alert_id)
     events: queue.Queue = queue.Queue()
 
     def worker() -> None:
@@ -472,12 +525,14 @@ def investigate_stream(
         try:
             row = session.get(Alert, alert_id)
             if not row:
-                events.put({"event": "error", "detail": "告警不存在"})
+                events.put({"event": "error", "detail": INVESTIGATE_FAIL})
                 return
 
             def emit(event: dict) -> None:
                 events.put(event)
 
+            _reset_alert_for_investigate(session, row)
+            session.commit()
             result = run_investigation(
                 session,
                 alert_id,
@@ -496,20 +551,25 @@ def investigate_stream(
             )
             session.commit()
             events.put({"event": "done", "payload": result})
-        except PrivacyLeakError as exc:
+        except PrivacyLeakError:
             session.rollback()
-            events.put({"event": "error", "detail": str(exc)})
-        except RuntimeError as exc:
+            events.put({"event": "error", "detail": "出站检漏失败，本轮已中止"})
+        except RuntimeError:
             session.rollback()
-            events.put({"event": "error", "detail": str(exc)})
-        except Exception as exc:
+            events.put({"event": "error", "detail": INVESTIGATE_FAIL})
+        except Exception:
             session.rollback()
-            events.put({"event": "error", "detail": str(exc)})
+            events.put({"event": "error", "detail": INVESTIGATE_FAIL})
         finally:
             session.close()
+            _end_investigation(alert_id)
             events.put(None)
 
-    threading.Thread(target=worker, daemon=True).start()
+    try:
+        threading.Thread(target=worker, daemon=True).start()
+    except Exception:
+        _end_investigation(alert_id)
+        raise
 
     def generate():
         while True:
@@ -656,8 +716,12 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
     )
     inv.human_decision = body.decision
     inv.human_note = body.note
-    inv.signed_by_id = user.staff_id
-    inv.signed_by_name = user.name
+    if body.decision in {"confirm", "modify"}:
+        inv.signed_by_id = user.staff_id
+        inv.signed_by_name = user.name
+    elif body.decision == "submit":
+        inv.signed_by_id = ""
+        inv.signed_by_name = ""
     inv.decided_at = utcnow()
     alert.status = _alert_status_after_decide(body.decision, payload.get("conclusion") or "")
     v2 = payload.setdefault("case_v2", {})
@@ -668,6 +732,9 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
         review["submitted_by_name"] = user.name
         review["submitted_at"] = format_cn(inv.decided_at)
         review["submit_note"] = body.note
+        review["signed_by_id"] = ""
+        review["signed_by_name"] = ""
+        review["signed_by"] = ""
     review.update(
         {
             "decision": body.decision,
@@ -675,11 +742,12 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
             "at": format_cn(inv.decided_at),
             "acted_by_id": user.staff_id,
             "acted_by_name": user.name,
-            "signed_by_id": user.staff_id,
-            "signed_by_name": user.name,
-            "signed_by": user.label(),
         }
     )
+    if body.decision in {"confirm", "modify"}:
+        review["signed_by_id"] = user.staff_id
+        review["signed_by_name"] = user.name
+        review["signed_by"] = user.label()
     payload["human_review"] = review
     inv.payload_json = json.dumps(payload, ensure_ascii=False)
     note = f"：{body.note}" if body.note else ""
@@ -713,16 +781,16 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
         body.decision,
         body.note,
         reco,
-        signed_by_id=user.staff_id,
-        signed_by_name=user.name,
+        signed_by_id=user.staff_id if body.decision in {"confirm", "modify"} else "",
+        signed_by_name=user.name if body.decision in {"confirm", "modify"} else "",
     )
     db.commit()
     return {
         "ok": True,
         "status": alert.status,
         "human_decision": body.decision,
-        "signed_by_id": user.staff_id,
-        "signed_by_name": user.name,
+        "signed_by_id": inv.signed_by_id or "",
+        "signed_by_name": inv.signed_by_name or "",
         "ai_recommendation": reco,
         "final_action": "human_only",
         "note": "AI 建议已记录，最终处置以人工为准，系统不会自动报送。",
@@ -832,10 +900,15 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
     report = payload.get("report", {})
     signed = inv.human_decision or ""
     signed_line = DECIDE_LABEL.get(signed, signed) if signed else "否（本文件仅为草稿）"
-    if inv.signed_by_name and inv.signed_by_id:
-        signer = f"{inv.signed_by_name}（{inv.signed_by_id}）"
+    review = payload.get("human_review") or {}
+    submitted_name = review.get("submitted_by_name") or "（未提交）"
+    if signed in {"confirm", "modify"} and (inv.signed_by_name or inv.signed_by_id):
+        if inv.signed_by_name and inv.signed_by_id:
+            signer = f"{inv.signed_by_name}（{inv.signed_by_id}）"
+        else:
+            signer = inv.signed_by_name or inv.signed_by_id
     else:
-        signer = inv.signed_by_name or inv.signed_by_id or "（未绑定用户）"
+        signer = "（未签发）"
     v2 = payload.get("case_v2") or {}
     scoring = payload.get("scoring") or {}
     priv = payload.get("privacy") or {}
@@ -856,7 +929,7 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
         f"- 规则分：{payload.get('confidence')}（{payload.get('confidence_kind') or 'rule_score_not_calibrated'}，非校准置信度）",
         f"- 人工签发：{signed_line}",
-        f"- 提交人：{(payload.get('human_review') or {}).get('submitted_by_name') or '（未提交）'}",
+        f"- 提交人：{submitted_name}",
         f"- 签发人：{signer}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",

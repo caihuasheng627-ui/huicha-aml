@@ -76,8 +76,8 @@ const PIPELINE = [
 const SIGN_STAGE = {
   id: "human",
   role: "Human",
-  title: "人签",
-  caption: "调查员做最终决策",
+  title: "签发",
+  caption: "提交复核 / 同意签发",
 };
 
 const RAIL = [...PIPELINE, SIGN_STAGE];

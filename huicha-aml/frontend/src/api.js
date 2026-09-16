@@ -203,6 +203,10 @@ export function parseSseBlocks(buffer) {
   return { events, rest };
 }
 
+export function shouldFallbackInvestigate(err) {
+  return Boolean(err?.streamFailed);
+}
+
 export async function streamInvestigate(
   id,
   { useChallenger = true, injectHallucination = false, experimentMode = false } = {},
@@ -213,28 +217,32 @@ export async function streamInvestigate(
     inject_hallucination: String(injectHallucination),
     experiment_mode: String(experimentMode),
   });
-  let r;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), INVESTIGATE_TIMEOUT_MS);
+  let opened = false;
   try {
-    r = await request(`/api/alerts/${id}/investigate/stream?${q}`, {
-      method: "GET",
-      timeoutMs: INVESTIGATE_TIMEOUT_MS,
-    });
-  } catch (e) {
-    const err = new Error(e?.message || "无法连接调查服务");
-    err.streamFailed = true;
-    throw err;
-  }
-  if (!r.ok) throw new Error(await readError(r, "调查失败"));
-  if (!r.body || typeof r.body.getReader !== "function") {
-    const err = new Error("调查流不可用");
-    err.streamFailed = true;
-    throw err;
-  }
-  const reader = r.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  let payload = null;
-  try {
+    let r;
+    try {
+      r = await request(`/api/alerts/${id}/investigate/stream?${q}`, {
+        method: "GET",
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      const err = new Error(e?.message || "无法连接调查服务");
+      err.streamFailed = true;
+      throw err;
+    }
+    if (!r.ok) throw new Error(await readError(r, "调查失败"));
+    if (!r.body || typeof r.body.getReader !== "function") {
+      const err = new Error("调查流不可用");
+      err.streamFailed = true;
+      throw err;
+    }
+    opened = true;
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let payload = null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -247,20 +255,16 @@ export async function streamInvestigate(
         if (ev.event === "error") throw new Error(ev.data?.detail || "调查失败");
       }
     }
+    if (!payload) throw new Error(ctrl.signal.aborted ? "调查超时" : "调查流未完成");
+    return payload;
   } catch (e) {
-    if (e?.message && !e.streamFailed && e.message !== "无法连接调查服务" && e.name !== "AbortError") {
-      throw e;
+    if (opened && !e?.streamFailed && (e?.name === "AbortError" || ctrl.signal.aborted)) {
+      throw new Error("调查超时");
     }
-    const err = e instanceof Error ? e : new Error("调查流中断");
-    err.streamFailed = true;
-    throw err;
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!payload) {
-    const err = new Error("调查流未完成");
-    err.streamFailed = true;
-    throw err;
-  }
-  return payload;
 }
 
 export async function fetchChecklist(id) {

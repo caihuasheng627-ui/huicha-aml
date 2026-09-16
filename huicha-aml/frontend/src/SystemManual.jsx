@@ -19,7 +19,7 @@ const PANELS = [
 const CONCLUSIONS = [
   ["排除", "ok", "证据足以说明交易与客户身份、职业或经营特征相符，但仍须写明排除理由。"],
   ["继续观察", "warn", "疑点未排除也未达上报门槛，保留监测。"],
-  ["建议上报", "risk", "仅为草稿建议，须调查员签发后再由复核与总部审定流程处理。"],
+  ["建议上报", "risk", "仅为草稿建议，须提交复核 / 同意签发后再由总部审定流程处理。"],
 ];
 
 const BLOCKERS = [
@@ -198,7 +198,7 @@ export default function SystemManual({ open, onClose, health }) {
             </div>
             <div>
               <dt>责任谁负</dt>
-              <dd>调查员签发；系统不会变成已报送。</dd>
+              <dd>调查员提交复核，合规岗同意签发；系统不会变成已报送。</dd>
             </div>
             <div>
               <dt>和监测什么关系</dt>

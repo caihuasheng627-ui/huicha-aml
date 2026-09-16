@@ -140,7 +140,9 @@ huicha-aml/
   experiments/     benchmark / ablation / hallucination 等框架
 ```
 
-调查流水线拆分：`agents.py` 编排；`tools.py` 取数；`analyst_rules.py` 提取指标；`decision.py` 负责 Judge 契约、规则对照与政策护栏；`llm.py` 调用 Judge/Reporter；`report_draft.py` 提供降级模板；`case_store.py` 落库。
+调查流水线：`agents.py` 门面；`pipeline/` 显式 Stage（Planner → Collector → Privacy → Analyst → Judge → Skeptic → Reporter → Guardrail → Assemble）；`tools.py` 取数；`analyst_rules.py` 提取指标；`decision.py` 负责 Judge 契约、规则对照与政策护栏；`llm.py` 统一 `call_json`/`call_text` 调用 Judge/Reporter；`report_draft.py` 提供降级模板；`case_store.py` 落库。
+
+可选环境变量：`HUICHA_MODEL_JUDGE` / `HUICHA_MODEL_REPORTER` 按角色覆盖模型；`HUICHA_JUDGE_TOOLS=1` 允许 Judge 在白名单内最多两轮只读补证（默认关）。调查进度可通过 `GET /api/alerts/{id}/investigate/stream` 以 SSE 推送阶段事件；工作台优先走流式并在失败时回落 POST。
 
 工作台并排展示“规则对照 / AI Judge / 护栏后建议”。两者**不相加**。字段 `confidence_kind=llm_self_assessed_not_calibrated` 明确模型把握度未经校准。
 

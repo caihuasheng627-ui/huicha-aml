@@ -34,6 +34,7 @@ import {
   login,
   logout,
   runInvestigate,
+  streamInvestigate,
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
@@ -411,6 +412,7 @@ export default function App() {
   const [kbLoading, setKbLoading] = useState(false);
   const [contestMode, setContestMode] = useState(false);
   const [contestStep, setContestStep] = useState("draft");
+  const [stageHint, setStageHint] = useState("");
   const openSeq = useRef(0);
   const startContestRef = useRef(null);
   const inv = detail?.investigation;
@@ -546,13 +548,34 @@ export default function App() {
     if (id && labMode && DEMOS.some((d) => d.id === id)) setQueueKind("demo");
     setInvError(false);
     setLoading(true);
+    setStageHint("正在调查…");
     open(id).catch(() => {});
+    const opts = {
+      useChallenger: experimentMode ? currentChallengerEnabled : true,
+      injectHallucination,
+      experimentMode,
+    };
+    const stageLabels = {
+      Planner: "规划调查计划…",
+      Collector: "归集证据…",
+      Privacy: "进模脱敏…",
+      Analyst: "提取事实指标…",
+      Judge: "Judge 生成建议中…",
+      Skeptic: "引用校验与反事实…",
+      PolicyGuardrail: "政策护栏检查…",
+      Reporter: "生成调查底稿…",
+    };
     try {
-      await runInvestigate(id, {
-        useChallenger: experimentMode ? currentChallengerEnabled : true,
-        injectHallucination,
-        experimentMode,
-      });
+      try {
+        await streamInvestigate(id, opts, (ev) => {
+          if (ev?.status === "started" && ev.role && ev.role !== "Assemble") {
+            setStageHint(stageLabels[ev.role] || `${ev.role} 进行中…`);
+          }
+        });
+      } catch (e) {
+        if (!e?.streamFailed) throw e;
+        await runInvestigate(id, opts);
+      }
       await open(id);
       await loadList();
       if (contestMode) setContestStep("evidence");
@@ -561,6 +584,7 @@ export default function App() {
       message.error(e.message || "调查失败");
     } finally {
       setLoading(false);
+      setStageHint("");
     }
   }
 
@@ -1092,7 +1116,7 @@ export default function App() {
               </div>
               <Space wrap style={{ marginBottom: 10 }}>
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
-                  {inv ? "重新调查" : "开始调查"}
+                  {loading ? stageHint || "调查中…" : inv ? "重新调查" : "开始调查"}
                 </Button>
                 {detail?.human_decision ? (
                   <>
@@ -1198,6 +1222,7 @@ export default function App() {
                     items={inv.steps.map((s) => {
                       const defaultOpen = labMode && ["Analyst", "Judge", "慧查agent", "Skeptic", "Reporter"].includes(s.role);
                       const opened = openSteps[s.role] ?? defaultOpen;
+                      const stageMs = (inv.trace || []).find((t) => t.role === s.role)?.elapsed_ms;
                       return {
                         color: (s.role === "Judge" || s.role === "慧查agent") && inv.use_challenger === false ? "gray" : "blue",
                         children: (
@@ -1213,6 +1238,11 @@ export default function App() {
                               }
                             >
                               {s.role} · {s.title} {opened ? "▾" : "▸"}
+                              {labMode && stageMs != null ? (
+                                <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>
+                                  {stageMs} ms
+                                </span>
+                              ) : null}
                             </button>
                             {opened && (
                               <>

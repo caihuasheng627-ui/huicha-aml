@@ -179,6 +179,90 @@ export async function runInvestigate(id, { useChallenger = true, injectHallucina
   return r.json();
 }
 
+export function parseSseBlocks(buffer) {
+  const events = [];
+  const parts = String(buffer || "").split("\n\n");
+  const rest = parts.pop() ?? "";
+  for (const block of parts) {
+    if (!block.trim()) continue;
+    let event = "message";
+    const dataLines = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+    }
+    const raw = dataLines.join("\n");
+    let data = raw;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      /* keep text */
+    }
+    events.push({ event, data });
+  }
+  return { events, rest };
+}
+
+export async function streamInvestigate(
+  id,
+  { useChallenger = true, injectHallucination = false, experimentMode = false } = {},
+  onStage,
+) {
+  const q = new URLSearchParams({
+    use_challenger: String(useChallenger),
+    inject_hallucination: String(injectHallucination),
+    experiment_mode: String(experimentMode),
+  });
+  let r;
+  try {
+    r = await request(`/api/alerts/${id}/investigate/stream?${q}`, {
+      method: "GET",
+      timeoutMs: INVESTIGATE_TIMEOUT_MS,
+    });
+  } catch (e) {
+    const err = new Error(e?.message || "无法连接调查服务");
+    err.streamFailed = true;
+    throw err;
+  }
+  if (!r.ok) throw new Error(await readError(r, "调查失败"));
+  if (!r.body || typeof r.body.getReader !== "function") {
+    const err = new Error("调查流不可用");
+    err.streamFailed = true;
+    throw err;
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let payload = null;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parsed = parseSseBlocks(buf);
+      buf = parsed.rest;
+      for (const ev of parsed.events) {
+        if (ev.event === "stage") onStage?.(ev.data);
+        if (ev.event === "done") payload = ev.data?.payload || ev.data;
+        if (ev.event === "error") throw new Error(ev.data?.detail || "调查失败");
+      }
+    }
+  } catch (e) {
+    if (e?.message && !e.streamFailed && e.message !== "无法连接调查服务" && e.name !== "AbortError") {
+      throw e;
+    }
+    const err = e instanceof Error ? e : new Error("调查流中断");
+    err.streamFailed = true;
+    throw err;
+  }
+  if (!payload) {
+    const err = new Error("调查流未完成");
+    err.streamFailed = true;
+    throw err;
+  }
+  return payload;
+}
+
 export async function fetchChecklist(id) {
   const r = await request(`/api/alerts/${id}/checklist`);
   if (!r.ok) throw new Error(await readError(r, "无法加载补证清单"));

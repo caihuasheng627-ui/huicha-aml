@@ -44,7 +44,7 @@ def auth_headers(client):
 
 @pytest.fixture()
 def client(monkeypatch):
-    def fake_chat(messages, *, temperature=0.0, max_tokens=900):
+    def fake_chat(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
         user = messages[-1]["content"]
         usage = {
             "prompt_tokens": 10,

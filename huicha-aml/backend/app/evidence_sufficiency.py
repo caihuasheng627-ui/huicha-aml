@@ -181,9 +181,11 @@ def search_minimal_set(
             continue
         cluster = set(leftover)
         finding_title = cand.get("title") or leftover[0]
+        is_first = rounds == 0
         rounds += 1
+        removed_for_round = cluster if is_first else (set(working_removed) | cluster)
         try:
-            payload = run_round(cluster, f"移除指标「{finding_title}」及其证据后重新判断")
+            payload = run_round(removed_for_round, f"移除指标「{finding_title}」及其证据后重新判断")
         except (RuntimeError, ValueError) as exc:
             payload = {"error": str(exc), "judge": None, "validation": {"passed": False, "issues": []}}
         error = str(payload.get("error") or "")

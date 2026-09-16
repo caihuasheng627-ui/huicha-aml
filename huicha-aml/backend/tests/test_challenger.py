@@ -431,8 +431,9 @@ def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
     def fake_enrich(**kwargs):
         prior = kwargs.get("prior_issues") or []
         if any(p.get("kind") == "counterfactual" for p in prior):
-            seen["findings"] = kwargs["findings"]
-            seen["allowed"] = kwargs["allowed_evidence"]
+            if "findings" not in seen:
+                seen["findings"] = kwargs["findings"]
+                seen["allowed"] = kwargs["allowed_evidence"]
             return _valid_judge(kwargs["allowed_evidence"][0], disposition="observe"), {}
         return _valid_judge("TX-B-IN-01"), {}
 
@@ -515,18 +516,20 @@ def test_counterfactual_syncs_predicate_args_with_removed_ids(client, monkeypatc
         prior = kwargs.get("prior_issues") or []
         ids = ["TX-L-01", "TX-L-02", "TX-L-03"]
         if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
-            allowed = [e for e in (kwargs.get("allowed_evidence") or []) if str(e).startswith("TX-")]
-            seen["allowed"] = allowed
+            allowed = list(kwargs.get("allowed_evidence") or [])
+            if "allowed" not in seen:
+                seen["allowed"] = [e for e in allowed if str(e).startswith("TX-")]
             kept = [e for e in ids if e in allowed]
+            cite = kept[:1] or [e for e in allowed if e][:1]
             return (
                 {
                     "disposition": "observe",
                     "confidence": 0.6,
                     "typologies": [],
-                    "supporting_evidence_ids": kept[:1],
+                    "supporting_evidence_ids": cite,
                     "contradicting_evidence_ids": [],
                     "missing_evidence": ["资金来源说明"],
-                    "rationale": [{"text": "移除过桥后仅余观察", "evidence_ids": kept[:1] or allowed[:1]}],
+                    "rationale": [{"text": "移除过桥后仅余观察", "evidence_ids": cite}],
                     "next_actions": [],
                 },
                 {},

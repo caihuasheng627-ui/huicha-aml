@@ -5,6 +5,7 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
+from ..llm import usage_tokens
 from .stages import STAGES
 from .state import InvestigationState, RunOptions, StageContext, StageDeps
 
@@ -77,7 +78,7 @@ def _stage_usage(role: str, state: InvestigationState) -> dict:
         blob = state.judge_usage or {}
     elif role == "Reporter":
         blob = state.reporter_usage or {}
-    tokens = int(blob.get("total_tokens") or 0) if isinstance(blob, dict) else 0
+    tokens = usage_tokens(blob) if isinstance(blob, dict) else 0
     cached = bool(blob.get("cached")) if isinstance(blob, dict) else False
     llm_calls = 1 if blob else 0
     return {"llm_calls": llm_calls, "tokens": tokens, "cached": cached}

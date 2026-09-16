@@ -132,6 +132,36 @@ def llm_provider_label() -> str:
     return labels.get(mode, mode)
 
 
+def usage_tokens(usage: dict | None) -> int:
+    if not isinstance(usage, dict):
+        return 0
+    if usage.get("total_tokens") is not None:
+        try:
+            return max(0, int(usage["total_tokens"]))
+        except (TypeError, ValueError):
+            pass
+    try:
+        return max(0, int(usage.get("prompt_tokens") or 0) + int(usage.get("completion_tokens") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def investigation_tokens(payload: dict | None) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    comparison = payload.get("comparison") or {}
+    if comparison.get("tokens") not in (None, ""):
+        try:
+            return max(0, int(comparison["tokens"]))
+        except (TypeError, ValueError):
+            pass
+    usage = (payload.get("llm") or {}).get("usage") or {}
+    total = usage_tokens(usage.get("judge")) + usage_tokens(usage.get("reporter"))
+    if total:
+        return total
+    return sum(int((row or {}).get("tokens") or 0) for row in (payload.get("trace") or []) if isinstance(row, dict))
+
+
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     usage = {
         "prompt_tokens": 8,

@@ -185,6 +185,18 @@ def test_chat_parses_usage(monkeypatch):
     assert usage["total_tokens"] == 3
 
 
+def test_usage_and_investigation_tokens():
+    from app.llm import investigation_tokens, usage_tokens
+
+    assert usage_tokens(None) == 0
+    assert usage_tokens({"prompt_tokens": 10, "completion_tokens": 20}) == 30
+    assert usage_tokens({"total_tokens": 12, "prompt_tokens": 1}) == 12
+    assert investigation_tokens({"comparison": {"tokens": 48}}) == 48
+    assert investigation_tokens({
+        "llm": {"usage": {"judge": {"total_tokens": 10}, "reporter": {"prompt_tokens": 2, "completion_tokens": 3}}},
+    }) == 15
+
+
 def _judge_inputs() -> dict:
     return {
         "alert": {"alert_type": "大额转账", "upstream": "monitoring"},

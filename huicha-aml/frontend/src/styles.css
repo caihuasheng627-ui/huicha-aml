@@ -563,7 +563,7 @@ body {
 
 .kpi {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -590,7 +590,7 @@ body {
 .kpi-card.risk { background: var(--crimson-soft); border-color: #fecaca; }
 .kpi-card.ok { background: var(--pass-soft); border-color: #ccfbf1; }
 .kpi-card.warn { background: var(--watch-soft); border-color: #fef3c7; }
-.kpi-card .k { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.kpi-card .k { font-size: 11px; font-weight: 500; letter-spacing: 0.02em; color: var(--muted); }
 .kpi-card .v {
   font-size: 18px;
   font-weight: 700;
@@ -1815,6 +1815,7 @@ body {
   .layout { grid-template-columns: 260px minmax(0, 1fr) 300px; }
   .viz-row { grid-template-columns: 1fr; }
   .theater-path { display: none; }
+  .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* 待补证：与其他工作区面板同级，不作回单装饰 */
 .slip {

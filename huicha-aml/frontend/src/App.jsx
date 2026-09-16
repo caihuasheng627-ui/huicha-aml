@@ -350,6 +350,33 @@ function conclusionTone(label) {
   return "risk";
 }
 
+function formatCount(n) {
+  if (n == null || n === "" || Number.isNaN(Number(n))) return "—";
+  return Number(n).toLocaleString("zh-CN");
+}
+
+function usageTokens(blob) {
+  if (!blob || typeof blob !== "object") return 0;
+  const total = Number(blob.total_tokens);
+  if (Number.isFinite(total)) return Math.max(0, total);
+  const prompt = Number(blob.prompt_tokens || 0);
+  const completion = Number(blob.completion_tokens || 0);
+  return Math.max(0, (Number.isFinite(prompt) ? prompt : 0) + (Number.isFinite(completion) ? completion : 0));
+}
+
+function investigationTokens(inv) {
+  if (!inv) return null;
+  if (inv.comparison?.tokens != null && inv.comparison.tokens !== "") {
+    const n = Number(inv.comparison.tokens);
+    if (Number.isFinite(n)) return n;
+  }
+  const usage = inv.llm?.usage || {};
+  const nested = usageTokens(usage.judge) + usageTokens(usage.reporter);
+  if (nested) return nested;
+  if (usage.total_tokens != null) return usageTokens(usage);
+  return (inv.trace || []).reduce((sum, row) => sum + Number(row?.tokens || 0), 0);
+}
+
 function MetricBoard({ metrics, feedback }) {
   const quality = metrics?.quality || {};
   const decided = feedback?.decisions
@@ -360,6 +387,7 @@ function MetricBoard({ metrics, feedback }) {
     ["拦截无效 Claim", quality.rejected_claims ?? "—", "伪造/跨案/谓词失败"],
     ["事实回查阻断", quality.fact_check_blocked ?? "—", "阻止直接签发"],
     ["平均调查耗时", quality.avg_investigation_ms == null ? "—" : `${quality.avg_investigation_ms} ms`, "从调查开始到草稿"],
+    ["消耗 Token", metrics?.tokens == null ? "—" : formatCount(metrics.tokens), "Judge + Reporter 合计"],
     ["人工采纳率", decided ? `${Math.round((feedback.decisions.confirm / decided) * 100)}%` : "—", decided ? `${decided} 次已处置` : "尚无人工样本"],
   ];
   return (
@@ -381,7 +409,7 @@ function MetricBoard({ metrics, feedback }) {
         ))}
       </div>
       <div className="metric-foot">
-        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
+        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 消耗 Token {formatCount(metrics?.tokens)} · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
       </div>
     </section>
   );
@@ -1016,7 +1044,7 @@ export default function App() {
         <aside className="col">
           <div className="col-title">
             <h3>{labMode ? "待办告警" : "我的待办"}</h3>
-            <Tag>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : queueKind === "done" ? doneCount : todoCount} 条</Tag>
+            <Tag>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : todoCount} 条</Tag>
           </div>
           <div
             className={`queue-filter${(labMode ? queueKind === "normal" : queueKind === "done") ? " is-right" : ""}`}
@@ -1151,6 +1179,15 @@ export default function App() {
                     {inv?.comparison ? `${inv.comparison.agent_ms} ms · ${inv.comparison.tools_called} 次` : "—"}
                   </div>
                 </div>
+                <div className="kpi-card">
+                  <div className="k">消耗 Token</div>
+                  <div className="v">{inv ? formatCount(investigationTokens(inv)) : "—"}</div>
+                  {inv?.llm?.usage ? (
+                    <div className="hint" style={{ margin: "6px 0 0" }}>
+                      Judge {formatCount(usageTokens(inv.llm.usage.judge))} · Reporter {formatCount(usageTokens(inv.llm.usage.reporter))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <Space wrap style={{ marginBottom: 10 }}>
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
@@ -1260,7 +1297,9 @@ export default function App() {
                     items={inv.steps.map((s) => {
                       const defaultOpen = labMode && ["Analyst", "Judge", "慧查agent", "Skeptic", "Reporter"].includes(s.role);
                       const opened = openSteps[s.role] ?? defaultOpen;
-                      const stageMs = (inv.trace || []).find((t) => t.role === s.role)?.elapsed_ms;
+                      const stageTrace = (inv.trace || []).find((t) => t.role === s.role);
+                      const stageMs = stageTrace?.elapsed_ms;
+                      const stageTok = stageTrace?.tokens;
                       return {
                         color: (s.role === "Judge" || s.role === "慧查agent") && inv.use_challenger === false ? "gray" : "blue",
                         children: (
@@ -1278,7 +1317,7 @@ export default function App() {
                               {s.role} · {s.title} {opened ? "▾" : "▸"}
                               {labMode && stageMs != null ? (
                                 <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>
-                                  {stageMs} ms
+                                  {stageMs} ms{stageTok ? ` · ${formatCount(stageTok)} tok` : ""}
                                 </span>
                               ) : null}
                             </button>
@@ -1513,7 +1552,7 @@ export default function App() {
           反洗钱调查工作台　合成数据　不自动报送　调查员提交 / 复核岗签发
         </span>
         <span>
-          队列 {metrics?.alerts ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签 {metrics?.signed ?? "—"}
+          队列 {metrics?.alerts ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签 {metrics?.signed ?? "—"}　Token {formatCount(metrics?.tokens)}
           {!contestMode && feedback?.rates ? `　签发率 ${Math.round((feedback.rates.confirm || 0) * 100)}%` : ""}
         </span>
       </footer>

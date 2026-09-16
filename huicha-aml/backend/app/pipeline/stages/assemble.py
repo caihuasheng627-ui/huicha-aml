@@ -6,7 +6,7 @@ from ...analyst_rules import CONCLUSION_LABEL
 from ...case_store import persist_investigation
 from ...checklist import attach_checklist, enrich_counterparties
 from ...decision import decision_claims
-from ...llm import llm_model, llm_provider_label
+from ...llm import llm_model, llm_provider_label, usage_tokens
 from ...logging_util import audit, warning
 from ...prompts import prompt_version
 from ...risk import CONCLUSION_TO_RECO, RECO_LABEL
@@ -166,6 +166,7 @@ class AssembleStage:
             }
         )
         elapsed_ms = int((time.perf_counter() - state.started) * 1000)
+        tokens = usage_tokens(judge_usage) + usage_tokens(reporter_usage)
         payload = {
             "alert": alert,
             "customer": customer,
@@ -215,7 +216,7 @@ class AssembleStage:
                 "model": llm_model(),
                 "masked": True,
                 "fact_retry": fact_retry,
-                "usage": {"judge": judge_usage, "reporter": reporter_usage},
+                "usage": {"judge": judge_usage, "reporter": reporter_usage, "total_tokens": tokens},
                 "models": {"judge": llm_model("judge"), "reporter": llm_model("reporter")},
             },
             "privacy": privacy.receipt(),
@@ -282,6 +283,7 @@ class AssembleStage:
             "comparison": {
                 "agent_ms": elapsed_ms,
                 "tools_called": len(tool_trace),
+                "tokens": tokens,
                 "elements_filled": sum(1 for e in report["elements"] if (e.get("value") or "").strip()),
                 "elements_total": len(report["elements"]),
                 "evidence_linkable": True,

@@ -22,7 +22,7 @@ from .checklist import (
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .display import case_no, mask_account
 from .knowledge import corpus_size, get_knowledge, list_knowledge, retrieval_mode, search_knowledge, search_unit_count
-from .llm import llm_mode, llm_model
+from .llm import investigation_tokens, llm_mode, llm_model
 from .models import Alert, AmlCase, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
 from .security import (
@@ -821,6 +821,7 @@ def metrics(db: Session = Depends(get_db)):
     ]
     fact_blocked = sum(1 for p in parsed_payloads if p.get("fact_issues"))
     elapsed = [float(p["elapsed_ms"]) for p in parsed_payloads if p.get("elapsed_ms") is not None]
+    tokens = sum(investigation_tokens(p) for p in parsed_payloads)
     validation_audits = db.query(AuditLog).filter(AuditLog.action == "validator").count()
     decision_audits = db.query(AuditLog).filter(AuditLog.action == "decide").count()
     return {
@@ -830,6 +831,7 @@ def metrics(db: Session = Depends(get_db)):
         "store": "sqlite",
         "drafts": len(invs),
         "signed": signed,
+        "tokens": tokens,
         "by_status": by_status,
         "quality": {
             "evidence_contract_pass_rate": round(

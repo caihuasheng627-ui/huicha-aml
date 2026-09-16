@@ -1,5 +1,20 @@
 import { useEffect, useState } from "react";
+import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 import { displayName, maskAccount } from "./workstation.js";
+
+export function EvidenceTokens({ text, onSelect }) {
+  return splitEvidenceParts(text).map((p, i) => {
+    if (!p) return null;
+    if (isEvidenceToken(p)) {
+      return (
+        <button key={i} type="button" className="token" onClick={() => onSelect(p)}>
+          {p}
+        </button>
+      );
+    }
+    return <span key={i}>{p}</span>;
+  });
+}
 
 export function clickSource(e) {
   const raw = String(e?.raw_reference || "");
@@ -307,11 +322,17 @@ export function JudgePanel({ judge, baseline, guardrails, validation, onSelect, 
           <span>{support.length} / {counter.length} / {missing.length}</span>
           <ul>
             {(judge.rationale || []).slice(0, 4).map((row, i) => (
-              <li key={`${row.text}-${i}`}>
-                <button type="button" className="token" onClick={() => row.evidence_ids?.[0] && onSelect(row.evidence_ids[0])}>
-                  {row.text}
-                </button>
-                <em>{(row.evidence_ids || []).join("、")}</em>
+              <li key={`${row.text}-${i}`} className="ch-rationale">
+                <span className="ch-rationale-text">
+                  <EvidenceTokens text={row.text} onSelect={onSelect} />
+                </span>
+                <span className="ch-rationale-ids">
+                  {(row.evidence_ids || []).map((id, j) => (
+                    <button key={`${id}-${j}`} type="button" className="token" onClick={() => onSelect(id)}>
+                      {id}
+                    </button>
+                  ))}
+                </span>
               </li>
             ))}
           </ul>

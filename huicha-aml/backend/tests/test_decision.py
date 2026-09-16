@@ -82,7 +82,7 @@ def test_false_predicate_is_rebound_when_snapshot_has_true_one():
     assert claims[0]["score_kind"] == "predicate_verified"
 
 
-def test_cross_case_tx_in_predicate_args_is_sanitized_then_bound():
+def test_cross_case_tx_in_predicate_args_fails_citation():
     decision = normalize_judge(
         _judge(
             predicate="consecutive_transfer_chain",
@@ -91,11 +91,8 @@ def test_cross_case_tx_in_predicate_args_is_sanitized_then_bound():
         )
     )
     result = verify_judge(decision, allowed_evidence=ALLOWED, facts=FACTS)
-    assert result["passed"] is True
-    claims = verified_claims_from_judge(decision)
-    assert claims
-    assert claims[0]["score_kind"] == "predicate_verified"
-    assert "TX-A-IN-01" not in (claims[0]["args"].get("tx_ids") or [])
+    assert result["passed"] is False
+    assert "TX-A-IN-01" in result["invalid_ids"]
 
 
 def test_disallowed_predicate_args_are_rebound_from_snapshot():

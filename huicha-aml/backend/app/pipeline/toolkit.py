@@ -121,6 +121,31 @@ def _record_denied(name: str, reason: str) -> None:
         )
 
 
+def txs_from_timeline(rows: list | None) -> list[dict]:
+    """把时间线行压成谓词快照可用的交易记录，便于 get_timeline 补进本案 txs。"""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        tx_id = str(row.get("tx_id") or row.get("id") or "").strip()
+        if not tx_id or tx_id in seen:
+            continue
+        seen.add(tx_id)
+        out.append(
+            {
+                "id": tx_id,
+                "from_account": row.get("from_account"),
+                "to_account": row.get("to_account"),
+                "amount": row.get("amount"),
+                "occurred_at": row.get("occurred_at") or row.get("time"),
+                "channel": row.get("channel"),
+                "remark": row.get("remark"),
+            }
+        )
+    return out
+
+
 def execute_judge_tool(
     name: str,
     args: dict,
@@ -156,8 +181,10 @@ def execute_judge_tool(
         return get_related_accounts(db, account_id), [], []
     if name == "get_timeline":
         rows = get_timeline(db, account_id)
-        new_ids = [r.get("tx_id") or r.get("evidence_id") for r in rows[:20] if r.get("tx_id") or r.get("evidence_id")]
-        return rows[:20], [i for i in new_ids if i], []
+        compact = rows[:20]
+        new_txs = txs_from_timeline(compact)
+        new_ids = [t["id"] for t in new_txs if t.get("id")]
+        return compact, new_ids, new_txs
     if name == "search_regulation":
         hits = search_regulation(str(args.get("query") or ""), as_of=str(args.get("as_of") or as_of))
         new_ids = [h.get("id") for h in hits if h.get("id")]

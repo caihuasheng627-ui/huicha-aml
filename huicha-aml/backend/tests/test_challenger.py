@@ -1,5 +1,6 @@
 import json
 
+from app.predicates import attach_stub_judge_predicate
 from app.validator import filter_challenger_items
 
 
@@ -269,6 +270,7 @@ def test_upstream_alert_label_does_not_directly_raise_rule_baseline(client):
 def test_watchlist_guardrail_prevents_direct_exclusion(client, monkeypatch):
     def fake_enrich(**kwargs):
         evidence_id = kwargs["allowed_evidence"][0]
+        row = attach_stub_judge_predicate({"text": "建议排除", "evidence_ids": [evidence_id]}, kwargs)
         return (
             {
                 "disposition": "exclude",
@@ -277,7 +279,7 @@ def test_watchlist_guardrail_prevents_direct_exclusion(client, monkeypatch):
                 "supporting_evidence_ids": [],
                 "contradicting_evidence_ids": [evidence_id],
                 "missing_evidence": [],
-                "rationale": [{"text": "建议排除", "evidence_ids": [evidence_id]}],
+                "rationale": [row],
                 "next_actions": [],
             },
             {},
@@ -313,7 +315,10 @@ def test_reporter_generates_all_four_sections(client):
         assert f"【{section}】" in text
 
 
-def _valid_judge(evidence_id: str, disposition: str = "suggest_report") -> dict:
+def _valid_judge(evidence_id: str, disposition: str = "suggest_report", *, context=None) -> dict:
+    row = {"text": "依据代表性流水", "evidence_ids": [evidence_id]}
+    if context:
+        row = attach_stub_judge_predicate(row, context)
     return {
         "disposition": disposition,
         "confidence": 0.8,
@@ -321,7 +326,7 @@ def _valid_judge(evidence_id: str, disposition: str = "suggest_report") -> dict:
         "supporting_evidence_ids": [evidence_id],
         "contradicting_evidence_ids": [],
         "missing_evidence": ["资金来源说明"],
-        "rationale": [{"text": "依据代表性流水", "evidence_ids": [evidence_id]}],
+        "rationale": [row],
         "next_actions": [],
     }
 
@@ -335,10 +340,10 @@ def _cf_aware_judge(kwargs, *, missing=None, confidence=0.8):
     prior = kwargs.get("prior_issues") or []
     eid = _tx_from_kwargs(kwargs)
     if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
-        decision = _valid_judge(eid, "observe")
+        decision = _valid_judge(eid, "observe", context=kwargs)
         decision["confidence"] = confidence
         return decision, {}
-    decision = _valid_judge(eid)
+    decision = _valid_judge(eid, context=kwargs)
     decision["confidence"] = confidence
     if missing is not None:
         decision["missing_evidence"] = missing
@@ -387,6 +392,23 @@ def test_judge_missing_evidence_ids_are_sanitized(client, monkeypatch):
     assert data["can_sign"] is True
 
 
+def test_tx_rationale_missing_predicate_triggers_repair(client, monkeypatch):
+    calls: list[list] = []
+
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        calls.append(prior)
+        if any(isinstance(p, dict) and p.get("kind") == "missing_predicate" for p in prior):
+            return _cf_aware_judge(kwargs)
+        return _valid_judge("TX-B-IN-01"), {}
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    assert data["judge_repaired"] is True
+    assert data["judge_validation"]["passed"] is True
+    assert any(any(isinstance(p, dict) and p.get("kind") == "missing_predicate" for p in batch) for batch in calls)
+
+
 def test_alert_id_in_report_is_not_flagged_by_fact_check(client, monkeypatch):
     from app import agents
 
@@ -408,8 +430,8 @@ def test_counterfactual_invalid_output_is_not_reported_as_unchanged(client, monk
     def fake_enrich(**kwargs):
         prior = kwargs.get("prior_issues") or []
         if any(p.get("kind") == "counterfactual" for p in prior):
-            return _valid_judge("TX-NOPE-1", disposition="observe"), {}
-        return _valid_judge("TX-B-IN-01"), {}
+            return _valid_judge("TX-NOPE-1", disposition="observe", context=kwargs), {}
+        return _valid_judge("TX-B-IN-01", context=kwargs), {}
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
@@ -434,8 +456,8 @@ def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
             if "findings" not in seen:
                 seen["findings"] = kwargs["findings"]
                 seen["allowed"] = kwargs["allowed_evidence"]
-            return _valid_judge(kwargs["allowed_evidence"][0], disposition="observe"), {}
-        return _valid_judge("TX-B-IN-01"), {}
+            return _valid_judge(kwargs["allowed_evidence"][0], disposition="observe", context=kwargs), {}
+        return _valid_judge("TX-B-IN-01", context=kwargs), {}
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
@@ -521,6 +543,10 @@ def test_counterfactual_syncs_predicate_args_with_removed_ids(client, monkeypatc
                 seen["allowed"] = [e for e in allowed if str(e).startswith("TX-")]
             kept = [e for e in ids if e in allowed]
             cite = kept[:1] or [e for e in allowed if e][:1]
+            row = attach_stub_judge_predicate(
+                {"text": "移除过桥后仅余观察", "evidence_ids": cite},
+                kwargs,
+            )
             return (
                 {
                     "disposition": "observe",
@@ -529,7 +555,7 @@ def test_counterfactual_syncs_predicate_args_with_removed_ids(client, monkeypatc
                     "supporting_evidence_ids": cite,
                     "contradicting_evidence_ids": [],
                     "missing_evidence": ["资金来源说明"],
-                    "rationale": [{"text": "移除过桥后仅余观察", "evidence_ids": cite}],
+                    "rationale": [row],
                     "next_actions": [],
                 },
                 {},
@@ -579,6 +605,9 @@ def test_low_confidence_rule_conflict_abstains(client, monkeypatch):
     assert any(r["code"] == "rule_judge_conflict_low_conf" for r in data["agent_reliability"]["reasons"])
     assert data["can_sign"] is False
     assert "倾向档" in data["report"]["full_text"]
+    conclusion_line = next(l for l in data["report"]["full_text"].split("\n") if l.startswith("【结论与理由】"))
+    assert conclusion_line.startswith("【结论与理由】AI 倾向")
+    assert "建议按内部规程复核后提交可疑交易报告" not in data["report"]["reason"]
 
 
 def test_stable_high_confidence_layering_remains_signable(client):
@@ -608,4 +637,6 @@ def test_judge_fallback_abstains_and_blocks_sign(client, monkeypatch):
     assert data["case_v2"]["agent_abstained"] is True
     assert data["scoring"]["mode"] == "judge_not_additive"
     assert "倾向档" in (data["report"].get("full_text") or "")
+    conclusion_line = next(l for l in (data["report"].get("full_text") or "").split("\n") if l.startswith("【结论与理由】"))
+    assert "未形成可直接签发结论" in conclusion_line
 

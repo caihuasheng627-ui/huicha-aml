@@ -391,13 +391,17 @@ def attach_stub_judge_predicate(rationale: dict, context: dict | None = None) ->
     if str(row.get("predicate") or "").strip():
         return row
     ctx = context if isinstance(context, dict) else {}
+    alert = ctx.get("alert_trigger") if isinstance(ctx.get("alert_trigger"), dict) else None
+    if not alert:
+        alert = ctx.get("alert") if isinstance(ctx.get("alert"), dict) else {}
     facts = case_facts(
         transactions=ctx.get("transactions") or [],
         customer=ctx.get("customer") or {},
-        account_id=str((ctx.get("alert_trigger") or {}).get("account_id") or ""),
+        account_id=str(alert.get("account_id") or ctx.get("account_id") or ""),
     )
     cited = [str(x) for x in (row.get("evidence_ids") or []) if str(x).startswith("TX-")]
-    allowed = {str(x) for x in (ctx.get("allowed_evidence_ids") or []) if str(x).startswith("TX-")}
+    allowed_raw = ctx.get("allowed_evidence_ids") or ctx.get("allowed_evidence") or []
+    allowed = {str(x) for x in allowed_raw if str(x).startswith("TX-")}
     picked = pick_true_predicate(facts, set(cited) if cited else None)
     if not picked and allowed:
         picked = pick_true_predicate(facts, allowed)

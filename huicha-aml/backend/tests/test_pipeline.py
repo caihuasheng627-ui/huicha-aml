@@ -178,5 +178,51 @@ def test_execute_judge_tool_rejects_unknown_and_cross_account(client):
         )
         assert "主体账户" in str(denied2)
         assert ids == [] and txs == []
+        rows, timeline_ids, timeline_txs = execute_judge_tool(
+            "get_timeline",
+            {"account_id": "6222-L-B"},
+            db=db,
+            account_id="6222-L-B",
+            as_of="2026-09-10",
+            alert_type="x",
+            industry="y",
+            search_knowledge=lambda *a, **k: [],
+        )
+        assert rows
+        assert timeline_ids
+        assert timeline_txs
+        assert {t["id"] for t in timeline_txs} <= set(timeline_ids)
+        assert all(t.get("occurred_at") or t.get("from_account") for t in timeline_txs)
     finally:
         db.close()
+
+
+def test_txs_from_timeline_maps_tx_id_and_time():
+    from app.pipeline.toolkit import txs_from_timeline
+
+    txs = txs_from_timeline(
+        [
+            {
+                "time": "2026-09-10 09:01:00",
+                "from_account": "A",
+                "to_account": "B",
+                "amount": 3,
+                "channel": "网银",
+                "tx_id": "TX-L-01",
+                "evidence_id": "TX-L-01",
+            },
+            {"tx_id": "TX-L-01", "time": "dup"},
+            {"evidence_id": "EV-ONLY"},
+        ]
+    )
+    assert txs == [
+        {
+            "id": "TX-L-01",
+            "from_account": "A",
+            "to_account": "B",
+            "amount": 3,
+            "occurred_at": "2026-09-10 09:01:00",
+            "channel": "网银",
+            "remark": None,
+        }
+    ]

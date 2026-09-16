@@ -31,7 +31,10 @@ def collect_sign_blockers(
             continue
         blockers.append({"code": code, "message": message})
     if use_challenger and judge_validation and not judge_validation.get("passed", True):
-        if not any(b["code"] in {"citation_failed", "predicate_failed", "judge_fallback"} for b in blockers):
+        if not any(
+            b["code"] in {"citation_failed", "predicate_failed", "missing_predicate", "judge_fallback"}
+            for b in blockers
+        ):
             blockers.append(
                 {
                     "code": "judge_contract",

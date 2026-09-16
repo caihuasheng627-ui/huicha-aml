@@ -155,4 +155,4 @@ def test_verify_judge_rejects_tx_outside_sample():
     result = verify_judge(decision, allowed_evidence={"TX-H-CASH-01", "TX-H-NIGHT-01"})
     assert result["passed"] is False
     assert "TX-H-POS-004" in result["invalid_ids"]
-    assert "进模样本或簇代表" in result["issues"][0]["message"]
+    assert any("进模样本或簇代表" in (i.get("message") or "") for i in result["issues"])

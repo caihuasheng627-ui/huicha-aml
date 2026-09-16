@@ -126,8 +126,10 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
     }
     else if (!user) status = "登录后才能提交或签发";
     else if (reviewer) status = "等待调查员提交复核";
-    else if (!factOk) status = `${blockText}，提交须填写说明`;
-    else status = abstained ? "系统已弃权，倾向档仅供参考" : "待提交复核";
+    else if (!factOk) status = abstained
+      ? `系统已弃权，${blockText}，提交须填写说明`
+      : `${blockText}，提交须填写说明`;
+    else status = "待提交复核";
   }
   return (
     <div className="sign-dock" data-contest="sign">

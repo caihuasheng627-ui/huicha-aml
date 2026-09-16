@@ -2,6 +2,7 @@ from fastapi import HTTPException
 import pytest
 
 from app.display import case_no, display_name, mask_account
+from app.predicates import attach_stub_judge_predicate
 from app.security import AuthUser
 from app.workflow import assert_decision_allowed
 
@@ -217,7 +218,12 @@ def test_abstain_case_submit_confirm_modify_reject(client, monkeypatch):
                 "supporting_evidence_ids": ["TX-B-IN-01"],
                 "contradicting_evidence_ids": [],
                 "missing_evidence": ["资金来源说明"],
-                "rationale": [{"text": "依据代表性流水", "evidence_ids": ["TX-B-IN-01"]}],
+                "rationale": [
+                    attach_stub_judge_predicate(
+                        {"text": "依据代表性流水", "evidence_ids": ["TX-B-IN-01"]},
+                        kwargs,
+                    )
+                ],
                 "next_actions": [],
             },
             {},

@@ -72,3 +72,19 @@ def test_export_reflects_human_sign(client, auth_headers):
     assert "陈析" in text
     assert "否（本文件仅为草稿）" not in text
     assert "CLOSE" in text or "排除" in text
+
+
+def test_apply_abstain_tone_rewrites_conclusion_section():
+    from app.report_draft import apply_abstain_tone
+
+    report = {
+        "reason": "疑点分析认为资金或行为特征与客户身份不匹配，建议按内部规程复核后提交可疑交易报告。",
+        "full_text": "【资金交易及客户行为】流水摘要。\n【结论与理由】建议上报。疑点分析认为资金或行为特征与客户身份不匹配，建议按内部规程复核后提交可疑交易报告。",
+        "elements": [{"key": "可疑/排除理由", "value": "建议上报"}],
+    }
+    apply_abstain_tone(report, "suggest_report")
+    assert "未形成可直接签发结论" in report["reason"]
+    assert "建议按内部规程复核后提交可疑交易报告" not in report["reason"]
+    line = next(item for item in report["full_text"].split("\n") if item.startswith("【结论与理由】"))
+    assert line.startswith("【结论与理由】AI 倾向、未形成可直接签发结论。")
+    assert report["elements"][0]["value"] == report["reason"]

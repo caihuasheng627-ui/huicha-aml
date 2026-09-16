@@ -10,7 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .predicates import catalog_for_prompt, case_facts, stub_challenger_item
+from .predicates import attach_stub_judge_predicate, catalog_for_prompt, case_facts, stub_challenger_item
 from .privacy import PrivacyMap, inspect_outbound
 from .validator import DELTA_BOUND, filter_challenger_items
 
@@ -198,6 +198,10 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
             for eid in (f.get("evidence_ids") or [])
         ][:6]
         cited = support or counter or list(data.get("allowed_evidence_ids") or [])[:2]
+        rationale = attach_stub_judge_predicate(
+            {"text": "依据本案已调取事实形成初步建议。", "evidence_ids": cited},
+            data,
+        )
         return (
             json.dumps(
                 {
@@ -207,7 +211,7 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
                     "supporting_evidence_ids": support,
                     "contradicting_evidence_ids": counter,
                     "missing_evidence": data.get("missing_evidence") or [],
-                    "rationale": [{"text": "依据本案已调取事实形成初步建议。", "evidence_ids": cited}],
+                    "rationale": [rationale],
                     "next_actions": ["由调查员复核证据与缺失材料"],
                 },
                 ensure_ascii=False,
@@ -775,6 +779,7 @@ def build_judge_context(
         ],
         # 只把模型在上下文里能看到内容的编号列出来；EV- 内部编号没有对应描述，列出只会诱导误引。
         "allowed_evidence_ids": [e for e in allowed_evidence if not str(e).startswith("EV-")][:120],
+        "allowed_predicates": catalog_for_prompt(),
         "missing_evidence": missing_evidence or [],
         "repair_issues": prior_issues or [],
         "output_limits": {

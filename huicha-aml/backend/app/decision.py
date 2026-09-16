@@ -6,8 +6,10 @@ import re
 
 from .analyst_rules import score_to_conclusion
 from .checklist import material_gap_titles
+from .predicates import _as_str_list
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
-from .schema import JudgeDecision
+from .schema import JudgeDecision, JudgeRationale, ValidationResult
+from .validator import validate_claim
 
 DISPOSITIONS = {"exclude", "observe", "suggest_report"}
 
@@ -83,22 +85,50 @@ def normalize_judge(raw: dict, *, known_ids: set[str] | None = None) -> dict:
     rationale = data.get("rationale")
     if isinstance(rationale, str):
         rationale = [{"text": rationale, "evidence_ids": data["supporting_evidence_ids"]}]
-    data["rationale"] = rationale if isinstance(rationale, list) else []
+    cleaned: list[dict] = []
+    for row in rationale if isinstance(rationale, list) else []:
+        if isinstance(row, str):
+            row = {"text": row, "evidence_ids": data["supporting_evidence_ids"]}
+        if not isinstance(row, dict):
+            continue
+        ids = [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
+        args = row.get("args") if isinstance(row.get("args"), dict) else {}
+        for eid in _as_str_list(args.get("tx_ids")):
+            if eid not in ids:
+                ids.append(eid)
+        predicate = str(row.get("predicate") or "").strip() or None
+        cleaned.append(
+            {
+                "text": row.get("text") or "",
+                "evidence_ids": ids,
+                "predicate": predicate,
+                "args": args,
+            }
+        )
+    data["rationale"] = cleaned
     result = JudgeDecision.model_validate(data).model_dump()
     if dropped:
         result["sanitized_missing_evidence"] = dropped
     return result
 
 
-def verify_judge(decision: dict, *, allowed_evidence: set[str]) -> dict:
-    """每个实质理由必须有本案引用；缺引用或伪造引用时整份建议不可采纳。"""
+def verify_judge(
+    decision: dict,
+    *,
+    allowed_evidence: set[str],
+    facts: dict | None = None,
+    case_id: str = "",
+    evidence_case: dict[str, str] | None = None,
+) -> dict:
+    """每个实质理由必须有本案引用；失败谓词与伪造引用一样使整份建议不可采纳。"""
     issues: list[dict] = []
     cited: list[str] = []
     for key in ("supporting_evidence_ids", "contradicting_evidence_ids"):
         for evidence_id in decision.get(key) or []:
             if evidence_id not in cited:
                 cited.append(evidence_id)
-    for index, row in enumerate(decision.get("rationale") or []):
+    rationale = decision.get("rationale") or []
+    for index, row in enumerate(rationale):
         ids = [str(x) for x in (row.get("evidence_ids") or []) if str(x)]
         if not str(row.get("text") or "").strip():
             issues.append({"kind": "empty_rationale", "index": index, "message": "理由为空"})
@@ -107,6 +137,34 @@ def verify_judge(decision: dict, *, allowed_evidence: set[str]) -> dict:
         for evidence_id in ids:
             if evidence_id not in cited:
                 cited.append(evidence_id)
+        predicate = str(row.get("predicate") or "").strip()
+        args = row.get("args") if isinstance(row.get("args"), dict) else {}
+        if predicate:
+            result = validate_claim(
+                claim=str(row.get("text") or ""),
+                evidence_ids=ids,
+                delta=0.0,
+                allowed=allowed_evidence,
+                case_id=case_id,
+                evidence_case=evidence_case,
+                predicate=predicate,
+                args=args,
+                facts=facts,
+            )
+            row["validation"] = ValidationResult.model_validate(result).model_dump()
+            row["evidence_ids"] = result.get("evidence_ids") or ids
+            if not result.get("valid"):
+                issues.append(
+                    {
+                        "kind": "predicate_failed",
+                        "index": index,
+                        "predicate": predicate,
+                        "evidence_ids": result.get("evidence_ids") or ids,
+                        "message": result.get("reason") or f"谓词 {predicate} 未通过核验",
+                    }
+                )
+        else:
+            row["validation"] = None
     invalid = [evidence_id for evidence_id in cited if evidence_id not in allowed_evidence]
     if invalid:
         issues.append(
@@ -120,14 +178,41 @@ def verify_judge(decision: dict, *, allowed_evidence: set[str]) -> dict:
         issues.append({"kind": "missing_rationale", "message": "缺少结构化理由"})
     if decision.get("disposition") == "suggest_report" and not decision.get("supporting_evidence_ids"):
         issues.append({"kind": "missing_support", "message": "建议上报但没有支持证据"})
+    try:
+        decision["rationale"] = [JudgeRationale.model_validate(row).model_dump() for row in rationale]
+    except Exception:
+        pass
     return {
         "passed": not issues,
         "issues": issues,
         "citation_count": len(cited),
         "invalid_ids": invalid,
         "score_kind": "evidence_contract",
-        "reason": "结构化建议及逐条引用通过校验" if not issues else "Judge 输出未通过证据契约",
+        "reason": "结构化建议及逐条引用、谓词通过校验" if not issues else "Judge 输出未通过证据契约",
     }
+
+
+def verified_claims_from_judge(decision: dict) -> list[dict]:
+    rows: list[dict] = []
+    for row in decision.get("rationale") or []:
+        validation = row.get("validation") or {}
+        if not validation.get("valid"):
+            continue
+        predicate = str(row.get("predicate") or validation.get("predicate") or "").strip()
+        if not predicate or validation.get("score_kind") != "predicate_verified":
+            continue
+        rows.append(
+            {
+                "claim": row.get("text") or "",
+                "predicate": predicate,
+                "args": row.get("args") or {},
+                "evidence_ids": validation.get("evidence_ids") or row.get("evidence_ids") or [],
+                "observed": validation.get("observed") or {},
+                "reason": validation.get("reason") or "",
+                "score_kind": validation.get("score_kind"),
+            }
+        )
+    return rows
 
 
 def apply_guardrails(decision: dict, *, watch_hits: list[dict], fact_issues: list[dict] | None = None) -> dict:

@@ -713,6 +713,7 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
         can_sign=bool(payload.get("can_sign")),
         note=body.note or "",
         submitted_by_id=submitted_by_id,
+        sign_blockers=payload.get("sign_blockers") or [],
     )
     inv.human_decision = body.decision
     inv.human_note = body.note

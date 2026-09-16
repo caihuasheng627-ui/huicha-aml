@@ -51,7 +51,7 @@ def test_investigate_returns_case_v2(client):
     assert data["evidence_graph"]
     assert data["risk"]["factors"]
     assert data["structured_report"]["human_review"]
-    assert data["prompt_versions"]["judge"] == "judge_v3"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
     assert data["judge_validation"]["passed"] is True
     assert data["scoring"]["mode"] == "judge_not_additive"
     assert data["prompt_versions"]["skeptic"] == "skeptic_v1"
@@ -69,6 +69,9 @@ def test_layering_demo_chain(client):
     assert data["judge"]["disposition"] == "suggest_report"
     assert data["case_v2"]["recommendation"] == "REPORT_REVIEW"
     assert "layering" in data["case_v2"]["suspicious_types"]
+    assert data["can_sign"] is True
+    assert data["agent_reliability"]["stance"] == "committed"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
     rel = [e for e in data["evidence_graph"] if e["evidence_type"] == "RELATIONSHIP"]
     assert rel
     assert all(

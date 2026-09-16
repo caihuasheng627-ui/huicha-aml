@@ -64,6 +64,10 @@ class InvestigationState:
     judge_usage: dict = field(default_factory=dict)
     reporter_usage: dict = field(default_factory=dict)
     counterfactual: dict = field(default_factory=dict)
+    evidence_sufficiency: dict = field(default_factory=dict)
+    verified_claims: list = field(default_factory=list)
+    agent_reliability: dict = field(default_factory=dict)
+    case_facts: dict = field(default_factory=dict)
     guardrails: dict = field(default_factory=dict)
     conclusion: str = ""
     confidence: float = 0.0

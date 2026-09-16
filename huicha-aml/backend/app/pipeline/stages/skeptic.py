@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from ...decision import normalize_judge, verify_judge
+from ...decision import normalize_judge, verified_claims_from_judge, verify_judge
+from ...evidence_sufficiency import default_counterfactual, drop_findings, search_minimal_set
+from ...predicates import case_facts
+from ...reliability import compute_reliability
 from ...sampler import compact_findings_for_llm
 from ..state import InvestigationState, StageContext
 
@@ -26,77 +29,77 @@ class SkepticStage:
         kb_hits = state.kb_hits
         privacy = state.privacy
         use_challenger = options.use_challenger
-
-        counterfactual_result = {
+        verified_claims = verified_claims_from_judge(judge) if judge_validation.get("passed") else []
+        counterfactual_result = default_counterfactual(judge)
+        sufficiency = {
+            "method": "bounded_greedy",
+            "verified": True,
+            "budget_exhausted": False,
             "performed": False,
-            "faithful": None,
-            "removed_evidence_ids": [],
-            "original_conclusion": judge["disposition"],
-            "counterfactual_conclusion": "",
-            "note": "无可剔除的关键支持证据，未执行 AI 反事实。",
+            "rounds": 0,
+            "max_rounds": 3,
+            "max_candidates": 4,
+            "minimal_sufficient_set": [],
+            "necessary_ids": [],
+            "redundant_ids": [],
+            "candidates": [],
+            "note": "未执行有界证据搜索。",
         }
-        if use_challenger and judge_validation["passed"] and judge.get("supporting_evidence_ids"):
-            key_id = judge["supporting_evidence_ids"][0]
-            key_finding = next(
-                (f for f in findings if key_id in (f.get("evidence_ids") or []) and f.get("polarity") == "support"),
-                None,
-            )
-            removed_ids = set((key_finding or {}).get("evidence_ids") or [key_id])
-            cf_cite = cite_set - removed_ids
-            # 其余指标里也可能引用被移除的流水；不擦掉的话模型会照抄，导致反事实轮次因「伪造引用」失效。
-            cf_findings = []
-            for f in findings:
-                if f is key_finding:
-                    continue
-                kept_ids = [e for e in (f.get("evidence_ids") or []) if e not in removed_ids]
-                if f.get("evidence_ids") and not kept_ids and f.get("polarity") != "context":
-                    continue
-                cf_findings.append({**f, "evidence_ids": kept_ids})
-            try:
-                cf_llm_findings = compact_findings_for_llm(cf_findings, keep_ids=citable - removed_ids)
-                cf_sample = [t for t in sample_txs if t.get("id") not in removed_ids]
-                raw_cf, _ = ctx.deps.enrich_judge(
-                    db=ctx.db,
-                    privacy=privacy,
-                    alert=alert,
-                    customer=customer,
-                    findings=cf_llm_findings,
-                    transactions=cf_sample,
-                    baseline=baseline,
-                    kb_hits=kb_hits,
-                    allowed_evidence=[e for e in prompt_allowed if e not in removed_ids],
-                    prior_issues=[
-                        {
-                            "kind": "counterfactual",
-                            "message": f"移除指标「{(key_finding or {}).get('title') or key_id}」及其证据后重新判断",
-                        }
-                    ],
-                    tx_clusters=sampling["clusters"],
-                    tx_summary=sampling["summary"],
-                )
-                cf_judge = normalize_judge(raw_cf, known_ids=allowed_set - removed_ids)
-                cf_valid = verify_judge(cf_judge, allowed_evidence=cf_cite)
-                changed = cf_judge["disposition"] != judge["disposition"]
-                if not cf_valid["passed"]:
-                    note = "反事实轮次输出未通过引用校验，无法判断建议是否依赖该证据，已标记供人工复核"
-                    faithful = None
-                elif changed:
-                    note = "移除模型声明的关键证据后建议随之变化"
-                    faithful = True
-                else:
-                    note = "移除关键证据后建议未变化，已标记供人工复核"
-                    faithful = False
-                counterfactual_result = {
-                    "performed": True,
-                    "faithful": faithful,
-                    "validated": cf_valid["passed"],
-                    "validation_issues": cf_valid["issues"],
-                    "removed_evidence_ids": sorted(removed_ids),
-                    "original_conclusion": judge["disposition"],
-                    "counterfactual_conclusion": cf_judge["disposition"],
-                    "note": note,
-                }
-            except (RuntimeError, ValueError) as exc:
-                counterfactual_result["note"] = f"反事实执行失败：{exc}"
 
+        def run_round(removed_ids: set[str], message: str) -> dict:
+            cf_cite = cite_set - removed_ids
+            cf_findings = drop_findings(findings, removed_ids)
+            cf_llm_findings = compact_findings_for_llm(cf_findings, keep_ids=citable - removed_ids)
+            cf_sample = [t for t in sample_txs if t.get("id") not in removed_ids]
+            cf_txs = [t for t in state.txs if t.get("id") not in removed_ids]
+            cf_facts = case_facts(transactions=cf_txs, customer=customer, account_id=state.account_id)
+            raw_cf, _ = ctx.deps.enrich_judge(
+                db=ctx.db,
+                privacy=privacy,
+                alert=alert,
+                customer=customer,
+                findings=cf_llm_findings,
+                transactions=cf_sample,
+                baseline=baseline,
+                kb_hits=kb_hits,
+                allowed_evidence=[e for e in prompt_allowed if e not in removed_ids],
+                prior_issues=[{"kind": "counterfactual", "message": message}],
+                tx_clusters=sampling["clusters"],
+                tx_summary=sampling["summary"],
+            )
+            cf_judge = normalize_judge(raw_cf, known_ids=allowed_set - removed_ids)
+            cf_valid = verify_judge(cf_judge, allowed_evidence=cf_cite, facts=cf_facts)
+            return {"judge": cf_judge, "validation": cf_valid, "error": ""}
+
+        if use_challenger and judge_validation.get("passed") and judge.get("supporting_evidence_ids"):
+            sufficiency, counterfactual_result = search_minimal_set(
+                judge=judge,
+                findings=findings,
+                verified_claims=verified_claims,
+                run_round=run_round,
+            )
+        elif judge_validation.get("passed"):
+            sufficiency["minimal_sufficient_set"] = list(
+                dict.fromkeys(
+                    [
+                        *(judge.get("supporting_evidence_ids") or []),
+                        *[eid for row in (judge.get("rationale") or []) for eid in (row.get("evidence_ids") or [])],
+                    ]
+                )
+            )
+            sufficiency["note"] = "无支持证据簇，沿用当前引用。"
+            sufficiency["verified"] = True
+
+        reliability = compute_reliability(
+            use_challenger=use_challenger,
+            judge=judge,
+            judge_validation=judge_validation,
+            fallback_reason=state.fallback_reason,
+            baseline=state.baseline_result,
+            counterfactual=counterfactual_result,
+            evidence_sufficiency=sufficiency,
+        )
         state.counterfactual = counterfactual_result
+        state.evidence_sufficiency = sufficiency
+        state.verified_claims = verified_claims
+        state.agent_reliability = reliability

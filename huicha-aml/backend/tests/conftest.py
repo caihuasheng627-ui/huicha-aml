@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
-from app.predicates import stub_challenger_item
+from app.predicates import attach_stub_judge_predicate, stub_challenger_item
 from app.seed import seed_if_empty
 
 
@@ -77,6 +77,10 @@ def client(monkeypatch):
                 for evidence_id in finding.get("evidence_ids", [])
             ][:6]
             cited = support or counter or data.get("allowed_evidence_ids", [])[:2]
+            rationale = attach_stub_judge_predicate(
+                {"text": "单测 Judge 建议", "evidence_ids": cited},
+                data,
+            )
             return (
                 json.dumps(
                     {
@@ -86,7 +90,7 @@ def client(monkeypatch):
                         "supporting_evidence_ids": support,
                         "contradicting_evidence_ids": counter,
                         "missing_evidence": [],
-                        "rationale": [{"text": "单测 Judge 建议", "evidence_ids": cited}],
+                        "rationale": [rationale],
                         "next_actions": ["人工复核"],
                     },
                     ensure_ascii=False,

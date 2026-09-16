@@ -190,3 +190,86 @@ def test_investigation_mutex_second_request_409(client):
         _end_investigation(aid)
     ok = client.post(f"/api/alerts/{aid}/investigate", params={"use_challenger": True})
     assert ok.status_code == 200, ok.text
+
+
+def test_abstain_case_submit_confirm_modify_reject(client, monkeypatch):
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
+            return (
+                {
+                    "disposition": "observe",
+                    "confidence": 0.6,
+                    "typologies": [],
+                    "supporting_evidence_ids": ["TX-NOPE-1"],
+                    "contradicting_evidence_ids": [],
+                    "missing_evidence": [],
+                    "rationale": [{"text": "无效反事实", "evidence_ids": ["TX-NOPE-1"]}],
+                    "next_actions": [],
+                },
+                {},
+            )
+        return (
+            {
+                "disposition": "suggest_report",
+                "confidence": 0.8,
+                "typologies": ["structuring"],
+                "supporting_evidence_ids": ["TX-B-IN-01"],
+                "contradicting_evidence_ids": [],
+                "missing_evidence": ["资金来源说明"],
+                "rationale": [{"text": "依据代表性流水", "evidence_ids": ["TX-B-IN-01"]}],
+                "next_actions": [],
+            },
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    inv_h = _login(client)
+    rev_h = _login(client, "002201", "aml123")
+    data = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True}).json()
+    assert data["can_sign"] is False
+    assert data["agent_reliability"]["stance"] == "abstain"
+    blocked_submit = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "submit", "note": ""},
+        headers=inv_h,
+    )
+    assert blocked_submit.status_code == 400
+    submitted = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "submit", "note": "已人工复核弃权原因"},
+        headers=inv_h,
+    )
+    assert submitted.status_code == 200, submitted.text
+    blocked_confirm = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "confirm", "note": ""},
+        headers=rev_h,
+    )
+    assert blocked_confirm.status_code == 400
+    blocked_modify = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "modify", "note": ""},
+        headers=rev_h,
+    )
+    assert blocked_modify.status_code == 400
+    modified = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "modify", "note": "复核后改写结论并签发"},
+        headers=rev_h,
+    )
+    assert modified.status_code == 200, modified.text
+
+    client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    submitted2 = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "submit", "note": "再次提交"},
+        headers=inv_h,
+    )
+    assert submitted2.status_code == 200, submitted2.text
+    rejected = client.post(
+        "/api/alerts/ALT-B-20260910/decide",
+        json={"decision": "reject", "note": "退回重查"},
+        headers=rev_h,
+    )
+    assert rejected.status_code == 200, rejected.text

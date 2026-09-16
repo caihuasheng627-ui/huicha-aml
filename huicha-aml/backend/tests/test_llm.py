@@ -222,16 +222,17 @@ def test_enrich_judge_uses_product_prompt_version_by_default(monkeypatch):
     monkeypatch.setattr(llm_mod, "chat", fake_chat)
     data, _ = llm_mod.enrich_judge(db=None, **_judge_inputs())
     assert data["disposition"] == "exclude"
-    assert prompt_version("judge") == "judge_v3"
-    assert seen["system"] == PROMPTS["judge_v3"]
+    assert prompt_version("judge") == "judge_v3p"
+    assert seen["system"] == PROMPTS["judge_v3p"]
     assert "三档判定标准" in seen["system"]
+    assert "可执行谓词" in seen["system"]
 
     llm_mod.enrich_judge(db=None, prompt_kind="judge_v2", **_judge_inputs())
     assert seen["system"] == PROMPTS["judge_v2"]
 
     llm_mod.enrich_judge(db=None, prompt_kind="judge_v4", **_judge_inputs())
     assert seen["system"] == PROMPTS["judge_v4"]
-    assert prompt_version("judge") == "judge_v3"
+    assert prompt_version("judge") == "judge_v3p"
 
 
 def test_result_source_key_namespaces_non_deepseek_models():
@@ -283,8 +284,9 @@ def test_deepseek_official_key_routes_to_deepseek_chat(monkeypatch):
 def test_judge_v4_is_ablation_only_and_avoids_v3_exemplars():
     from app.prompts import PROMPTS, prompt_version
 
-    assert prompt_version("judge") == "judge_v3"
+    assert prompt_version("judge") == "judge_v3p"
     assert "judge_v4" in PROMPTS
+    assert "judge_v3p" in PROMPTS
     exemplars = (
         "工资表",
         "赔付书",

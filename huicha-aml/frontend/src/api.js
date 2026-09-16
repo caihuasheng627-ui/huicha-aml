@@ -284,6 +284,17 @@ export async function appendChecklist(id, itemIds) {
   return data;
 }
 
+export async function saveNote(id, note) {
+  const r = await request(`/api/alerts/${id}/note`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "写入备注失败");
+  return data;
+}
+
 export async function decide(id, decision, note) {
   const r = await request(`/api/alerts/${id}/decide`, {
     method: "POST",

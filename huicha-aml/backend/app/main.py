@@ -591,6 +591,10 @@ class DecideBody(BaseModel):
     note: str = ""
 
 
+class NoteBody(BaseModel):
+    note: str = ""
+
+
 class ChecklistAppendBody(BaseModel):
     item_ids: list[str] = []
 
@@ -691,6 +695,63 @@ def append_checklist(alert_id: str, body: ChecklistAppendBody, request: Request,
         "final_action": "draft_only",
         "note": "已写入调查员草稿备注，系统不会自动报送。",
         **blob,
+    }
+
+
+@app.post("/api/alerts/{alert_id}/note")
+def save_human_note(alert_id: str, body: NoteBody, request: Request, db: Session = Depends(get_db)):
+    """不能直接签发时，把人工判断写入草稿备注，不改变处置/签发状态。"""
+    user = require_user(request)
+    alert = db.get(Alert, alert_id)
+    inv = get_investigation(db, alert_id)
+    if not alert or not inv:
+        raise HTTPException(400, "请先生成调查草稿")
+    note = (body.note or "").strip()
+    if not note:
+        raise HTTPException(400, "请填写备注")
+    payload = json.loads(inv.payload_json)
+    inv.human_note = note
+    report = payload.setdefault("report", {})
+    apply_remarks_to_report(report, note)
+    review = dict(payload.get("human_review") or {})
+    review["note"] = note
+    review["note_at"] = format_cn(utcnow())
+    review["note_by_id"] = user.staff_id
+    review["note_by_name"] = user.name
+    payload["human_review"] = review
+    peers = enrich_counterparties(
+        db,
+        (payload.get("alert") or {}).get("account_id") or alert.account_id,
+        payload.get("transactions") or [],
+        payload.get("graph") or {},
+    )
+    attach_checklist(payload, counterparties=peers, human_note=note)
+    inv.payload_json = json.dumps(payload, ensure_ascii=False)
+    write_audit(
+        db,
+        alert_id,
+        user.label(),
+        "note",
+        json.dumps(
+            {
+                "summary": "写入草稿备注（未签发）",
+                "case_id": alert_id,
+                "human_decision": inv.human_decision or "",
+                "can_sign": bool(payload.get("can_sign")),
+                "data_note": "synthetic",
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "alert_id": alert_id,
+        "human_note": note,
+        "human_decision": inv.human_decision or "",
+        "can_sign": bool(payload.get("can_sign")),
+        "final_action": "draft_only",
+        "note": "已写入草稿备注，未改变签发状态，系统不会自动报送。",
     }
 
 

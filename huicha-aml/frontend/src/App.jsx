@@ -34,6 +34,7 @@ import {
   login,
   logout,
   runInvestigate,
+  saveNote,
   streamInvestigate,
   shouldFallbackInvestigate,
   setDemoToken,
@@ -99,7 +100,7 @@ function WelcomeBrief({ labMode }) {
   );
 }
 
-function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHotAction }) {
+function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSaveNote, onDecide, onLogin, onExport, contestHotAction }) {
   const hasDraft = Boolean(inv?.report);
   const factOk = Boolean(hasDraft && inv.can_sign);
   const blockText = signBlockerText(inv);
@@ -113,6 +114,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
   const canConfirm = Boolean(reviewer && submitted && factOk && !finalized);
   const canModify = Boolean(reviewer && submitted && !finalized);
   const canReject = Boolean(user && hasDraft && !finalized);
+  const canWriteNote = Boolean(user && hasDraft && note.trim());
   let status = "先选左侧告警";
   if (current) {
     if (!hasDraft) status = "尚无草稿";
@@ -121,20 +123,27 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
       status = reviewer
         ? factOk
           ? "待复核签发"
-          : `${blockText}，不能直接同意签发`
+          : `${blockText}，不能直接同意签发，可先写入备注`
         : "已提交，等待复核";
     }
     else if (!user) status = "登录后才能提交或签发";
     else if (reviewer) status = "等待调查员提交复核";
-    else if (!factOk) status = `${blockText}，提交须填写说明`;
+    else if (!factOk) status = abstained
+      ? `系统已弃权，${blockText}，先写入备注或带说明提交`
+      : `${blockText}，先写入备注或带说明提交`;
     else status = abstained ? "系统已弃权，倾向档仅供参考" : "待提交复核";
   }
   return (
-    <div className="sign-dock" data-contest="sign">
+    <div className={`sign-dock${!factOk && hasDraft ? " is-blocked" : ""}`} data-contest="sign">
+      {!factOk && hasDraft ? <p className="sign-dock-block">{blockedSignNoteHint(inv)}</p> : null}
       <Input.TextArea
         id="investigator-note"
         rows={4}
-        placeholder="处理意见（提交说明 / 复核意见 / 退回原因）"
+        placeholder={
+          !factOk && hasDraft
+            ? "不能直接签发。写明人工判断后点「写入备注」，或带说明提交复核。"
+            : "处理意见（提交说明 / 复核意见 / 退回原因）"
+        }
         value={note}
         onChange={(e) => onNote(e.target.value)}
         disabled={!current}
@@ -168,6 +177,9 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
           )}
           <Button danger disabled={!canReject} onClick={() => onDecide("reject")}>
             {reviewer ? "退回调查" : "退回重查"}
+          </Button>
+          <Button disabled={!canWriteNote || savingNote} onClick={onSaveNote}>
+            {savingNote ? "写入中…" : "写入备注"}
           </Button>
           <Button disabled={!hasDraft || !user} onClick={onExport}>
             导出底稿
@@ -220,9 +232,10 @@ const AUDIT_ACTION = {
   tools: "调取工具",
   validator: "证据校验",
   checklist: "补证清单",
+  note: "写入备注",
 };
 
-import { collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
@@ -435,6 +448,7 @@ export default function App() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const [currentChallengerEnabled, setCurrentChallengerEnabled] = useState(true);
   const [experimentMode, setExperimentMode] = useState(false);
   const [injectHallucination, setInjectHallucination] = useState(false);
@@ -636,6 +650,35 @@ export default function App() {
     } finally {
       setLoading(false);
       setStageHint("");
+    }
+  }
+
+  async function onSaveNote() {
+    if (!current) return;
+    if (!user) {
+      message.warning("请先登录后再写入备注");
+      setLoginOpen(true);
+      return;
+    }
+    if (!note.trim()) {
+      message.warning("请先填写处理意见");
+      document.getElementById("investigator-note")?.focus();
+      return;
+    }
+    setSavingNote(true);
+    try {
+      await saveNote(current, note);
+      await open(current);
+      message.success("已写入草稿备注，未改变签发状态");
+    } catch (e) {
+      if (String(e.message || "").includes("登录")) {
+        clearSession();
+        setUser(null);
+        setLoginOpen(true);
+      }
+      message.error(e.message);
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -1300,9 +1343,25 @@ export default function App() {
                   style={{ marginBottom: 12 }}
                   message={inv.fact_issues?.length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
                   description={
-                    inv.fact_issues?.length
-                      ? inv.fact_issues.map((x) => x.token).join("、")
-                      : collectSignBlockers(inv).map((row) => row.message).join("；")
+                    <>
+                      <div>
+                        {inv.fact_issues?.length
+                          ? inv.fact_issues.map((x) => x.token).join("、")
+                          : collectSignBlockers(inv).map((row) => row.message).join("；")}
+                      </div>
+                      <p className="sign-block-note-hint">不能直接签发。把人工判断写入草稿备注，不改变处置状态。</p>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          document.getElementById("investigator-note")?.focus();
+                          if (note.trim()) onSaveNote();
+                          else message.info("请在底部签发栏填写处理意见后点「写入备注」");
+                        }}
+                      >
+                        写入备注
+                      </Button>
+                    </>
                   }
                 />
               )}
@@ -1381,7 +1440,9 @@ export default function App() {
             user={user}
             note={note}
             signed={detail}
+            savingNote={savingNote}
             onNote={setNote}
+            onSaveNote={onSaveNote}
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
             onExport={() => downloadExport(current).catch((e) => message.error(e.message))}

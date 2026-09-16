@@ -1,4 +1,4 @@
-import { collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
 
 const abstainInv = {
   use_challenger: true,
@@ -21,6 +21,9 @@ if (collectSignBlockers(factInv)[0].message !== "事实回查未通过") {
 }
 if (reliabilityStance(abstainInv) !== "abstain" || reliabilityStance({ use_challenger: false }) !== "committed") {
   throw new Error("reliability stance mapping failed");
+}
+if (!blockedSignNoteHint(abstainInv).includes("写入草稿备注") || blockedSignNoteHint({ can_sign: true })) {
+  throw new Error("blocked sign should prompt writing a draft note");
 }
 
 console.log("sign blockers ok");

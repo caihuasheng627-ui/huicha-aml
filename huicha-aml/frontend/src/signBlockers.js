@@ -32,3 +32,8 @@ export function reliabilityStance(inv) {
   if (!inv || inv.use_challenger === false) return "committed";
   return inv.agent_reliability?.stance === "abstain" ? "abstain" : "committed";
 }
+
+export function blockedSignNoteHint(inv) {
+  if (!inv || inv.can_sign) return "";
+  return `${signBlockerText(inv)}。不能直接签发，把人工判断写入草稿备注。`;
+}

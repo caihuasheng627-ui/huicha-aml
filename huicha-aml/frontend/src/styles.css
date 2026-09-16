@@ -388,6 +388,22 @@ body {
   border-top: 1px solid var(--line);
   background: #fbfcfd;
 }
+.sign-dock.is-blocked {
+  background: var(--crimson-soft);
+  box-shadow: inset 3px 0 0 var(--crimson);
+}
+.sign-dock-block {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--crimson);
+  line-height: 1.45;
+}
+.sign-dock.is-blocked .ant-input {
+  border-color: #e8b4b4;
+}
+.sign-block-note-hint {
+  margin: 8px 0;
+}
 .sign-dock .ant-input {
   font-size: 13px;
   min-height: 96px;

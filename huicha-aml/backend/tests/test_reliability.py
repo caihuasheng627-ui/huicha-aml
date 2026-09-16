@@ -46,7 +46,20 @@ def test_hard_citation_and_fallback_abstain():
     assert not any(r["code"] == "citation_failed" for r in missing["reasons"])
 
 
-def test_cf_invalid_is_hard():
+def test_cf_invalid_is_hard_without_greedy_core():
+    result = compute_reliability(
+        use_challenger=True,
+        judge={"disposition": "suggest_report", "confidence": 0.8},
+        judge_validation={"passed": True, "issues": []},
+        baseline={"conclusion": "suggest_report"},
+        counterfactual={"performed": True, "validated": False, "faithful": None},
+        evidence_sufficiency={"verified": False, "necessary_ids": []},
+    )
+    assert result["stance"] == "abstain"
+    assert any(r["code"] == "cf_invalid" and r["severity"] == "hard" for r in result["reasons"])
+
+
+def test_cf_invalid_does_not_override_greedy_core():
     result = compute_reliability(
         use_challenger=True,
         judge={"disposition": "suggest_report", "confidence": 0.8},
@@ -55,8 +68,8 @@ def test_cf_invalid_is_hard():
         counterfactual={"performed": True, "validated": False, "faithful": None},
         evidence_sufficiency={"verified": True, "necessary_ids": ["TX-1"]},
     )
-    assert result["stance"] == "abstain"
-    assert any(r["code"] == "cf_invalid" and r["severity"] == "hard" for r in result["reasons"])
+    assert result["stance"] == "committed"
+    assert not any(r["code"] == "cf_invalid" for r in result["reasons"])
 
 
 def test_soft_low_conf_conflict_and_stable_high_conf_committed():

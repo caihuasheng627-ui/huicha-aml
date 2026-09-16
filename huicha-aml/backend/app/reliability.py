@@ -57,8 +57,19 @@ def compute_reliability(
         if kinds & HARD_CITATION or not (kinds & (HARD_PREDICATE | HARD_MISSING_PREDICATE)):
             reasons.append(_reason("citation_failed", "hard", "证据契约未通过，不能直接签发"))
 
-    if counterfactual.get("performed") and counterfactual.get("validated") is False:
-        reasons.append(_reason("cf_invalid", "hard", "反事实轮次输出无效，不能判断证据依赖"))
+    necessary = sufficiency.get("necessary_ids") or []
+    if (
+        counterfactual.get("performed")
+        and counterfactual.get("validated") is False
+        and not necessary
+    ):
+        reasons.append(
+            _reason(
+                "cf_invalid",
+                "hard",
+                "反事实轮次输出无效，且未形成可依赖的证据核心，不能直接签发",
+            )
+        )
 
     try:
         confidence = float(judge.get("confidence") or 0)
@@ -75,7 +86,6 @@ def compute_reliability(
             )
         )
 
-    necessary = sufficiency.get("necessary_ids") or []
     if (
         judge_conc == "suggest_report"
         and counterfactual.get("performed")

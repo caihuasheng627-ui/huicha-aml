@@ -442,9 +442,11 @@ def test_counterfactual_invalid_output_is_not_reported_as_unchanged(client, monk
     assert cf["counterfactual_conclusion"] == "observe"
     assert "未通过引用校验" in cf["note"]
     assert "未变化" not in cf["note"]
-    assert data["agent_reliability"]["stance"] == "abstain"
-    assert data["can_sign"] is False
-    assert data["case_v2"]["agent_abstained"] is True
+    assert data["evidence_sufficiency"]["necessary_ids"]
+    assert not any(r["code"] == "cf_invalid" for r in data["agent_reliability"]["reasons"])
+    assert data["agent_reliability"]["stance"] == "committed"
+    assert data["can_sign"] is True
+    assert data["case_v2"]["agent_abstained"] is False
 
 
 def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):

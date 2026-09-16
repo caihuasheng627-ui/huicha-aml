@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...analyst_rules import CONCLUSION_LABEL
 from ...decision import apply_guardrails, normalize_judge, verify_judge
+from ...predicates import case_facts
 from ...typology import tags_from_findings
 from ..state import InvestigationState, StageContext
 
@@ -87,7 +87,9 @@ class JudgeStage:
                     tx_summary=sampling["summary"],
                 )
             decision = normalize_judge(raw, known_ids=state.allowed_set)
-            return decision, verify_judge(decision, allowed_evidence=state.cite_set), usage
+            facts = case_facts(transactions=state.txs, customer=customer, account_id=state.account_id)
+            state.case_facts = facts
+            return decision, verify_judge(decision, allowed_evidence=state.cite_set, facts=facts), usage
 
         if use_challenger:
             try:

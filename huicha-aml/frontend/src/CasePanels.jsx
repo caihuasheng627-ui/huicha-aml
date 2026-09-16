@@ -386,6 +386,68 @@ export function CounterfactualBox({ cf }) {
   );
 }
 
+function TokenList({ ids, onSelect }) {
+  if (!ids?.length) return <span className="hint">（无）</span>;
+  return (
+    <span className="ch-rationale-ids">
+      {ids.map((id, i) => (
+        <button key={`${id}-${i}`} type="button" className="token" onClick={() => onSelect?.(id)}>
+          {id}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+export function VerifiedClaims({ rows, onSelect }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">已核验主张</div>
+      <p className="hint">封闭谓词在本案快照上重新执行后成立，不是语义支持度。</p>
+      {rows.slice(0, 8).map((row, i) => (
+        <div key={`${row.predicate}-${i}`} className="ev">
+          <code className="pred-ok">成立 · {row.predicate}</code>
+          <div>
+            <EvidenceTokens text={row.claim || "已核验交易模式"} onSelect={onSelect} />
+          </div>
+          <div className="hint">{row.reason}</div>
+          <TokenList ids={row.evidence_ids} onSelect={onSelect} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EvidenceSufficiencyPanel({ data, onSelect }) {
+  if (!data) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">证据充分性（有界贪心）</div>
+      <p className="hint">
+        {data.verified ? "已在候选预算内收敛" : "预算耗尽或未形成稳定核心"}
+        · {data.method || "bounded_greedy"} · {data.rounds || 0}/{data.max_rounds || 3} 轮
+        {data.budget_exhausted ? " · 不宣称全局最小" : ""}
+      </p>
+      <ul className="ch-flow">
+        <li>
+          <b>最小充分集</b>
+          <TokenList ids={data.minimal_sufficient_set} onSelect={onSelect} />
+        </li>
+        <li>
+          <b>必要编号</b>
+          <TokenList ids={data.necessary_ids} onSelect={onSelect} />
+        </li>
+        <li>
+          <b>冗余编号</b>
+          <TokenList ids={data.redundant_ids} onSelect={onSelect} />
+        </li>
+      </ul>
+      {data.note ? <div className="hint">{data.note}</div> : null}
+    </div>
+  );
+}
+
 const SLIP_PRI = { high: "高", medium: "中", low: "低" };
 const SLIP_ST = { missing: "待补", optional: "可选", satisfied: "已齐" };
 

@@ -13,6 +13,7 @@ from ...risk import CONCLUSION_TO_RECO, RECO_LABEL
 from ...schema import InvestigationPlan, PlanStep, StructuredReport
 from ...tools import ALLOWED_TOOLS, yuan
 from ...typology import tags_from_findings
+from ...workflow import collect_sign_blockers
 from ..cites import regulation_cites
 from ..state import InvestigationState, StageContext
 
@@ -41,6 +42,9 @@ class AssembleStage:
         baseline_result = state.baseline_result
         guardrails = state.guardrails
         counterfactual_result = state.counterfactual
+        evidence_sufficiency = state.evidence_sufficiency or {}
+        verified_claims = state.verified_claims or []
+        agent_reliability = state.agent_reliability or {}
         conclusion = state.conclusion
         confidence = state.confidence
         report = state.report
@@ -58,7 +62,7 @@ class AssembleStage:
             "从流水、KYC、图谱和知识库提取支持/反向/缺失证据",
             "Privacy：姓名/账号/客户号占位后再出站，检漏失败则中止",
             "慧查agent 输出完整三档建议与逐条引用",
-            "Skeptic 校验证据契约并执行一次关键证据反事实",
+            "Skeptic 校验证据契约、谓词真值，并做有界最小证据集搜索",
             "政策护栏只作否决或升级，不参与加权",
             "Reporter 生成四段全文并做事实回查",
             "Human Approval（Agent 不得报送）",
@@ -110,11 +114,13 @@ class AssembleStage:
             },
             {
                 "role": "Skeptic",
-                "title": "引用校验与反事实检查",
+                "title": "引用/谓词核验与有界最小证据集",
                 "content": judge_validation["reason"],
                 "items": [
                     *(i.get("message") or str(i) for i in judge_validation.get("issues") or []),
-                    counterfactual_result["note"],
+                    counterfactual_result.get("note") or "",
+                    evidence_sufficiency.get("note") or "",
+                    agent_reliability.get("note") or "",
                 ],
             },
             {
@@ -182,6 +188,9 @@ class AssembleStage:
             "rule_baseline": baseline_result,
             "policy_guardrails": guardrails,
             "counterfactual": counterfactual_result,
+            "evidence_sufficiency": evidence_sufficiency,
+            "verified_claims": verified_claims,
+            "agent_reliability": agent_reliability,
             "use_challenger": use_challenger,
             "case_challenger_enabled": use_challenger,
             "experiment_mode": experiment_mode,
@@ -254,6 +263,7 @@ class AssembleStage:
                 "recommendation_label": RECO_LABEL[recommendation],
                 "suspicious_types": tags_from_findings(findings),
                 "human_required": True,
+                "agent_abstained": (agent_reliability.get("stance") == "abstain") if use_challenger else False,
                 "data_note": "synthetic",
             },
             "structured_report": StructuredReport(
@@ -278,7 +288,17 @@ class AssembleStage:
             "kb_hits": kb_hits,
             "transactions": txs,
             "fact_issues": fact_issues,
-            "can_sign": len(fact_issues) == 0 and (judge_validation["passed"] or not use_challenger),
+            "sign_blockers": collect_sign_blockers(
+                fact_issues=fact_issues,
+                judge_validation=judge_validation,
+                use_challenger=use_challenger,
+                reliability=agent_reliability,
+            ),
+            "can_sign": (
+                len(fact_issues) == 0
+                and (judge_validation["passed"] or not use_challenger)
+                and ((not use_challenger) or agent_reliability.get("stance", "committed") == "committed")
+            ),
             "elapsed_ms": elapsed_ms,
             "comparison": {
                 "agent_ms": elapsed_ms,

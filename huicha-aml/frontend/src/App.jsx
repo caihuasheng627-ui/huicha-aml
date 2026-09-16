@@ -39,7 +39,7 @@ import {
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
+import { CounterfactualBox, CustomerCard, EvidenceLists, EvidenceSufficiencyPanel, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import ContestCoach from "./ContestCoach.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
@@ -102,6 +102,8 @@ function WelcomeBrief({ labMode }) {
 function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHotAction }) {
   const hasDraft = Boolean(inv?.report);
   const factOk = Boolean(hasDraft && inv.can_sign);
+  const blockText = signBlockerText(inv);
+  const abstained = reliabilityStance(inv) === "abstain";
   const decision = signed?.human_decision || "";
   const submitted = decision === "submit";
   const finalized = decision === "confirm" || decision === "modify";
@@ -115,11 +117,17 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
   if (current) {
     if (!hasDraft) status = "尚无草稿";
     else if (finalized) status = `${HUMAN[decision]}${signed?.signed_by_name ? ` · ${signed.signed_by_name}` : ""}`;
-    else if (submitted) status = reviewer ? "待复核签发" : "已提交，等待复核";
+    else if (submitted) {
+      status = reviewer
+        ? factOk
+          ? "待复核签发"
+          : `${blockText}，不能直接同意签发`
+        : "已提交，等待复核";
+    }
     else if (!user) status = "登录后才能提交或签发";
     else if (reviewer) status = "等待调查员提交复核";
-    else if (!factOk) status = "事实回查未通过，提交须填写说明";
-    else status = "待提交复核";
+    else if (!factOk) status = `${blockText}，提交须填写说明`;
+    else status = abstained ? "系统已弃权，倾向档仅供参考" : "待提交复核";
   }
   return (
     <div className="sign-dock" data-contest="sign">
@@ -214,6 +222,7 @@ const AUDIT_ACTION = {
   checklist: "补证清单",
 };
 
+import { collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
@@ -293,9 +302,10 @@ function ReportText({ text, issues, onSelect }) {
   );
 }
 
-function DecisionComparison({ judge, baseline, guardrails, label, ablation, contestHot }) {
+function DecisionComparison({ judge, baseline, guardrails, label, ablation, contestHot, reliability }) {
   if (!baseline) return null;
   const same = baseline.conclusion === guardrails?.final_conclusion;
+  const abstained = !ablation && reliability?.stance === "abstain";
   return (
     <div className={`score-break${contestHot ? " contest-hot" : ""}`} data-contest="guardrail">
       <div className="score-break-hd">
@@ -304,13 +314,16 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation, cont
       </div>
       <ul>
         <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score ?? 0).toFixed(2)}</em></li>
-        <li><span>慧查agent</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>AI 倾向档</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>系统可靠性</span><em>{ablation ? "—" : abstained ? "弃权" : "可签发倾向"}</em></li>
         <li><span>政策护栏后</span><em>{label}</em></li>
         <li><span>AI 自评把握度</span><em>{ablation ? "—" : Number(judge?.confidence ?? 0).toFixed(2)}</em></li>
       </ul>
       <div className="hint" style={{ margin: "6px 0 0" }}>
         {ablation
           ? "本案为慧查agent 关闭后的消融结果，仅展示规则对照。"
+          : abstained
+            ? `系统已弃权：上列为 AI 倾向档，不可直接签发。${reliability?.note || ""}`
           : same
             ? "AI 与规则对照一致，没有加权合成。把握度是「对结论有多确定」，不是风险高低。"
             : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。把握度不是风险分。"}
@@ -1263,7 +1276,7 @@ export default function App() {
               )}
               {inv && (
                 <div className="viz-row">
-                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} />
+                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} reliability={inv.agent_reliability} />
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
@@ -1273,18 +1286,24 @@ export default function App() {
                 </div>
               )}
               {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
+              {inv && <VerifiedClaims rows={inv.verified_claims} onSelect={selectEvidence} />}
+              {inv && <EvidenceSufficiencyPanel data={inv.evidence_sufficiency} onSelect={selectEvidence} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
               {inv && <RejectedClaims rows={inv.rejected_claims} onSelect={selectEvidence} />}
-              {inv?.fact_issues?.length > 0 && (
+              {inv && !inv.can_sign && (
                 <Alert
                   type="error"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  message="事实回查未通过，禁止提交或签发"
-                  description={inv.fact_issues.map((x) => x.token).join("、")}
+                  message={inv.fact_issues?.length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
+                  description={
+                    inv.fact_issues?.length
+                      ? inv.fact_issues.map((x) => x.token).join("、")
+                      : collectSignBlockers(inv).map((row) => row.message).join("；")
+                  }
                 />
               )}
 

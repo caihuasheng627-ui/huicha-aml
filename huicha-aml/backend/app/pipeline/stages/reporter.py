@@ -44,7 +44,12 @@ class ReporterStage:
         )
         reporter_usage: dict = {}
         fact_retry = False
-        if use_challenger and judge_validation["passed"]:
+        abstained = (state.agent_reliability or {}).get("stance") == "abstain"
+        if abstained:
+            note = "系统已弃权：以上仅为 AI 倾向档，未形成可直接签发结论，须调查员说明后提交。"
+            report["reason"] = f"{report.get('reason') or ''} {note}".strip()
+            report["full_text"] = f"{report.get('full_text') or ''}\n{note}".strip()
+        if use_challenger and judge_validation["passed"] and not abstained:
             report_context = {
                 "conclusion": conclusion,
                 "conclusion_label": CONCLUSION_LABEL[conclusion],

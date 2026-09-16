@@ -36,7 +36,7 @@ def test_investigate_payload_includes_trace_and_models(client):
     assert data["llm"]["model"] == "deepseek-v4-flash-0731"
     assert data["llm"]["models"]["judge"] == "deepseek-v4-flash-0731"
     assert data["llm"]["models"]["reporter"] == "deepseek-v4-flash-0731"
-    assert data["prompt_versions"]["judge"] == "judge_v3"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
     assert data["comparison"]["tokens"] >= 0
     assert data["llm"]["usage"]["total_tokens"] == data["comparison"]["tokens"]
 
@@ -60,7 +60,7 @@ def test_investigate_stream_emits_stages_and_done(client):
     done = next(e["data"]["payload"] for e in events if e["event"] == "done")
     assert set(post.json()) <= set(done)
     assert done["alert"]["id"] == "ALT-A-20260910"
-    assert done["prompt_versions"]["judge"] == "judge_v3"
+    assert done["prompt_versions"]["judge"] == "judge_v3p"
 
 
 def test_llm_model_role_override(monkeypatch):

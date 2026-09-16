@@ -22,6 +22,7 @@ from benchmark import (  # noqa: E402
     missing_evidence_report,
     offline_baselines,
     per_tag_report,
+    skip_results_write,
     update_results_json,
     update_results_md,
 )
@@ -97,7 +98,9 @@ def main() -> None:
     parser.add_argument("--no-write", action="store_true")
     args = parser.parse_args()
     result = ingest(Path(args.jsonl), args.set_name, args.prompt)
-    if not args.no_write:
+    if skip_results_write(result) and not args.no_write:
+        print("skip RESULTS write: placeholder/public-rewrite/real hold-out 不写入主表", flush=True)
+    elif not args.no_write:
         ablation = update_results_json(result)
         update_results_md(result, ablation)
     print(json.dumps({k: result[k] for k in ("prompt", "source", "n_scored", "macro_f1", "observe_pred_rate", "run_log")}, ensure_ascii=False, indent=2))

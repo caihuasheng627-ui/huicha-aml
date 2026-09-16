@@ -102,3 +102,26 @@ def test_ablation_does_not_abstain():
         baseline={"conclusion": "exclude"},
     )
     assert result["stance"] == "committed"
+
+
+def test_unverified_core_without_necessary_ids_is_soft_abstain():
+    result = compute_reliability(
+        use_challenger=True,
+        judge={"disposition": "exclude", "confidence": 0.8},
+        judge_validation={"passed": True, "issues": []},
+        baseline={"conclusion": "exclude"},
+        counterfactual={"performed": False},
+        evidence_sufficiency={"verified": False, "necessary_ids": []},
+    )
+    assert result["stance"] == "abstain"
+    assert any(r["code"] == "evidence_core_unverified" and r["severity"] == "soft" for r in result["reasons"])
+
+    with_core = compute_reliability(
+        use_challenger=True,
+        judge={"disposition": "suggest_report", "confidence": 0.8},
+        judge_validation={"passed": True, "issues": []},
+        baseline={"conclusion": "suggest_report"},
+        counterfactual={"performed": True, "validated": True, "faithful": True},
+        evidence_sufficiency={"verified": False, "necessary_ids": ["TX-1"]},
+    )
+    assert with_core["stance"] == "committed"

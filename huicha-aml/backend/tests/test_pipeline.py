@@ -144,6 +144,10 @@ def test_judge_tools_round_and_cross_account_denied(client, monkeypatch):
     assert any(t["tool"] == "get_related_accounts" and t.get("ok") is True for t in tools)
     assert data["judge_validation"]["passed"] is True
     assert calls["n"] >= 2
+    assert data["verified_claims"]
+    assert data["verified_claims"][0]["score_kind"] == "predicate_verified"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
+    assert data["scoring"]["mode"] == "judge_not_additive"
 
 
 def test_execute_judge_tool_rejects_unknown_and_cross_account(client):

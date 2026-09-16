@@ -593,3 +593,19 @@ def test_stable_high_confidence_layering_remains_signable(client):
     assert data["prompt_versions"]["judge"] == "judge_v3p"
     assert data["evidence_sufficiency"]["method"] == "bounded_greedy"
 
+
+def test_judge_fallback_abstains_and_blocks_sign(client, monkeypatch):
+    def boom(**_kwargs):
+        raise RuntimeError("Judge unavailable")
+
+    monkeypatch.setattr("app.agents.enrich_judge", boom)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    assert data["judge_validation"]["score_kind"] == "fallback"
+    assert data["judge_validation"]["passed"] is False
+    assert data["agent_reliability"]["stance"] == "abstain"
+    assert any(r["code"] == "judge_fallback" for r in data["agent_reliability"]["reasons"])
+    assert data["can_sign"] is False
+    assert data["case_v2"]["agent_abstained"] is True
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert "倾向档" in (data["report"].get("full_text") or "")
+

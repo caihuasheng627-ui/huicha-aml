@@ -404,6 +404,42 @@ body {
 .sign-block-note-hint {
   margin: 8px 0;
 }
+.sign-note-log {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.sign-note-log li {
+  padding: 6px 8px;
+  border-left: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+.sign-note-log-meta {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sign-note-log-text {
+  display: block;
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+.sign-note-log-warn {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--watch);
+}
+.sign-note-template {
+  display: inline-block;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
 .sign-dock .ant-input {
   font-size: 13px;
   min-height: 96px;

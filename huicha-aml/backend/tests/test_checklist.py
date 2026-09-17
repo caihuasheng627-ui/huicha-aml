@@ -208,7 +208,9 @@ def test_checklist_api_get_and_append(client):
     assert missing[0]["title"] in out["human_note"]
     detail = client.get("/api/alerts/ALT-B-20260910").json()
     assert "【补证清单】" in (detail.get("human_note") or "")
-    assert "【补证备注】" in ((detail.get("investigation") or {}).get("report") or {}).get("full_text", "")
+    full = ((detail.get("investigation") or {}).get("report") or {}).get("full_text", "")
+    assert "【补证清单】" in full
+    assert missing[0]["title"] in full or missing[0]["title"] in (detail.get("human_note") or "")
 
     again = client.get("/api/alerts/ALT-B-20260910/checklist").json()
     assert any(i["id"] in pick and i.get("appended") for i in again["items"])

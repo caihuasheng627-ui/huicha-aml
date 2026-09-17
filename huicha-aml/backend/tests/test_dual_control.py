@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+import json
 import pytest
 
 from app.display import case_no, display_name, mask_account
@@ -322,5 +323,134 @@ def test_blocked_sign_can_write_note_without_deciding(client):
     assert detail["human_note"] == "幻觉账号已人工核对，维持观察待补证"
     assert detail["alert"]["status"] not in {"ready_to_file", "closed", "modified"}
     report = (detail.get("investigation") or {}).get("report") or {}
-    assert "【补证备注】幻觉账号已人工核对，维持观察待补证" in (report.get("full_text") or "")
-    assert (detail.get("investigation") or {}).get("human_review", {}).get("note") == "幻觉账号已人工核对，维持观察待补证"
+    full = report.get("full_text") or ""
+    assert "【补证备注】" in full
+    assert "人工声明，未经系统回查" in full
+    assert "幻觉账号已人工核对，维持观察待补证" in full
+    review = (detail.get("investigation") or {}).get("human_review") or {}
+    assert review.get("note") == "幻觉账号已人工核对，维持观察待补证"
+    assert review.get("note_by_name") == "陈析"
+    notes = review.get("notes") or []
+    assert len(notes) == 1
+    assert notes[0]["text"] == "幻觉账号已人工核对，维持观察待补证"
+    assert notes[0]["by_name"] == "陈析"
+    assert any(row.get("code") == "fact_check" for row in notes[0].get("blockers") or [])
+    audits = [row for row in detail["audit"] if row["action"] == "note"]
+    assert audits
+    logged = json.loads(audits[-1]["detail"])
+    assert logged["note"] == "幻觉账号已人工核对，维持观察待补证"
+    assert any(row.get("code") == "fact_check" for row in logged.get("blockers") or [])
+
+    quality = client.get("/api/metrics").json()["quality"]
+    assert quality["blocked_with_note"] >= 1
+    assert quality["blocked_unsigned"] >= quality["blocked_with_note"]
+    assert quality["note_by_blocker"].get("fact_check", 0) >= 1
+
+
+def test_note_rejected_after_signed(client):
+    from tests.conftest import dual_confirm
+
+    inv_h = _login(client)
+    client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
+    ok, _rev = dual_confirm(client, "ALT-A-20260910", note="同意排除")
+    assert ok.status_code == 200, ok.text
+    blocked = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "签发后再改一笔"},
+        headers=inv_h,
+    )
+    assert blocked.status_code == 400
+    assert "已签发" in blocked.json()["detail"]
+
+
+def test_reviewer_note_does_not_change_decision(client):
+    inv_h = _login(client)
+    rev_h = _login(client, "002201", "aml123")
+    client.post(
+        "/api/alerts/ALT-A-20260910/investigate",
+        params={"use_challenger": True, "inject_hallucination": True},
+    )
+    first = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "调查员先记下幻觉账号待核对"},
+        headers=inv_h,
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "复核岗补充：维持观察，不改处置"},
+        headers=rev_h,
+    )
+    assert second.status_code == 200, second.text
+    body = second.json()
+    assert body["human_decision"] == ""
+    assert body["final_action"] == "draft_only"
+    detail = client.get("/api/alerts/ALT-A-20260910").json()
+    assert detail["human_decision"] in {"", None}
+    notes = ((detail.get("investigation") or {}).get("human_review") or {}).get("notes") or []
+    assert [row["text"] for row in notes] == [
+        "调查员先记下幻觉账号待核对",
+        "复核岗补充：维持观察，不改处置",
+    ]
+    assert notes[1]["by_name"] == "李审"
+
+
+def test_note_keeps_checklist_block(client):
+    inv_h = _login(client)
+    inv = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    assert inv.status_code == 200, inv.text
+    missing = [i for i in (inv.json().get("checklist") or {}).get("items") or [] if i.get("status") == "missing"]
+    assert missing
+    appended = client.post(
+        "/api/alerts/ALT-B-20260910/checklist/append",
+        json={"item_ids": [missing[0]["id"]]},
+        headers=inv_h,
+    )
+    assert appended.status_code == 200, appended.text
+    assert "【补证清单】" in appended.json()["human_note"]
+    saved = client.post(
+        "/api/alerts/ALT-B-20260910/note",
+        json={"note": "用途证明仍缺，先记人工判断"},
+        headers=inv_h,
+    )
+    assert saved.status_code == 200, saved.text
+    detail = client.get("/api/alerts/ALT-B-20260910").json()
+    human_note = detail.get("human_note") or ""
+    assert "用途证明仍缺，先记人工判断" in human_note
+    assert "【补证清单】" in human_note
+    full = ((detail.get("investigation") or {}).get("report") or {}).get("full_text") or ""
+    assert "【补证备注】" in full
+    assert "用途证明仍缺，先记人工判断" in full
+    assert "【补证清单】" in full
+
+
+def test_note_rejects_overlong_and_warns_unknown_token(client):
+    from app.notes import NOTE_MAX_LEN
+
+    inv_h = _login(client)
+    client.post(
+        "/api/alerts/ALT-A-20260910/investigate",
+        params={"use_challenger": True, "inject_hallucination": True},
+    )
+    too_long = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "字" * (NOTE_MAX_LEN + 1)},
+        headers=inv_h,
+    )
+    assert too_long.status_code == 400
+    assert "不超过" in too_long.json()["detail"]
+    warned = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "已人工核对 6222-FAKE-9999，维持观察"},
+        headers=inv_h,
+    )
+    assert warned.status_code == 200, warned.text
+    warnings = warned.json().get("note_fact_warnings") or []
+    assert any(row.get("token") == "6222-FAKE-9999" for row in warnings)
+    assert all(row.get("severity") == "soft" for row in warnings)
+    detail = client.get("/api/alerts/ALT-A-20260910").json()
+    assert detail["human_decision"] in {"", None}
+    assert (detail.get("investigation") or {}).get("can_sign") is False
+    full = ((detail.get("investigation") or {}).get("report") or {}).get("full_text") or ""
+    assert "6222-FAKE-9999" in full
+    assert "未在工具事实中出现" in full

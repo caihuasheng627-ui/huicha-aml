@@ -1,4 +1,4 @@
-import { blockedSignNoteHint, collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
 
 const abstainInv = {
   use_challenger: true,
@@ -24,6 +24,15 @@ if (reliabilityStance(abstainInv) !== "abstain" || reliabilityStance({ use_chall
 }
 if (!blockedSignNoteHint(abstainInv).includes("写入草稿备注") || blockedSignNoteHint({ can_sign: true })) {
   throw new Error("blocked sign should prompt writing a draft note");
+}
+if (!noteTemplateFor(factInv).includes("事实回查未通过") || noteTemplateFor({ can_sign: true })) {
+  throw new Error("blocked fact-check should offer a note template");
+}
+if (!noteTemplateFor(abstainInv).includes("证据充分性") ) {
+  throw new Error("cf_invalid should offer sufficiency template");
+}
+if (workingNoteText("判断维持观察\n\n【补证清单】用途证明") !== "判断维持观察") {
+  throw new Error("working note should drop checklist block");
 }
 
 console.log("sign blockers ok");

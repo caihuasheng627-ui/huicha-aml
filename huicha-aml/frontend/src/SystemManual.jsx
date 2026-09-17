@@ -1,4 +1,4 @@
-import { Drawer, Tag } from "antd";
+import { Drawer } from "antd";
 import BrandLogo from "./BrandLogo.jsx";
 import { ApproachComparison } from "./CasePanels.jsx";
 
@@ -211,14 +211,14 @@ export default function SystemManual({ open, onClose, health }) {
         <section className="manual-sec">
           <h4>十一、运行环境</h4>
           <div className="manual-chips">
-            <Tag>版本 {health?.version || "—"}</Tag>
-            <Tag color={health?.llm && health.llm !== "off" ? "blue" : "red"}>
+            <span className="st-chip">版本 {health?.version || "—"}</span>
+            <span className={`st-chip ${health?.llm && health.llm !== "off" ? "navy" : "risk"}`}>
               模型 {health?.model || health?.llm || "未配置"}
-            </Tag>
-            <Tag>知识库 {health?.kb_docs ?? "—"} 条</Tag>
-            <Tag>检索 {health?.kb_retrieval || "hybrid-keyword-tfidf"}</Tag>
-            <Tag color="orange">数据 {health?.data_note || "synthetic"}</Tag>
-            <Tag color="geekblue">出站 {privacyPolicy}</Tag>
+            </span>
+            <span className="st-chip">知识库 {health?.kb_docs ?? "—"} 条</span>
+            <span className="st-chip">检索 {health?.kb_retrieval || "hybrid-keyword-tfidf"}</span>
+            <span className="st-chip brass">数据 {health?.data_note || "synthetic"}</span>
+            <span className="st-chip">出站 {privacyPolicy}</span>
           </div>
           <p className="manual-note">{health?.stack || "FastAPI + SQLite + React（竞赛原型）"}</p>
         </section>

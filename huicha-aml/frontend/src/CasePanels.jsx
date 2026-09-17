@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
+import { sufficiencyHeadline } from "./sufficiencyCopy.js";
 import { displayName, maskAccount } from "./workstation.js";
 
 export function EvidenceTokens({ text, onSelect }) {
@@ -425,7 +426,7 @@ export function EvidenceSufficiencyPanel({ data, onSelect }) {
     <div className="v2-panel">
       <div className="v2-hd">证据充分性（有界贪心）</div>
       <p className="hint">
-        {data.verified ? "已在候选预算内收敛" : "预算耗尽或未形成稳定核心"}
+        {sufficiencyHeadline(data)}
         · {data.method || "bounded_greedy"} · {data.rounds || 0}/{data.max_rounds || 3} 轮
         {data.budget_exhausted ? " · 不宣称全局最小" : ""}
       </p>

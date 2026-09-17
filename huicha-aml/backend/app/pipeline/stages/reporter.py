@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ...analyst_rules import CONCLUSION_LABEL
 from ...logging_util import warning
-from ...report_draft import apply_full_text, render_report
+from ...report_draft import apply_abstain_tone, apply_full_text, render_report
 from ...tools import fact_check
 from ..state import FAKE_ACCOUNT, InvestigationState, StageContext
 
@@ -46,9 +46,7 @@ class ReporterStage:
         fact_retry = False
         abstained = (state.agent_reliability or {}).get("stance") == "abstain"
         if abstained:
-            note = "系统已弃权：以上仅为 AI 倾向档，未形成可直接签发结论，须调查员说明后提交。"
-            report["reason"] = f"{report.get('reason') or ''} {note}".strip()
-            report["full_text"] = f"{report.get('full_text') or ''}\n{note}".strip()
+            apply_abstain_tone(report, conclusion)
         if use_challenger and judge_validation["passed"] and not abstained:
             report_context = {
                 "conclusion": conclusion,

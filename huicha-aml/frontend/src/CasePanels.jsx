@@ -1,4 +1,20 @@
 import { useEffect, useState } from "react";
+import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
+import { displayName, maskAccount } from "./workstation.js";
+
+export function EvidenceTokens({ text, onSelect }) {
+  return splitEvidenceParts(text).map((p, i) => {
+    if (!p) return null;
+    if (isEvidenceToken(p)) {
+      return (
+        <button key={i} type="button" className="token" onClick={() => onSelect(p)}>
+          {p}
+        </button>
+      );
+    }
+    return <span key={i}>{p}</span>;
+  });
+}
 
 export function clickSource(e) {
   const raw = String(e?.raw_reference || "");
@@ -50,7 +66,7 @@ export function TxTimeline({ rows, onSelect }) {
               {String(t.time || "").slice(5, 16)}
             </button>
             <span>
-              {t.from_account} → {t.to_account}
+              {maskAccount(t.from_account)} → {maskAccount(t.to_account)}
             </span>
             <b>{t.amount != null ? Number(t.amount).toLocaleString() : ""}</b>
           </li>
@@ -87,7 +103,9 @@ const KIND = { enterprise: "对公", individual: "个人" };
 export function CustomerCard({ customer, accountId, selected, onSelect }) {
   if (!customer?.id) return null;
   const active = selected === customer.id || selected === accountId;
-  const accounts = customer.accounts?.length ? customer.accounts.join("、") : accountId || "—";
+  const accounts = (customer.accounts?.length ? customer.accounts : accountId ? [accountId] : [])
+    .map((id) => maskAccount(id))
+    .join("、") || "—";
   return (
     <div
       id={`ev-${customer.id}`}
@@ -100,7 +118,7 @@ export function CustomerCard({ customer, accountId, selected, onSelect }) {
       }}
     >
       <div className="kyc-hd">
-        <b>{customer.name || customer.id}</b>
+        <b>{displayName(customer.name) || customer.id}</b>
         <code>{customer.id}</code>
       </div>
       <dl className="kyc-dl">
@@ -131,8 +149,8 @@ export function CustomerCard({ customer, accountId, selected, onSelect }) {
           </dd>
         </div>
       </dl>
-      {customer.summary ? <p className="kyc-sum">{customer.summary}</p> : null}
-      <p className="kyc-note">合成档案摘要，不是尽调原件。开户申请、受益所有人、回访记录未入库。</p>
+      {customer.summary ? <p className="kyc-sum">{displayName(customer.summary)}</p> : null}
+      <p className="kyc-note">档案摘要。开户申请、受益所有人、回访记录如需原件，请走补证。</p>
     </div>
   );
 }
@@ -186,7 +204,7 @@ export function EvidenceLists({ graph, claims, kbHits, ablation, selected, onSel
 
   return (
     <div className="v2-panel">
-      <div className="v2-hd">证据分组（synthetic）</div>
+      <div className="v2-hd">证据分组</div>
       <div className="v2-hd sub">客户与账户</div>
       {profiles.slice(0, 6).map((e) => (
         <Row key={e.evidence_id} e={e} kind="profile" />
@@ -304,11 +322,17 @@ export function JudgePanel({ judge, baseline, guardrails, validation, onSelect, 
           <span>{support.length} / {counter.length} / {missing.length}</span>
           <ul>
             {(judge.rationale || []).slice(0, 4).map((row, i) => (
-              <li key={`${row.text}-${i}`}>
-                <button type="button" className="token" onClick={() => row.evidence_ids?.[0] && onSelect(row.evidence_ids[0])}>
-                  {row.text}
-                </button>
-                <em>{(row.evidence_ids || []).join("、")}</em>
+              <li key={`${row.text}-${i}`} className="ch-rationale">
+                <span className="ch-rationale-text">
+                  <EvidenceTokens text={row.text} onSelect={onSelect} />
+                </span>
+                <span className="ch-rationale-ids">
+                  {(row.evidence_ids || []).map((id, j) => (
+                    <button key={`${id}-${j}`} type="button" className="token" onClick={() => onSelect(id)}>
+                      {id}
+                    </button>
+                  ))}
+                </span>
               </li>
             ))}
           </ul>
@@ -358,6 +382,68 @@ export function CounterfactualBox({ cf }) {
           ? `移除 ${(cf.removed_evidence_ids || []).join("、")}：${DECISION_LABEL[cf.original_conclusion] || cf.original_conclusion} → ${DECISION_LABEL[cf.counterfactual_conclusion] || cf.counterfactual_conclusion || "无输出"}${cf.validated === false ? "（该轮输出未通过引用校验）" : ""}。${cf.note}`
           : cf.note || `${cf.assumption}：${cf.original} → ${cf.counterfactual}`}
       </p>
+    </div>
+  );
+}
+
+function TokenList({ ids, onSelect }) {
+  if (!ids?.length) return <span className="hint">（无）</span>;
+  return (
+    <span className="ch-rationale-ids">
+      {ids.map((id, i) => (
+        <button key={`${id}-${i}`} type="button" className="token" onClick={() => onSelect?.(id)}>
+          {id}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+export function VerifiedClaims({ rows, onSelect }) {
+  if (!rows?.length) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">已核验主张</div>
+      <p className="hint">封闭谓词在本案快照上重新执行后成立，不是语义支持度。</p>
+      {rows.slice(0, 8).map((row, i) => (
+        <div key={`${row.predicate}-${i}`} className="ev">
+          <code className="pred-ok">成立 · {row.predicate}</code>
+          <div>
+            <EvidenceTokens text={row.claim || "已核验交易模式"} onSelect={onSelect} />
+          </div>
+          <div className="hint">{row.reason}</div>
+          <TokenList ids={row.evidence_ids} onSelect={onSelect} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EvidenceSufficiencyPanel({ data, onSelect }) {
+  if (!data) return null;
+  return (
+    <div className="v2-panel">
+      <div className="v2-hd">证据充分性（有界贪心）</div>
+      <p className="hint">
+        {data.verified ? "已在候选预算内收敛" : "预算耗尽或未形成稳定核心"}
+        · {data.method || "bounded_greedy"} · {data.rounds || 0}/{data.max_rounds || 3} 轮
+        {data.budget_exhausted ? " · 不宣称全局最小" : ""}
+      </p>
+      <ul className="ch-flow">
+        <li>
+          <b>最小充分集</b>
+          <TokenList ids={data.minimal_sufficient_set} onSelect={onSelect} />
+        </li>
+        <li>
+          <b>必要编号</b>
+          <TokenList ids={data.necessary_ids} onSelect={onSelect} />
+        </li>
+        <li>
+          <b>冗余编号</b>
+          <TokenList ids={data.redundant_ids} onSelect={onSelect} />
+        </li>
+      </ul>
+      {data.note ? <div className="hint">{data.note}</div> : null}
     </div>
   );
 }

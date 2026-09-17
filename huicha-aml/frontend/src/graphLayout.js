@@ -11,11 +11,11 @@ export function accountTail(id) {
 }
 
 export function nodeCaption(n) {
-  const name = String(n.label || n.id || "").replace(/（合成）/g, "").trim();
+  const name = String(n.label || n.id || "").replace(/（演示）/g, "").replace(/（合成）/g, "").replace(/演示/g, "").trim();
   const tail = accountTail(n.id);
   if (n.kind === "channel") return { primary: name || tail, secondary: "" };
   if (!name || name === n.id) return { primary: tail, secondary: "" };
-  if (name.length > 5 && tail && tail !== name) {
+  if (tail && tail !== name && String(n.id || "").startsWith("6222")) {
     const short = name.length > 6 ? `${name.slice(0, 6)}…` : name;
     return { primary: tail, secondary: short };
   }

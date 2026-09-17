@@ -39,7 +39,7 @@ CANDIDATE_RE = re.compile(
     r"6222-[A-Z0-9\-]+|"
     r"ACC-\d+|"
     r"CASH-\d+|"
-    r"KB-[A-Z0-9\-]+|"
+    r"KB-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*|"
     r"(?<![A-Za-z0-9])C-[A-Z0-9]+|"
     r"\d{4}-\d{2}-\d{2}|"
     r"\d+(?:\.\d+)?\s*万元|"

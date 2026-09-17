@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.main import format_cn
-from app.tools import amount_known_forms, fact_check, yuan
+from app.tools import CANDIDATE_RE, amount_known_forms, fact_check, yuan
 
 
 def test_fact_check_catches_fake_wan_yuan():
@@ -52,6 +52,43 @@ def test_fact_check_treats_alert_and_evidence_ids_as_whole_tokens():
     assert fact_check("告警编号ALT-B-20260910，证据EV-ALT-B-20260910-001，日期20260910。", facts) == []
     issues = fact_check("证据 EV-ALT-B-20260910-999 与告警 ALT-Z-20260910。", facts)
     assert {i["token"] for i in issues} == {"EV-ALT-B-20260910-999", "ALT-Z-20260910"}
+
+
+def test_fact_check_allows_article_chunk_kb_ids():
+    facts = {
+        "amounts": [],
+        "tx_ids": [],
+        "accounts": [],
+        "dates": ["2026-09-10"],
+        "names": [],
+        "kb_ids": ["KB-CTR-03-a14", "KB-REG-02", "KB-AML-03-a35", "KB-REG-01", "KB-CDD-01-a4"],
+        "ref_ids": [],
+    }
+    text = "依据 KB-CTR-03-a14、KB-REG-02、KB-AML-03-a35、KB-REG-01、KB-CDD-01-a4。"
+    assert [m.group(0) for m in CANDIDATE_RE.finditer(text)] == [
+        "KB-CTR-03-a14",
+        "KB-REG-02",
+        "KB-AML-03-a35",
+        "KB-REG-01",
+        "KB-CDD-01-a4",
+    ]
+    assert fact_check(text, facts) == []
+    issues = fact_check("另引 KB-AML-99-a1 与 KB-FAKE-01-a9。", facts)
+    assert {i["token"] for i in issues} == {"KB-AML-99-a1", "KB-FAKE-01-a9"}
+
+
+def test_article_kb_citation_does_not_block_sign(client):
+    for use_challenger in (True, False):
+        data = client.post(
+            "/api/alerts/ALT-B-20260910/investigate",
+            params={"use_challenger": use_challenger, "inject_hallucination": False},
+        ).json()
+        article_ids = [h["id"] for h in data.get("kb_hits") or [] if "-a" in h["id"]]
+        assert article_ids, "本案应命中条款切块，否则覆盖不到编号回查"
+        text = data["report"]["full_text"]
+        assert any(kid in text for kid in article_ids)
+        assert data["fact_issues"] == []
+        assert data["can_sign"] is True
 
 
 def test_sanitize_missing_evidence_drops_ids_and_ranges():
@@ -135,14 +172,29 @@ def test_hallucination_blocks_sign(client, auth_headers):
     assert any(i["token"] == "6222-FAKE-9999" for i in data["fact_issues"])
     blocked = client.post(
         "/api/alerts/ALT-A-20260910/decide",
-        json={"decision": "confirm", "note": ""},
+        json={"decision": "submit", "note": ""},
         headers=auth_headers,
     )
     assert blocked.status_code == 400
+    submitted = client.post(
+        "/api/alerts/ALT-A-20260910/decide",
+        json={"decision": "submit", "note": "已人工删除幻觉账号"},
+        headers=auth_headers,
+    )
+    assert submitted.status_code == 200
+    from tests.conftest import login_headers
+
+    rev = login_headers(client, "002201", "aml123")
+    still_blocked = client.post(
+        "/api/alerts/ALT-A-20260910/decide",
+        json={"decision": "confirm", "note": ""},
+        headers=rev,
+    )
+    assert still_blocked.status_code == 400
     ok = client.post(
         "/api/alerts/ALT-A-20260910/decide",
         json={"decision": "modify", "note": "已人工删除幻觉账号"},
-        headers=auth_headers,
+        headers=rev,
     )
     assert ok.status_code == 200
 
@@ -173,12 +225,10 @@ def test_audit_time_is_cn_local(client, monkeypatch):
 
 
 def test_feedback_endpoint(client, auth_headers):
+    from tests.conftest import dual_confirm
+
     client.post("/api/alerts/ALT-A-20260910/investigate", params={"use_challenger": True})
-    client.post(
-        "/api/alerts/ALT-A-20260910/decide",
-        json={"decision": "confirm", "note": ""},
-        headers=auth_headers,
-    )
+    dual_confirm(client, "ALT-A-20260910")
     r = client.get("/api/feedback")
     assert r.status_code == 200
     assert r.json()["decisions"]["confirm"] >= 1
@@ -204,6 +254,7 @@ def test_health_reports_llm(client):
     assert body["limitations"]
     assert body["contest"]["demo_case"] == "ALT-L-20260910"
     assert "人效对照未完成" in " ".join(body["limitations"])
+    assert not any("Macro-F1" in x or "Challenger 调分" in x for x in body["limitations"])
 
 
 def test_planner_skips_watchlist_on_wholesale(client):

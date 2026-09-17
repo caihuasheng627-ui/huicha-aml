@@ -326,6 +326,25 @@ def _valid_judge(evidence_id: str, disposition: str = "suggest_report") -> dict:
     }
 
 
+def _tx_from_kwargs(kwargs, fallback="TX-B-IN-01") -> str:
+    allowed = kwargs.get("allowed_evidence") or []
+    return next((e for e in allowed if str(e).startswith("TX-")), allowed[0] if allowed else fallback)
+
+
+def _cf_aware_judge(kwargs, *, missing=None, confidence=0.8):
+    prior = kwargs.get("prior_issues") or []
+    eid = _tx_from_kwargs(kwargs)
+    if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
+        decision = _valid_judge(eid, "observe")
+        decision["confidence"] = confidence
+        return decision, {}
+    decision = _valid_judge(eid)
+    decision["confidence"] = confidence
+    if missing is not None:
+        decision["missing_evidence"] = missing
+    return decision, {}
+
+
 def test_truncated_judge_output_gets_one_repair_before_fallback(client, monkeypatch):
     calls: list[list] = []
 
@@ -333,7 +352,7 @@ def test_truncated_judge_output_gets_one_repair_before_fallback(client, monkeypa
         calls.append(kwargs.get("prior_issues") or [])
         if len(calls) == 1:
             raise RuntimeError("Judge 输出超过 max_tokens 被截断（completion_tokens=1000），请压缩证据引用数量")
-        return _valid_judge("TX-B-IN-01"), {"finish_reason": "stop"}
+        return _cf_aware_judge(kwargs)
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
@@ -347,15 +366,16 @@ def test_truncated_judge_output_gets_one_repair_before_fallback(client, monkeypa
 
 def test_judge_missing_evidence_ids_are_sanitized(client, monkeypatch):
     def fake_enrich(**kwargs):
-        decision = _valid_judge("TX-B-IN-01")
-        decision["missing_evidence"] = [
-            "EV-ALT-B-20260910-001",
-            "EV-ALT-B-20260910-002至030",
-            "TX-B-IN-02",
-            "资金来源说明",
-            "受益所有人信息",
-        ]
-        return decision, {}
+        return _cf_aware_judge(
+            kwargs,
+            missing=[
+                "EV-ALT-B-20260910-001",
+                "EV-ALT-B-20260910-002至030",
+                "TX-B-IN-02",
+                "资金来源说明",
+                "受益所有人信息",
+            ],
+        )
 
     monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
     data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
@@ -400,6 +420,9 @@ def test_counterfactual_invalid_output_is_not_reported_as_unchanged(client, monk
     assert cf["counterfactual_conclusion"] == "observe"
     assert "未通过引用校验" in cf["note"]
     assert "未变化" not in cf["note"]
+    assert data["agent_reliability"]["stance"] == "abstain"
+    assert data["can_sign"] is False
+    assert data["case_v2"]["agent_abstained"] is True
 
 
 def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
@@ -408,8 +431,9 @@ def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
     def fake_enrich(**kwargs):
         prior = kwargs.get("prior_issues") or []
         if any(p.get("kind") == "counterfactual" for p in prior):
-            seen["findings"] = kwargs["findings"]
-            seen["allowed"] = kwargs["allowed_evidence"]
+            if "findings" not in seen:
+                seen["findings"] = kwargs["findings"]
+                seen["allowed"] = kwargs["allowed_evidence"]
             return _valid_judge(kwargs["allowed_evidence"][0], disposition="observe"), {}
         return _valid_judge("TX-B-IN-01"), {}
 
@@ -420,3 +444,168 @@ def test_counterfactual_findings_drop_removed_evidence(client, monkeypatch):
     assert not (removed & set(seen["allowed"]))
     assert all(not (removed & set(f.get("evidence_ids") or [])) for f in seen["findings"])
     assert data["counterfactual"]["faithful"] is True
+    assert data["agent_reliability"]["stance"] == "committed"
+    assert data["can_sign"] is True
+
+
+def test_false_predicate_is_repaired_on_second_round(client, monkeypatch):
+    calls: list[list] = []
+
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        calls.append(prior)
+        if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
+            return _cf_aware_judge(kwargs)
+        ids = ["TX-L-01", "TX-L-02", "TX-L-03"]
+        if not any(isinstance(p, dict) and p.get("kind") == "predicate_failed" for p in prior):
+            return (
+                {
+                    "disposition": "suggest_report",
+                    "confidence": 0.8,
+                    "typologies": ["layering"],
+                    "supporting_evidence_ids": ids,
+                    "contradicting_evidence_ids": [],
+                    "missing_evidence": [],
+                    "rationale": [
+                        {
+                            "text": "金额递增",
+                            "evidence_ids": ids,
+                            "predicate": "amount_monotonic_increasing",
+                            "args": {"tx_ids": ids},
+                        }
+                    ],
+                    "next_actions": [],
+                },
+                {},
+            )
+        return (
+            {
+                "disposition": "suggest_report",
+                "confidence": 0.8,
+                "typologies": ["layering"],
+                "supporting_evidence_ids": ids,
+                "contradicting_evidence_ids": [],
+                "missing_evidence": [],
+                "rationale": [
+                    {
+                        "text": "连续过桥",
+                        "evidence_ids": ids,
+                        "predicate": "consecutive_transfer_chain",
+                        "args": {"tx_ids": ids},
+                    }
+                ],
+                "next_actions": [],
+            },
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-L-20260910/investigate").json()
+    assert data["judge_repaired"] is True
+    assert data["judge_validation"]["passed"] is True
+    assert data["verified_claims"]
+    assert data["verified_claims"][0]["predicate"] == "consecutive_transfer_chain"
+    assert data["can_sign"] is True
+    assert any(any(isinstance(p, dict) and p.get("kind") == "predicate_failed" for p in batch) for batch in calls)
+
+
+def test_counterfactual_syncs_predicate_args_with_removed_ids(client, monkeypatch):
+    seen: dict = {}
+
+    def fake_enrich(**kwargs):
+        prior = kwargs.get("prior_issues") or []
+        ids = ["TX-L-01", "TX-L-02", "TX-L-03"]
+        if any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in prior):
+            allowed = list(kwargs.get("allowed_evidence") or [])
+            if "allowed" not in seen:
+                seen["allowed"] = [e for e in allowed if str(e).startswith("TX-")]
+            kept = [e for e in ids if e in allowed]
+            cite = kept[:1] or [e for e in allowed if e][:1]
+            return (
+                {
+                    "disposition": "observe",
+                    "confidence": 0.6,
+                    "typologies": [],
+                    "supporting_evidence_ids": cite,
+                    "contradicting_evidence_ids": [],
+                    "missing_evidence": ["资金来源说明"],
+                    "rationale": [{"text": "移除过桥后仅余观察", "evidence_ids": cite}],
+                    "next_actions": [],
+                },
+                {},
+            )
+        return (
+            {
+                "disposition": "suggest_report",
+                "confidence": 0.8,
+                "typologies": ["layering"],
+                "supporting_evidence_ids": ids,
+                "contradicting_evidence_ids": [],
+                "missing_evidence": [],
+                "rationale": [
+                    {
+                        "text": "连续过桥",
+                        "evidence_ids": ids,
+                        "predicate": "consecutive_transfer_chain",
+                        "args": {"tx_ids": ids},
+                    }
+                ],
+                "next_actions": [],
+            },
+            {},
+        )
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-L-20260910/investigate").json()
+    removed = set(data["counterfactual"]["removed_evidence_ids"])
+    assert removed
+    assert not (removed & set(seen["allowed"]))
+    assert data["counterfactual"]["validated"] is True
+    assert data["verified_claims"][0]["args"]["tx_ids"] == ["TX-L-01", "TX-L-02", "TX-L-03"]
+
+
+def test_low_confidence_rule_conflict_abstains(client, monkeypatch):
+    def fake_enrich(**kwargs):
+        decision, usage = _cf_aware_judge(kwargs, confidence=0.4)
+        if not any(isinstance(p, dict) and p.get("kind") == "counterfactual" for p in (kwargs.get("prior_issues") or [])):
+            decision["disposition"] = "suggest_report"
+            decision["confidence"] = 0.4
+        return decision, usage
+
+    monkeypatch.setattr("app.agents.enrich_judge", fake_enrich)
+    data = client.post("/api/alerts/ALT-A-20260910/investigate").json()
+    assert data["rule_baseline"]["conclusion"] != data["judge"]["disposition"] or data["judge"]["confidence"] < 0.55
+    assert data["agent_reliability"]["stance"] == "abstain"
+    assert any(r["code"] == "rule_judge_conflict_low_conf" for r in data["agent_reliability"]["reasons"])
+    assert data["can_sign"] is False
+    assert "倾向档" in data["report"]["full_text"]
+
+
+def test_stable_high_confidence_layering_remains_signable(client):
+    data = client.post("/api/alerts/ALT-L-20260910/investigate").json()
+    assert data["rule_baseline"]["conclusion"] == "exclude"
+    assert data["judge"]["disposition"] == "suggest_report"
+    assert data["judge"]["confidence"] >= 0.55
+    assert data["judge_validation"]["passed"] is True
+    assert data["agent_reliability"]["stance"] == "committed"
+    assert data["case_v2"]["agent_abstained"] is False
+    assert data["can_sign"] is True
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
+    assert data["evidence_sufficiency"]["method"] == "bounded_greedy"
+
+
+def test_judge_fallback_abstains_and_blocks_sign(client, monkeypatch):
+    def boom(**_kwargs):
+        raise RuntimeError("Judge unavailable")
+
+    monkeypatch.setattr("app.agents.enrich_judge", boom)
+    data = client.post("/api/alerts/ALT-B-20260910/investigate").json()
+    assert data["judge_validation"]["score_kind"] == "fallback"
+    assert data["judge_validation"]["passed"] is False
+    assert data["agent_reliability"]["stance"] == "abstain"
+    assert any(r["code"] == "judge_fallback" for r in data["agent_reliability"]["reasons"])
+    assert data["can_sign"] is False
+    assert data["case_v2"]["agent_abstained"] is True
+    assert data["scoring"]["mode"] == "judge_not_additive"
+    assert "倾向档" in (data["report"].get("full_text") or "")
+

@@ -1,11 +1,13 @@
 import json
+import queue
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -18,9 +20,10 @@ from .checklist import (
     merge_note,
 )
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
+from .display import case_no, mask_account
 from .knowledge import corpus_size, get_knowledge, list_knowledge, retrieval_mode, search_knowledge, search_unit_count
-from .llm import llm_mode, llm_model
-from .models import Alert, AuditLog, Customer, Investigation, utcnow
+from .llm import investigation_tokens, llm_mode, llm_model
+from .models import Alert, AmlCase, AuditLog, Customer, Investigation, utcnow
 from .case_store import persist_human_decision, seed_prompt_versions
 from .security import (
     auth_mode,
@@ -32,10 +35,12 @@ from .security import (
     require_user,
     resolve_session,
 )
+from .workflow import assert_decision_allowed
 from .privacy import POLICY_VERSION, PrivacyLeakError
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
+    "submit": "已提交复核",
     "confirm": "已记录签发",
     "modify": "修改后采纳",
     "reject": "已驳回",
@@ -55,6 +60,8 @@ def format_cn(dt: datetime | None) -> str:
 def _alert_status_after_decide(decision: str, conclusion: str) -> str:
     if decision == "reject":
         return "pending"
+    if decision == "submit":
+        return "pending_review"
     if decision == "modify":
         return "modified"
     if conclusion == "exclude":
@@ -67,6 +74,8 @@ def _alert_status_after_decide(decision: str, conclusion: str) -> str:
 def _case_status_after_decide(decision: str, conclusion: str) -> str:
     if decision == "reject":
         return "OPEN"
+    if decision == "submit":
+        return "PENDING_REVIEW"
     if decision != "confirm":
         return "PENDING_REVIEW"
     if conclusion in {"exclude", "observe"}:
@@ -76,6 +85,54 @@ def _case_status_after_decide(decision: str, conclusion: str) -> str:
 
 def get_investigation(db: Session, alert_id: str) -> Investigation | None:
     return db.query(Investigation).filter(Investigation.alert_id == alert_id).first()
+
+
+_INVESTIGATE_GUARD = threading.Lock()
+_INVESTIGATE_RUNNING: set[str] = set()
+INVESTIGATE_BUSY = "本案正在调查"
+INVESTIGATE_FAIL = "调查失败，请重试"
+
+
+def _try_begin_investigation(alert_id: str) -> None:
+    with _INVESTIGATE_GUARD:
+        if alert_id in _INVESTIGATE_RUNNING:
+            raise HTTPException(409, INVESTIGATE_BUSY)
+        _INVESTIGATE_RUNNING.add(alert_id)
+
+
+def _end_investigation(alert_id: str) -> None:
+    with _INVESTIGATE_GUARD:
+        _INVESTIGATE_RUNNING.discard(alert_id)
+
+
+def _reset_alert_for_investigate(db: Session, alert: Alert) -> Investigation | None:
+    """重跑必须覆盖 pending_review / monitoring，并清掉人工处置痕迹。"""
+    alert.status = "investigating"
+    inv = get_investigation(db, alert.id)
+    if inv:
+        inv.human_decision = ""
+        inv.human_note = ""
+        inv.signed_by_id = ""
+        inv.signed_by_name = ""
+        inv.decided_at = None
+        try:
+            payload = json.loads(inv.payload_json or "{}")
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload.get("human_review"), dict):
+            payload["human_review"] = {}
+        v2 = payload.get("case_v2")
+        if isinstance(v2, dict):
+            v2["human_decision"] = ""
+            v2["status"] = "INVESTIGATING"
+            payload["case_v2"] = v2
+        inv.payload_json = json.dumps(payload, ensure_ascii=False)
+    rec = db.get(AmlCase, alert.id)
+    if rec:
+        rec.human_decision = ""
+        rec.status = "OPEN"
+        rec.updated_at = utcnow()
+    return inv
 
 
 @asynccontextmanager
@@ -157,9 +214,8 @@ def health():
             "SQLite 文件库，调查载荷明文存储，不是银行级加密",
             "LLM 出站经 PrivacyMap 脱敏并检漏；工作台展示受控明文",
             "知识库含现行法律规章官方条款（按条切块）+ 作业转述；混合检索（关键词 + 字符 TF-IDF），目录条数见 kb_docs，检索单元见 kb_search_units",
-            "告警为合成数据，gold_label 与规则模板同源；合成集 Macro-F1 不是生产准确率",
+            "告警为合成数据，gold_label 与规则模板同源，不是生产准确率",
             "人效对照未完成前不得填写效率提升百分比",
-            "Challenger 调分须封闭谓词在本案快照上执行为真",
         ],
     }
 
@@ -235,6 +291,7 @@ def list_alerts(db: Session = Depends(get_db)):
         out.append(
             {
                 "id": a.id,
+                "case_no": case_no(a.id, a.created_at),
                 "title": a.title,
                 "alert_type": a.alert_type,
                 "amount": a.amount,
@@ -243,6 +300,7 @@ def list_alerts(db: Session = Depends(get_db)):
                 "demo_tag": a.demo_tag,
                 "customer_name": c.name if c else "",
                 "customer_id": a.customer_id,
+                "account_masked": mask_account(a.account_id),
                 "upstream": a.upstream,
                 "has_draft": bool(inv),
                 "conclusion": inv.conclusion if inv else "",
@@ -274,6 +332,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
     return {
         "alert": {
             "id": alert.id,
+            "case_no": case_no(alert.id, alert.created_at),
             "title": alert.title,
             "alert_type": alert.alert_type,
             "amount": alert.amount,
@@ -281,6 +340,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
             "status": alert.status,
             "demo_tag": alert.demo_tag,
             "account_id": alert.account_id,
+            "account_masked": mask_account(alert.account_id),
             "customer_id": alert.customer_id,
             "upstream": alert.upstream,
         },
@@ -289,6 +349,8 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
         "human_note": inv.human_note if inv else "",
         "signed_by_id": (inv.signed_by_id if inv else "") or "",
         "signed_by_name": (inv.signed_by_name if inv else "") or "",
+        "submitted_by_id": ((payload or {}).get("human_review") or {}).get("submitted_by_id") or "",
+        "submitted_by_name": ((payload or {}).get("human_review") or {}).get("submitted_by_name") or "",
         "decided_at": format_cn(inv.decided_at) if inv else "",
         "audit": [
             {
@@ -319,18 +381,46 @@ def investigate(
     alert = db.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "告警不存在")
+    _try_begin_investigation(alert_id)
     try:
-        result = run_investigation(
+        _reset_alert_for_investigate(db, alert)
+        db.commit()
+        try:
+            result = run_investigation(
+                db,
+                alert_id,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+            )
+        except PrivacyLeakError as e:
+            raise HTTPException(502, str(e)) from e
+        except RuntimeError as e:
+            raise HTTPException(502, str(e)) from e
+        _finalize_investigation(
             db,
-            alert_id,
+            alert,
+            result,
             use_challenger=use_challenger,
             inject_hallucination=inject_hallucination,
             experiment_mode=experiment_mode,
         )
-    except PrivacyLeakError as e:
-        raise HTTPException(502, str(e)) from e
-    except RuntimeError as e:
-        raise HTTPException(502, str(e)) from e
+        db.commit()
+        return result
+    finally:
+        _end_investigation(alert_id)
+
+
+def _finalize_investigation(
+    db: Session,
+    alert: Alert,
+    result: dict,
+    *,
+    use_challenger: bool,
+    inject_hallucination: bool,
+    experiment_mode: bool,
+) -> None:
+    alert_id = alert.id
     inv = get_investigation(db, alert_id)
     blob = json.dumps(result, ensure_ascii=False)
     if inv:
@@ -344,8 +434,7 @@ def investigate(
     else:
         inv = Investigation(alert_id=alert_id, payload_json=blob, conclusion=result["conclusion"])
         db.add(inv)
-    if alert.status in {"pending", "closed", "ready_to_file", "modified"}:
-        alert.status = "investigating"
+    alert.status = "investigating"
     scoring = result.get("scoring") or {}
     run = result.get("challenger_run") or {}
     validator = result.get("validator_result") or {}
@@ -411,8 +500,90 @@ def investigate(
                 ensure_ascii=False,
             ),
         )
-    db.commit()
-    return result
+
+
+def _sse_pack(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.get("/api/alerts/{alert_id}/investigate/stream")
+def investigate_stream(
+    alert_id: str,
+    use_challenger: bool = True,
+    inject_hallucination: bool = False,
+    experiment_mode: bool = False,
+    db: Session = Depends(get_db),
+):
+    alert = db.get(Alert, alert_id)
+    if not alert:
+        raise HTTPException(404, "告警不存在")
+    _try_begin_investigation(alert_id)
+    events: queue.Queue = queue.Queue()
+
+    def worker() -> None:
+        session = SessionLocal()
+        try:
+            row = session.get(Alert, alert_id)
+            if not row:
+                events.put({"event": "error", "detail": INVESTIGATE_FAIL})
+                return
+
+            def emit(event: dict) -> None:
+                events.put(event)
+
+            _reset_alert_for_investigate(session, row)
+            session.commit()
+            result = run_investigation(
+                session,
+                alert_id,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+                emit=emit,
+            )
+            _finalize_investigation(
+                session,
+                row,
+                result,
+                use_challenger=use_challenger,
+                inject_hallucination=inject_hallucination,
+                experiment_mode=experiment_mode,
+            )
+            session.commit()
+            events.put({"event": "done", "payload": result})
+        except PrivacyLeakError:
+            session.rollback()
+            events.put({"event": "error", "detail": "出站检漏失败，本轮已中止"})
+        except RuntimeError:
+            session.rollback()
+            events.put({"event": "error", "detail": INVESTIGATE_FAIL})
+        except Exception:
+            session.rollback()
+            events.put({"event": "error", "detail": INVESTIGATE_FAIL})
+        finally:
+            session.close()
+            _end_investigation(alert_id)
+            events.put(None)
+
+    try:
+        threading.Thread(target=worker, daemon=True).start()
+    except Exception:
+        _end_investigation(alert_id)
+        raise
+
+    def generate():
+        while True:
+            item = events.get()
+            if item is None:
+                break
+            event = item.get("event") or "message"
+            yield _sse_pack(event, item)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class DecideBody(BaseModel):
@@ -526,34 +697,59 @@ def append_checklist(alert_id: str, body: ChecklistAppendBody, request: Request,
 @app.post("/api/alerts/{alert_id}/decide")
 def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depends(get_db)):
     user = require_user(request)
-    if body.decision not in {"confirm", "modify", "reject"}:
-        raise HTTPException(400, "decision 必须是 confirm / modify / reject")
     alert = db.get(Alert, alert_id)
     inv = get_investigation(db, alert_id)
     if not alert or not inv:
         raise HTTPException(400, "请先生成调查草稿")
     payload = json.loads(inv.payload_json)
-    if body.decision == "confirm" and not payload.get("can_sign"):
-        raise HTTPException(400, "事实回查未通过，不能签发")
-    if body.decision == "modify" and not payload.get("can_sign") and not body.note.strip():
-        raise HTTPException(400, "事实回查未通过时，「修改后采纳」须填写修改说明")
+    review = dict(payload.get("human_review") or {})
+    submitted_by_id = review.get("submitted_by_id") or ""
+    if inv.human_decision == "submit":
+        submitted_by_id = submitted_by_id or inv.signed_by_id or ""
+    assert_decision_allowed(
+        user,
+        body.decision,
+        current_decision=inv.human_decision or "",
+        can_sign=bool(payload.get("can_sign")),
+        note=body.note or "",
+        submitted_by_id=submitted_by_id,
+        sign_blockers=payload.get("sign_blockers") or [],
+    )
     inv.human_decision = body.decision
     inv.human_note = body.note
-    inv.signed_by_id = user.staff_id
-    inv.signed_by_name = user.name
+    if body.decision in {"confirm", "modify"}:
+        inv.signed_by_id = user.staff_id
+        inv.signed_by_name = user.name
+    elif body.decision == "submit":
+        inv.signed_by_id = ""
+        inv.signed_by_name = ""
     inv.decided_at = utcnow()
     alert.status = _alert_status_after_decide(body.decision, payload.get("conclusion") or "")
     v2 = payload.setdefault("case_v2", {})
     v2["status"] = _case_status_after_decide(body.decision, payload.get("conclusion") or "")
     v2["human_decision"] = body.decision
-    payload["human_review"] = {
-        "decision": body.decision,
-        "note": body.note,
-        "at": format_cn(inv.decided_at),
-        "signed_by_id": user.staff_id,
-        "signed_by_name": user.name,
-        "signed_by": user.label(),
-    }
+    if body.decision == "submit":
+        review["submitted_by_id"] = user.staff_id
+        review["submitted_by_name"] = user.name
+        review["submitted_at"] = format_cn(inv.decided_at)
+        review["submit_note"] = body.note
+        review["signed_by_id"] = ""
+        review["signed_by_name"] = ""
+        review["signed_by"] = ""
+    review.update(
+        {
+            "decision": body.decision,
+            "note": body.note,
+            "at": format_cn(inv.decided_at),
+            "acted_by_id": user.staff_id,
+            "acted_by_name": user.name,
+        }
+    )
+    if body.decision in {"confirm", "modify"}:
+        review["signed_by_id"] = user.staff_id
+        review["signed_by_name"] = user.name
+        review["signed_by"] = user.label()
+    payload["human_review"] = review
     inv.payload_json = json.dumps(payload, ensure_ascii=False)
     note = f"：{body.note}" if body.note else ""
     scoring = payload.get("scoring") or {}
@@ -586,16 +782,16 @@ def decide(alert_id: str, body: DecideBody, request: Request, db: Session = Depe
         body.decision,
         body.note,
         reco,
-        signed_by_id=user.staff_id,
-        signed_by_name=user.name,
+        signed_by_id=user.staff_id if body.decision in {"confirm", "modify"} else "",
+        signed_by_name=user.name if body.decision in {"confirm", "modify"} else "",
     )
     db.commit()
     return {
         "ok": True,
         "status": alert.status,
         "human_decision": body.decision,
-        "signed_by_id": user.staff_id,
-        "signed_by_name": user.name,
+        "signed_by_id": inv.signed_by_id or "",
+        "signed_by_name": inv.signed_by_name or "",
         "ai_recommendation": reco,
         "final_action": "human_only",
         "note": "AI 建议已记录，最终处置以人工为准，系统不会自动报送。",
@@ -626,6 +822,7 @@ def metrics(db: Session = Depends(get_db)):
     ]
     fact_blocked = sum(1 for p in parsed_payloads if p.get("fact_issues"))
     elapsed = [float(p["elapsed_ms"]) for p in parsed_payloads if p.get("elapsed_ms") is not None]
+    tokens = sum(investigation_tokens(p) for p in parsed_payloads)
     validation_audits = db.query(AuditLog).filter(AuditLog.action == "validator").count()
     decision_audits = db.query(AuditLog).filter(AuditLog.action == "decide").count()
     return {
@@ -635,6 +832,7 @@ def metrics(db: Session = Depends(get_db)):
         "store": "sqlite",
         "drafts": len(invs),
         "signed": signed,
+        "tokens": tokens,
         "by_status": by_status,
         "quality": {
             "evidence_contract_pass_rate": round(
@@ -656,7 +854,7 @@ def feedback(db: Session = Depends(get_db)):
     """人机闭环看板：采纳/修改/驳回率，及人工改结论与 Agent 建议对照。"""
     invs = db.query(Investigation).all()
     alerts = {a.id: a for a in db.query(Alert).all()}
-    counts = {"confirm": 0, "modify": 0, "reject": 0, "undecided": 0}
+    counts = {"confirm": 0, "modify": 0, "reject": 0, "submit": 0, "undecided": 0}
     by_type: dict[str, dict] = {}
     flipped = []
     for inv in invs:
@@ -705,10 +903,15 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
     report = payload.get("report", {})
     signed = inv.human_decision or ""
     signed_line = DECIDE_LABEL.get(signed, signed) if signed else "否（本文件仅为草稿）"
-    if inv.signed_by_name and inv.signed_by_id:
-        signer = f"{inv.signed_by_name}（{inv.signed_by_id}）"
+    review = payload.get("human_review") or {}
+    submitted_name = review.get("submitted_by_name") or "（未提交）"
+    if signed in {"confirm", "modify"} and (inv.signed_by_name or inv.signed_by_id):
+        if inv.signed_by_name and inv.signed_by_id:
+            signer = f"{inv.signed_by_name}（{inv.signed_by_id}）"
+        else:
+            signer = inv.signed_by_name or inv.signed_by_id
     else:
-        signer = inv.signed_by_name or inv.signed_by_id or "（未绑定用户）"
+        signer = "（未签发）"
     v2 = payload.get("case_v2") or {}
     scoring = payload.get("scoring") or {}
     priv = payload.get("privacy") or {}
@@ -722,12 +925,14 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         "# 循证慧查 可疑交易调查草稿（非报送报文）",
         "",
         f"- 告警：{alert_id}",
+        f"- 案件号：{case_no(alert_id, (payload.get('alert') or {}).get('created_at') or '')}",
         f"- 建议结论：{payload.get('conclusion_label')}",
         f"- AI 建议档：{v2.get('recommendation') or ''}",
         f"- 风险等级：{v2.get('risk_level') or ''}",
         f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
         f"- 规则分：{payload.get('confidence')}（{payload.get('confidence_kind') or 'rule_score_not_calibrated'}，非校准置信度）",
         f"- 人工签发：{signed_line}",
+        f"- 提交人：{submitted_name}",
         f"- 签发人：{signer}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",

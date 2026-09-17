@@ -84,6 +84,36 @@ class ValidationResult(BaseModel):
 class JudgeRationale(BaseModel):
     text: str
     evidence_ids: list[str] = Field(default_factory=list)
+    predicate: str | None = None
+    args: dict = Field(default_factory=dict)
+    validation: ValidationResult | None = None
+
+
+class AbstainReason(BaseModel):
+    code: str
+    severity: Literal["hard", "soft"]
+    message: str
+
+
+class EvidenceSufficiency(BaseModel):
+    method: str = "bounded_greedy"
+    verified: bool = False
+    budget_exhausted: bool = False
+    performed: bool = False
+    rounds: int = 0
+    max_rounds: int = 3
+    max_candidates: int = 4
+    minimal_sufficient_set: list[str] = Field(default_factory=list)
+    necessary_ids: list[str] = Field(default_factory=list)
+    redundant_ids: list[str] = Field(default_factory=list)
+    candidates: list[dict] = Field(default_factory=list)
+    note: str = ""
+
+
+class AgentReliability(BaseModel):
+    stance: Literal["committed", "abstain"] = "committed"
+    reasons: list[AbstainReason] = Field(default_factory=list)
+    note: str = ""
 
 
 class JudgeDecision(BaseModel):

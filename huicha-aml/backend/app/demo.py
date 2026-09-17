@@ -21,7 +21,7 @@ from .predicates import stub_challenger_item
 from .seed import seed_if_empty
 
 
-def _stub_chat(messages, *, temperature=0.0, max_tokens=900):
+def _stub_chat(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
     usage = {"prompt_tokens": 8, "completion_tokens": 16, "total_tokens": 24, "cached": False, "model": "stub"}
     sys = messages[0]["content"]
     user = messages[-1]["content"]

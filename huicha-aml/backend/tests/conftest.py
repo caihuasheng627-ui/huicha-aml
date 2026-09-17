@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
-from app.predicates import stub_challenger_item
+from app.predicates import attach_stub_judge_predicate, stub_challenger_item
 from app.seed import seed_if_empty
 
 
@@ -20,6 +20,23 @@ def login_headers(client, staff_id="002183", password="aml123"):
     return {"X-Huicha-Session": r.json()["token"]}
 
 
+def dual_confirm(client, alert_id, note=""):
+    inv = login_headers(client)
+    rev = login_headers(client, "002201", "aml123")
+    submitted = client.post(
+        f"/api/alerts/{alert_id}/decide",
+        json={"decision": "submit", "note": note},
+        headers=inv,
+    )
+    assert submitted.status_code == 200, submitted.text
+    signed = client.post(
+        f"/api/alerts/{alert_id}/decide",
+        json={"decision": "confirm", "note": note},
+        headers=rev,
+    )
+    return signed, rev
+
+
 @pytest.fixture()
 def auth_headers(client):
     return login_headers(client)
@@ -27,7 +44,7 @@ def auth_headers(client):
 
 @pytest.fixture()
 def client(monkeypatch):
-    def fake_chat(messages, *, temperature=0.0, max_tokens=900):
+    def fake_chat(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
         user = messages[-1]["content"]
         usage = {
             "prompt_tokens": 10,
@@ -60,6 +77,10 @@ def client(monkeypatch):
                 for evidence_id in finding.get("evidence_ids", [])
             ][:6]
             cited = support or counter or data.get("allowed_evidence_ids", [])[:2]
+            rationale = attach_stub_judge_predicate(
+                {"text": "单测 Judge 建议", "evidence_ids": cited},
+                data,
+            )
             return (
                 json.dumps(
                     {
@@ -69,7 +90,7 @@ def client(monkeypatch):
                         "supporting_evidence_ids": support,
                         "contradicting_evidence_ids": counter,
                         "missing_evidence": [],
-                        "rationale": [{"text": "单测 Judge 建议", "evidence_ids": cited}],
+                        "rationale": [rationale],
                         "next_actions": ["人工复核"],
                     },
                     ensure_ascii=False,
@@ -79,14 +100,16 @@ def client(monkeypatch):
         if "完整四段调查底稿" in sys:
             data = json.loads(user)
             ids = "、".join(data.get("evidence_ids", [])[:4])
+            regs = "、".join(data.get("regulation_ids", [])[:5])
             conclusion = data["conclusion_label"]
+            cite = f"依据 {regs}。" if regs else ""
             return (
                 "\n".join(
                     [
                         f"【资金交易及客户行为】已核对证据 {ids}。",
                         f"【疑点分析】形成{conclusion}初步建议，证据 {ids}。",
                         f"【反证与缺失证据】已核查反向材料，证据 {ids}。",
-                        f"【结论与理由】{conclusion}。须人工签发，不可自动报送，证据 {ids}。",
+                        f"【结论与理由】{conclusion}。{cite}须人工签发，不可自动报送，证据 {ids}。",
                     ]
                 ),
                 usage,

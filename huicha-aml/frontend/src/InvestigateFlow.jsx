@@ -55,11 +55,11 @@ const PIPELINE = [
     id: "validator",
     role: "Skeptic",
     title: "核验",
-    caption: "引用契约 + 关键证据反事实",
+    caption: "引用/谓词核验 + 有界最小证据集",
     dwell: 860,
     linger: false,
-    ticks: ["证据存在性", "逐条引用复核", "最小证据扰动"],
-    logs: ["verify_judge", "citation_validity", "counterfactual_check"],
+    ticks: ["证据存在性", "谓词真值", "有界贪心反事实"],
+    logs: ["verify_judge", "predicate_check", "bounded_greedy_cf"],
   },
   {
     id: "reporter",
@@ -76,8 +76,8 @@ const PIPELINE = [
 const SIGN_STAGE = {
   id: "human",
   role: "Human",
-  title: "人签",
-  caption: "调查员做最终决策",
+  title: "签发",
+  caption: "提交复核 / 同意签发",
 };
 
 const RAIL = [...PIPELINE, SIGN_STAGE];

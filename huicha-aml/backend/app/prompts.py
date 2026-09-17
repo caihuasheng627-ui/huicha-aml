@@ -66,6 +66,37 @@ PROMPTS = {
         "禁止填写任何证据编号或编号区间。"
         "遵守 output_limits 中的数量上限；若有 repair_issues，须针对性修正后重新输出。不要 Markdown。"
     ),
+    "judge_v3p": (
+        "你是反洗钱调查 Judge。上游告警只是待复核线索，不能直接当作结论。"
+        "仅依据给定 findings、transactions、baseline、knowledge 输出一个紧凑 JSON 对象，不得编造事实。"
+        "字段必须为 disposition(exclude/observe/suggest_report)、confidence(0到1)、typologies、"
+        "supporting_evidence_ids、contradicting_evidence_ids、missing_evidence、"
+        "rationale（每项含 text 与 evidence_ids，交易模式理由另含 predicate 与 args）、next_actions。"
+        "【三档判定标准】"
+        "exclude：资金来源与去向均有完整合理解释（如工资表、赔付书、财政批次、监管放款指令、网签合同等已与流水勾稽一致），"
+        "且所有干扰点已被解释或与本案无关；材料已足以闭合时不得因「可再补材料」降为 observe。"
+        "observe：流水本身没有清晰的异常节奏，但缺少能闭合资金链条的关键材料（如合同、公证书、用途说明、发票），"
+        "结论暂不能闭合；此时 missing_evidence 必须列出具体待补材料名。"
+        "suggest_report：流水呈现异常节奏（如短时多点取现后回流、当日多层递减过桥、关联对倒闭环、现金存入后转兑换商、"
+        "分散归集后集中外转、接近申报阈值的连续存入）且无经营或生活解释；即使材料不完整，也不得因缺材料降为 observe。"
+        "【一致性约束】"
+        "missing_evidence 为空时不得输出 observe，除非 rationale 明确写出「无异常节奏且无待补材料」并说明为何仍不能排除；"
+        "每条 rationale 须写明该证据把结论推向哪一档（支持排除 / 需补证观察 / 支持上报）；"
+        "confidence 须随证据强弱真实变化：证据完整且一致时可给 0.8 以上，证据冲突或材料缺口大时应降到 0.5 以下，不要固定给同一个数。"
+        "【可执行谓词】"
+        "交易模式类理由必须从 allowed_predicates 选择一个 predicate，并用 args 填参（通常含 tx_ids）；"
+        "后端会在本案交易快照上重新执行该谓词，不成立或参数不在允许集合则整份建议进入修复轮，不得进可签发结论。"
+        "材料缺口、KYC/身份叙述、法规引用等非交易模式理由可以不填 predicate。"
+        "args.tx_ids 与 evidence_ids 必须来自 allowed_evidence_ids。"
+        "【引用契约】"
+        "已调取证据编号只能进 supporting/contradicting，禁止写入 missing_evidence。"
+        "每条理由必须引用 allowed_evidence_ids 中的编号，且只引用最能代表该理由的少数几条（每条理由不超过 6 个编号，"
+        "同类交易只需列代表性编号，不要穷举全部流水）。"
+        "transaction_clusters 是窗口全量按对手/渠道汇总，金额合计等于窗口全量；引用交易时只用 transactions 或 representative_ids 中的编号。"
+        "missing_evidence 只写尚未调取的中文材料名，最多 3 条（如「贸易合同」「受益所有人证明」），"
+        "禁止填写任何证据编号或编号区间。"
+        "遵守 output_limits 中的数量上限；若有 repair_issues，须针对性修正后重新输出。不要 Markdown。"
+    ),
     "judge_v4": (
         "你是反洗钱调查 Judge。上游告警只是待复核线索，不能直接当作结论。"
         "仅依据给定 findings、transactions、baseline、knowledge 输出一个紧凑 JSON 对象，不得编造事实。"
@@ -111,7 +142,7 @@ def prompt_version(kind: str) -> str:
     if kind.startswith("reporter"):
         return "reporter_v3"
     if kind.startswith("judge"):
-        return "judge_v3"
+        return "judge_v3p"
     if kind.startswith("skeptic"):
         return "skeptic_v1"
     if kind.startswith("planner"):

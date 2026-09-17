@@ -76,7 +76,7 @@ def test_case_h_llm_context_has_no_raw_pii(client, monkeypatch):
     captured = {}
     orig = llm_mod.chat
 
-    def wrap(messages, *, temperature=0.0, max_tokens=900):
+    def wrap(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
         sys = messages[0]["content"]
         user = messages[-1]["content"]
         if ("调查 Judge" in sys or "disposition" in sys) and "ctx" not in captured:

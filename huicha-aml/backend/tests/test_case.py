@@ -51,7 +51,7 @@ def test_investigate_returns_case_v2(client):
     assert data["evidence_graph"]
     assert data["risk"]["factors"]
     assert data["structured_report"]["human_review"]
-    assert data["prompt_versions"]["judge"] == "judge_v3"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
     assert data["judge_validation"]["passed"] is True
     assert data["scoring"]["mode"] == "judge_not_additive"
     assert data["prompt_versions"]["skeptic"] == "skeptic_v1"
@@ -69,6 +69,9 @@ def test_layering_demo_chain(client):
     assert data["judge"]["disposition"] == "suggest_report"
     assert data["case_v2"]["recommendation"] == "REPORT_REVIEW"
     assert "layering" in data["case_v2"]["suspicious_types"]
+    assert data["can_sign"] is True
+    assert data["agent_reliability"]["stance"] == "committed"
+    assert data["prompt_versions"]["judge"] == "judge_v3p"
     rel = [e for e in data["evidence_graph"] if e["evidence_type"] == "RELATIONSHIP"]
     assert rel
     assert all(
@@ -76,27 +79,22 @@ def test_layering_demo_chain(client):
     )
 
 
+from tests.conftest import dual_confirm
+
+
 def test_agent_cannot_auto_report(client, auth_headers):
     client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
-    d = client.post(
-        "/api/alerts/ALT-B-20260910/decide",
-        json={"decision": "confirm", "note": ""},
-        headers=auth_headers,
-    )
+    d, _ = dual_confirm(client, "ALT-B-20260910")
     assert d.status_code == 200
     body = d.json()
     assert body["final_action"] == "human_only"
     assert "自动报送" in body["note"]
-    assert body["signed_by_name"] == "陈析"
+    assert body["signed_by_name"] == "李审"
 
 
 def test_observe_confirm_is_monitoring_not_filing(client, auth_headers):
     client.post("/api/alerts/ALT-F-20260910/investigate", params={"use_challenger": True})
-    d = client.post(
-        "/api/alerts/ALT-F-20260910/decide",
-        json={"decision": "confirm", "note": ""},
-        headers=auth_headers,
-    )
+    d, _ = dual_confirm(client, "ALT-F-20260910")
     assert d.status_code == 200
     assert d.json()["status"] == "monitoring"
     detail = client.get("/api/alerts/ALT-F-20260910").json()
@@ -113,7 +111,7 @@ def test_case_h_sampling_keeps_cash_and_caps_judge_context(client, monkeypatch):
     captured = {}
     orig = llm_mod.chat
 
-    def wrap(messages, *, temperature=0.0, max_tokens=900):
+    def wrap(messages, *, temperature=0.0, max_tokens=900, **_kwargs):
         sys = messages[0]["content"]
         user = messages[-1]["content"]
         if ("调查 Judge" in sys or "disposition" in sys) and "ctx" not in captured:

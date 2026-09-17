@@ -10,8 +10,8 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from .predicates import catalog_for_prompt, case_facts, stub_challenger_item
-from .privacy import inspect_outbound
+from .predicates import attach_stub_judge_predicate, catalog_for_prompt, case_facts, stub_challenger_item
+from .privacy import PrivacyMap, inspect_outbound
 from .validator import DELTA_BOUND, filter_challenger_items
 
 _ENV_LOADED = False
@@ -63,8 +63,12 @@ def require_api_key() -> str:
     return api_key
 
 
-def llm_model() -> str:
+def llm_model(role: str | None = None) -> str:
     _load_env()
+    if role:
+        override = (os.getenv(f"HUICHA_MODEL_{role.upper()}") or "").strip()
+        if override:
+            return override
     if _deepseek_key():
         return (os.getenv("DEEPSEEK_MODEL") or DEFAULT_DEEPSEEK_MODEL).strip() or DEFAULT_DEEPSEEK_MODEL
     explicit = (os.getenv("DASHSCOPE_MODEL") or os.getenv("ZHIPU_MODEL") or "").strip()
@@ -128,6 +132,36 @@ def llm_provider_label() -> str:
     return labels.get(mode, mode)
 
 
+def usage_tokens(usage: dict | None) -> int:
+    if not isinstance(usage, dict):
+        return 0
+    if usage.get("total_tokens") is not None:
+        try:
+            return max(0, int(usage["total_tokens"]))
+        except (TypeError, ValueError):
+            pass
+    try:
+        return max(0, int(usage.get("prompt_tokens") or 0) + int(usage.get("completion_tokens") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def investigation_tokens(payload: dict | None) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    comparison = payload.get("comparison") or {}
+    if comparison.get("tokens") not in (None, ""):
+        try:
+            return max(0, int(comparison["tokens"]))
+        except (TypeError, ValueError):
+            pass
+    usage = (payload.get("llm") or {}).get("usage") or {}
+    total = usage_tokens(usage.get("judge")) + usage_tokens(usage.get("reporter"))
+    if total:
+        return total
+    return sum(int((row or {}).get("tokens") or 0) for row in (payload.get("trace") or []) if isinstance(row, dict))
+
+
 def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     usage = {
         "prompt_tokens": 8,
@@ -164,6 +198,10 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
             for eid in (f.get("evidence_ids") or [])
         ][:6]
         cited = support or counter or list(data.get("allowed_evidence_ids") or [])[:2]
+        rationale = attach_stub_judge_predicate(
+            {"text": "依据本案已调取事实形成初步建议。", "evidence_ids": cited},
+            data,
+        )
         return (
             json.dumps(
                 {
@@ -173,7 +211,7 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
                     "supporting_evidence_ids": support,
                     "contradicting_evidence_ids": counter,
                     "missing_evidence": data.get("missing_evidence") or [],
-                    "rationale": [{"text": "依据本案已调取事实形成初步建议。", "evidence_ids": cited}],
+                    "rationale": [rationale],
                     "next_actions": ["由调查员复核证据与缺失材料"],
                 },
                 ensure_ascii=False,
@@ -222,8 +260,8 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
     return text, usage
 
 
-def _cache_key(kind: str, payload: dict) -> str:
-    raw = json.dumps({"kind": kind, "model": llm_model(), "payload": payload}, ensure_ascii=False, sort_keys=True)
+def _cache_key(kind: str, payload: dict, *, model: str | None = None) -> str:
+    raw = json.dumps({"kind": kind, "model": model or llm_model(), "payload": payload}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -242,7 +280,7 @@ def _cache_get(db: Session | None, key: str) -> tuple[str, dict] | None:
     return row.response_text, {**usage, "cached": True}
 
 
-def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict) -> None:
+def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict, *, model: str | None = None) -> None:
     if db is None:
         return
     from .models import LlmCache
@@ -252,14 +290,14 @@ def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict) 
     if row:
         row.response_text = text
         row.usage_json = blob
-        row.model = llm_model()
+        row.model = model or llm_model()
         row.kind = kind
     else:
         db.add(
             LlmCache(
                 cache_key=key,
                 kind=kind,
-                model=llm_model(),
+                model=model or llm_model(),
                 response_text=text,
                 usage_json=blob,
             )
@@ -270,13 +308,20 @@ def _cache_put(db: Session | None, key: str, kind: str, text: str, usage: dict) 
         db.rollback()
 
 
-def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 900) -> tuple[str, dict]:
+def chat(
+    messages: list[dict],
+    *,
+    temperature: float = 0.0,
+    max_tokens: int = 900,
+    model: str | None = None,
+    tools: list | None = None,
+) -> tuple[str, dict]:
     inspect_outbound(messages)
     if llm_stub_enabled():
         return _offline_stub_chat(messages)
     api_key = require_api_key()
     base = llm_base_url()
-    model = llm_model()
+    model = model or llm_model()
     timeout_s = 90 if model.startswith("glm") or "deepseek.com" in base else 45
     payload = {
         "model": model,
@@ -284,6 +329,8 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if tools:
+        payload["tools"] = tools
     # 百炼 / 智谱 GLM 需要显式关思考；官方 DeepSeek 不接受该字段。
     if "deepseek.com" not in base:
         payload["enable_thinking"] = False
@@ -315,10 +362,11 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
         content = (msg.get("content") or "").strip()
         if not content:
             content = (msg.get("reasoning_content") or "").strip()
-        if not content:
+        tool_calls = msg.get("tool_calls") or []
+        if not content and not tool_calls:
             raise RuntimeError(f"{vendor}返回空 content model={model}")
         usage = data.get("usage") or {}
-        return content, {
+        out = {
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),
             "total_tokens": usage.get("total_tokens"),
@@ -326,6 +374,9 @@ def chat(messages: list[dict], *, temperature: float = 0.0, max_tokens: int = 90
             "cached": False,
             "model": model,
         }
+        if tool_calls:
+            out["tool_calls"] = tool_calls
+        return content, out
     except (KeyError, IndexError, TypeError, AttributeError) as e:
         raise RuntimeError(f"{vendor}返回无法解析 model={model}: {data!r}"[:500]) from e
 
@@ -398,6 +449,86 @@ def _parse_model_json(text: str, usage: dict, *, role: str) -> dict:
                 "请压缩证据引用数量"
             ) from exc
         raise
+
+
+def call_json(
+    kind: str,
+    context: dict,
+    *,
+    system: str,
+    role: str,
+    db: Session | None = None,
+    privacy=None,
+    max_tokens: int = 900,
+    cacheable: bool = True,
+    model: str | None = None,
+) -> tuple[dict, dict]:
+    """脱敏 → 缓存 → chat → 解析 JSON → 反脱敏。"""
+    payload = privacy.prepare_for_llm(context) if privacy else context
+    resolved = model or llm_model(role)
+    key = _cache_key(kind, payload, model=resolved) if cacheable else None
+    cached = _cache_get(db, key) if key else None
+    if cached:
+        text, usage = cached
+        data = _extract_json_object(text)
+        return _unmask_value(data, privacy), usage
+    text, usage = chat(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ],
+        temperature=0.0,
+        max_tokens=max_tokens,
+        model=resolved,
+    )
+    data = _parse_model_json(text, usage, role=role)
+    if key:
+        _cache_put(db, key, kind, text, usage, model=resolved)
+    return _unmask_value(data, privacy), usage
+
+
+def call_text(
+    kind: str,
+    context: dict,
+    *,
+    system: str,
+    role: str,
+    db: Session | None = None,
+    privacy=None,
+    max_tokens: int = 900,
+    cacheable: bool = True,
+    model: str | None = None,
+    reject_truncated: bool = False,
+) -> tuple[str, dict]:
+    """脱敏 → 缓存 → chat → 去围栏 → 反脱敏。"""
+    payload = privacy.prepare_for_llm(context) if privacy else context
+    resolved = model or llm_model(role)
+    key = _cache_key(kind, payload, model=resolved) if cacheable else None
+    cached = _cache_get(db, key) if key else None
+    if cached:
+        text, usage = cached
+    else:
+        text, usage = chat(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+            temperature=0.0,
+            max_tokens=max_tokens,
+            model=resolved,
+        )
+        if reject_truncated and usage.get("finish_reason") == "length":
+            raise RuntimeError(
+                f"{role} 输出超过 max_tokens 被截断（completion_tokens={usage.get('completion_tokens')}）"
+            )
+        if key and _strip_fence(text):
+            _cache_put(db, key, kind, text, usage, model=resolved)
+    text = _strip_fence(text)
+    if privacy:
+        text = privacy.unmask_text(text)
+    if not text:
+        raise RuntimeError(f"{role} 返回空文本")
+    return text, usage
 
 
 def _unmask_value(value, privacy: PrivacyMap | None):
@@ -613,6 +744,55 @@ def enrich_report_reason(
     return text, usage
 
 
+def build_judge_context(
+    *,
+    alert: dict,
+    customer: dict,
+    findings: list[dict],
+    transactions: list[dict],
+    baseline: dict,
+    kb_hits: list[dict],
+    allowed_evidence: list[str],
+    missing_evidence: list[str] | None = None,
+    prior_issues: list[dict] | None = None,
+    tx_clusters: list[dict] | None = None,
+    tx_summary: dict | None = None,
+) -> dict:
+    return {
+        "alert_trigger": {
+            "type": alert.get("alert_type"),
+            "source": alert.get("upstream"),
+            "note": "仅为待复核线索，不直接决定 disposition",
+        },
+        "customer": {
+            key: customer.get(key)
+            for key in ("id", "name", "kind", "industry", "opened_at", "kyc_level", "summary")
+        },
+        "findings": findings,
+        "transactions": list(transactions or []),
+        "transaction_summary": tx_summary or {},
+        "transaction_clusters": tx_clusters or [],
+        "baseline": baseline,
+        "knowledge": [
+            {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}
+            for h in kb_hits[:8]
+        ],
+        # 只把模型在上下文里能看到内容的编号列出来；EV- 内部编号没有对应描述，列出只会诱导误引。
+        "allowed_evidence_ids": [e for e in allowed_evidence if not str(e).startswith("EV-")][:120],
+        "allowed_predicates": catalog_for_prompt(),
+        "missing_evidence": missing_evidence or [],
+        "repair_issues": prior_issues or [],
+        "output_limits": {
+            "supporting_evidence_ids": 10,
+            "contradicting_evidence_ids": 10,
+            "rationale": 5,
+            "evidence_ids_per_rationale": 6,
+            "missing_evidence": 5,
+            "next_actions": 5,
+        },
+    }
+
+
 def enrich_judge(
     *,
     db: Session | None = None,
@@ -636,58 +816,29 @@ def enrich_judge(
     kind = prompt_kind or prompt_version("judge")
     if kind not in PROMPTS or not kind.startswith("judge"):
         raise ValueError(f"未知 judge prompt 版本：{kind}")
-    context = {
-        "alert_trigger": {
-            "type": alert.get("alert_type"),
-            "source": alert.get("upstream"),
-            "note": "仅为待复核线索，不直接决定 disposition",
-        },
-        "customer": {
-            key: customer.get(key)
-            for key in ("id", "name", "kind", "industry", "opened_at", "kyc_level", "summary")
-        },
-        "findings": findings,
-        "transactions": list(transactions or []),
-        "transaction_summary": tx_summary or {},
-        "transaction_clusters": tx_clusters or [],
-        "baseline": baseline,
-        "knowledge": [
-            {"id": h.get("id"), "kind": h.get("kind"), "title": h.get("title"), "snippet": h.get("snippet")}
-            for h in kb_hits[:8]
-        ],
-        # 只把模型在上下文里能看到内容的编号列出来；EV- 内部编号没有对应描述，列出只会诱导误引。
-        "allowed_evidence_ids": [e for e in allowed_evidence if not str(e).startswith("EV-")][:120],
-        "missing_evidence": missing_evidence or [],
-        "repair_issues": prior_issues or [],
-        "output_limits": {
-            "supporting_evidence_ids": 10,
-            "contradicting_evidence_ids": 10,
-            "rationale": 5,
-            "evidence_ids_per_rationale": 6,
-            "missing_evidence": 5,
-            "next_actions": 5,
-        },
-    }
-    if privacy:
-        context = privacy.prepare_for_llm(context)
-    key = None if prior_issues else _cache_key(kind, context)
-    cached = _cache_get(db, key) if key else None
-    if cached:
-        text, usage = cached
-        data = _extract_json_object(text)
-    else:
-        text, usage = chat(
-            [
-                {"role": "system", "content": PROMPTS[kind]},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-            temperature=0.0,
-            max_tokens=JUDGE_MAX_TOKENS,
-        )
-        data = _parse_model_json(text, usage, role="Judge")
-        if key:
-            _cache_put(db, key, kind, text, usage)
-    return _unmask_value(data, privacy), usage
+    context = build_judge_context(
+        alert=alert,
+        customer=customer,
+        findings=findings,
+        transactions=transactions,
+        baseline=baseline,
+        kb_hits=kb_hits,
+        allowed_evidence=allowed_evidence,
+        missing_evidence=missing_evidence,
+        prior_issues=prior_issues,
+        tx_clusters=tx_clusters,
+        tx_summary=tx_summary,
+    )
+    return call_json(
+        kind,
+        context,
+        system=PROMPTS[kind],
+        role="Judge",
+        db=db,
+        privacy=privacy,
+        max_tokens=JUDGE_MAX_TOKENS,
+        cacheable=not prior_issues,
+    )
 
 
 def enrich_full_report(
@@ -697,33 +848,17 @@ def enrich_full_report(
     context: dict,
     prior_issues: list[dict] | None = None,
 ) -> tuple[str, dict]:
-    payload = {**context, "repair_issues": prior_issues or []}
-    if privacy:
-        payload = privacy.prepare_for_llm(payload)
-    key = None if prior_issues else _cache_key("reporter_v3", payload)
-    cached = _cache_get(db, key) if key else None
-    if cached:
-        text, usage = cached
-    else:
-        from .prompts import PROMPTS
+    from .prompts import PROMPTS
 
-        text, usage = chat(
-            [
-                {"role": "system", "content": PROMPTS["reporter_v3"]},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-            ],
-            temperature=0.0,
-            max_tokens=REPORTER_MAX_TOKENS,
-        )
-        if usage.get("finish_reason") == "length":
-            raise RuntimeError(
-                f"Reporter 输出超过 max_tokens 被截断（completion_tokens={usage.get('completion_tokens')}）"
-            )
-        if key and _strip_fence(text):
-            _cache_put(db, key, "reporter_v3", text, usage)
-    text = _strip_fence(text)
-    if privacy:
-        text = privacy.unmask_text(text)
-    if not text:
-        raise RuntimeError("Reporter 返回空文本")
-    return text, usage
+    payload = {**context, "repair_issues": prior_issues or []}
+    return call_text(
+        "reporter_v3",
+        payload,
+        system=PROMPTS["reporter_v3"],
+        role="Reporter",
+        db=db,
+        privacy=privacy,
+        max_tokens=REPORTER_MAX_TOKENS,
+        cacheable=not prior_issues,
+        reject_truncated=True,
+    )

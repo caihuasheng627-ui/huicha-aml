@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node src/graphLayout.test.mjs && node src/workstation.test.mjs && node src/sse.test.mjs && node src/evidenceTokens.test.mjs && node src/investigateFallback.test.mjs && node src/signBlockers.test.mjs"
   },
   "dependencies": {
     "antd": "^5.24.0",

@@ -385,6 +385,34 @@ def pick_true_predicate(facts: dict, allowed_ids: set[str] | None = None) -> dic
     return None
 
 
+def attach_stub_judge_predicate(rationale: dict, context: dict | None = None) -> dict:
+    """给 stub / 单测 Judge 补一条对本案为真的谓词，避免无谓词时无法展示已核验主张。"""
+    row = dict(rationale or {})
+    if str(row.get("predicate") or "").strip():
+        return row
+    ctx = context if isinstance(context, dict) else {}
+    facts = case_facts(
+        transactions=ctx.get("transactions") or [],
+        customer=ctx.get("customer") or {},
+        account_id=str((ctx.get("alert_trigger") or {}).get("account_id") or ""),
+    )
+    cited = [str(x) for x in (row.get("evidence_ids") or []) if str(x).startswith("TX-")]
+    allowed = {str(x) for x in (ctx.get("allowed_evidence_ids") or []) if str(x).startswith("TX-")}
+    picked = pick_true_predicate(facts, set(cited) if cited else None)
+    if not picked and allowed:
+        picked = pick_true_predicate(facts, allowed)
+    if not picked:
+        return row
+    ids = list(row.get("evidence_ids") or [])
+    for eid in picked.get("evidence_ids") or []:
+        if eid not in ids:
+            ids.append(eid)
+    row["predicate"] = picked["predicate"]
+    row["args"] = picked["args"]
+    row["evidence_ids"] = ids
+    return row
+
+
 def stub_challenger_item(
     context: dict,
     *,

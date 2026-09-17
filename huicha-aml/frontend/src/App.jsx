@@ -32,14 +32,24 @@ import {
   login,
   logout,
   runInvestigate,
+  streamInvestigate,
+  shouldFallbackInvestigate,
   setDemoToken,
 } from "./api";
 import BrandLogo from "./BrandLogo.jsx";
-import { CounterfactualBox, CustomerCard, EvidenceLists, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline } from "./CasePanels.jsx";
+import { CounterfactualBox, CustomerCard, EvidenceLists, EvidenceSufficiencyPanel, JudgePanel, RejectedClaims, RegulationBox, RiskFactors, SupplementChecklist, TxTimeline, VerifiedClaims } from "./CasePanels.jsx";
 import ContestCoach from "./ContestCoach.jsx";
 import Graph from "./Graph.jsx";
 import { InvestigateTheater, usePipelinePlayback } from "./InvestigateFlow.jsx";
 import SystemManual from "./SystemManual.jsx";
+import {
+  displayName,
+  isDoneStatus,
+  isReviewer,
+  isTodoStatus,
+  persistLabMode,
+  readLabMode,
+} from "./workstation.js";
 
 const EMPTY_KEYS = [
   ["比赛演示（案例 L 主线）", "0"],
@@ -50,10 +60,22 @@ const EMPTY_KEYS = [
   ["打开案例 L 多层", "5"],
   ["打开案例 H 抽数", "6"],
   ["系统说明书", "H"],
-  ["按当前策略重跑", "选中案件后点按钮"],
+  ["开始调查", "选中案件后点按钮"],
 ];
 
-function WelcomeBrief() {
+function WelcomeBrief({ labMode }) {
+  if (!labMode) {
+    return (
+      <div className="welcome">
+        <div className="welcome-logo">
+          <BrandLogo size={68} />
+        </div>
+        <div className="welcome-title">循证慧查</div>
+        <div className="welcome-subtitle">反洗钱调查工作台 · 从左侧待办领取案件</div>
+        <p className="welcome-note">生成草稿后由调查员提交复核，合规岗签发。系统不自动报送。</p>
+      </div>
+    );
+  }
   return (
     <div className="welcome">
       <div className="welcome-letterhead">
@@ -65,9 +87,14 @@ function WelcomeBrief() {
           <p className="welcome-unit">合规调查工作台</p>
         </div>
       </div>
+<<<<<<< HEAD
       <p className="welcome-subtitle">
         从左侧告警池选定案件。系统只出调查草稿，签发由人工完成。快捷键 0 进入案例 L 演示主线。
       </p>
+=======
+      <div className="welcome-title">循证慧查</div>
+      <div className="welcome-subtitle">实验室 · 快捷键 0 进入比赛演示</div>
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -82,38 +109,75 @@ function WelcomeBrief() {
   );
 }
 
-function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHot }) {
+function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHotAction }) {
   const hasDraft = Boolean(inv?.report);
-  const canSign = Boolean(hasDraft && inv.can_sign);
-  const status = !current
-    ? "先选左侧告警"
-    : !hasDraft
-      ? "尚无草稿"
-      : signed?.human_decision
-        ? `${HUMAN[signed.human_decision]}${signed.signed_by_name ? ` · ${signed.signed_by_name}` : ""}`
-        : canSign
-          ? "待签发"
-          : "事实回查未通过，不能签发";
+  const factOk = Boolean(hasDraft && inv.can_sign);
+  const blockText = signBlockerText(inv);
+  const abstained = reliabilityStance(inv) === "abstain";
+  const decision = signed?.human_decision || "";
+  const submitted = decision === "submit";
+  const finalized = decision === "confirm" || decision === "modify";
+  const reviewer = isReviewer(user);
+  const investigator = Boolean(user) && !reviewer;
+  const canSubmit = Boolean(investigator && hasDraft && !finalized && (factOk || note.trim()) && decision !== "submit");
+  const canConfirm = Boolean(reviewer && submitted && factOk && !finalized);
+  const canModify = Boolean(reviewer && submitted && !finalized);
+  const canReject = Boolean(user && hasDraft && !finalized);
+  let status = "先选左侧告警";
+  if (current) {
+    if (!hasDraft) status = "尚无草稿";
+    else if (finalized) status = `${HUMAN[decision]}${signed?.signed_by_name ? ` · ${signed.signed_by_name}` : ""}`;
+    else if (submitted) {
+      status = reviewer
+        ? factOk
+          ? "待复核签发"
+          : `${blockText}，不能直接同意签发`
+        : "已提交，等待复核";
+    }
+    else if (!user) status = "登录后才能提交或签发";
+    else if (reviewer) status = "等待调查员提交复核";
+    else if (!factOk) status = `${blockText}，提交须填写说明`;
+    else status = abstained ? "系统已弃权，倾向档仅供参考" : "待提交复核";
+  }
   return (
-    <div className={`sign-dock${contestHot ? " contest-hot" : ""}`} data-contest="sign">
+    <div className="sign-dock" data-contest="sign">
       <Input.TextArea
         id="investigator-note"
         rows={4}
-        placeholder="调查员意见（修改说明 / 驳回原因）"
+        placeholder="处理意见（提交说明 / 复核意见 / 退回原因）"
         value={note}
         onChange={(e) => onNote(e.target.value)}
         disabled={!current}
       />
       <div className="sign-dock-row">
         <div className="sign-dock-actions">
-          <Button type="primary" disabled={!canSign} onClick={() => onDecide("confirm")}>
-            签发结论
-          </Button>
-          <Button disabled={!hasDraft} onClick={() => onDecide("modify")}>
-            修改后采纳
-          </Button>
-          <Button danger disabled={!hasDraft} onClick={() => onDecide("reject")}>
-            驳回重查
+          {(!user || investigator) && (
+            <Button
+              type="primary"
+              className={contestHotAction === "submit" ? "contest-hot" : undefined}
+              disabled={!canSubmit}
+              onClick={() => onDecide("submit")}
+            >
+              提交复核
+            </Button>
+          )}
+          {reviewer && (
+            <>
+              <Button
+                type="primary"
+                className={contestHotAction === "confirm" ? "contest-hot" : undefined}
+                disabled={!canConfirm}
+                onClick={() => onDecide("confirm")}
+              >
+                同意签发
+              </Button>
+              <Button disabled={!canModify} onClick={() => onDecide("modify")}>
+                修改后签发
+              </Button>
+            </>
+          )}
+          <Button danger disabled={!canReject} onClick={() => onDecide("reject")}>
+            {reviewer ? "退回调查" : "退回重查"}
           </Button>
           <Button disabled={!hasDraft || !user} onClick={onExport}>
             导出底稿
@@ -125,7 +189,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
               <button type="button" className="sign-dock-link" onClick={onLogin}>
                 登录
               </button>
-              后才能签发或导出
+              后才能提交或签发
             </>
           ) : (
             status
@@ -137,9 +201,10 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
 }
 
 const HUMAN = {
-  confirm: "已记录签发",
-  modify: "修改后采纳",
-  reject: "已驳回",
+  submit: "已提交复核",
+  confirm: "复核同意",
+  modify: "修改后签发",
+  reject: "已退回",
 };
 
 function Chip({ tone = "idle", children }) {
@@ -147,12 +212,22 @@ function Chip({ tone = "idle", children }) {
 }
 
 const STATUS = {
+<<<<<<< HEAD
   pending: { text: "待调查", tone: "idle" },
   investigating: { text: "调查中", tone: "work" },
   closed: { text: "已排除关闭", tone: "ok" },
   monitoring: { text: "持续监测", tone: "watch" },
   ready_to_file: { text: "待复核上报", tone: "risk" },
   modified: { text: "人工已改", tone: "watch" },
+=======
+  pending: { text: "待调查", color: "default" },
+  investigating: { text: "调查中", color: "processing" },
+  pending_review: { text: "待复核", color: "warning" },
+  closed: { text: "已排除关闭", color: "success" },
+  monitoring: { text: "持续监测", color: "warning" },
+  ready_to_file: { text: "待报送", color: "error" },
+  modified: { text: "复核已改", color: "warning" },
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
 };
 
 const CONC = {
@@ -169,6 +244,7 @@ const AUDIT_TITLE = {
   export: "导出底稿",
 };
 
+<<<<<<< HEAD
 const TOOL_LABEL = {
   get_alert: "告警",
   get_customer: "客户资料",
@@ -208,6 +284,10 @@ function uniqueLookups(logs) {
 
 const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
 const TOKEN_ONE = /^(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)$/;
+=======
+import { collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
 
 const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
@@ -312,13 +392,13 @@ function auditText(x, lookups) {
 
 function ReportText({ text, issues, onSelect }) {
   const bad = new Set((issues || []).map((x) => x.token));
-  const parts = String(text || "").split(TOKEN_SPLIT);
+  const parts = splitEvidenceParts(text);
   return (
     <div className="report-box">
       {parts.map((p, i) => {
         if (!p) return null;
         if (bad.has(p)) return <mark key={i}>{p}</mark>;
-        if (TOKEN_ONE.test(p)) {
+        if (isEvidenceToken(p)) {
           return (
             <button key={i} type="button" className="token" onClick={() => onSelect(p)}>
               {p}
@@ -331,9 +411,10 @@ function ReportText({ text, issues, onSelect }) {
   );
 }
 
-function DecisionComparison({ judge, baseline, guardrails, label, ablation, contestHot }) {
+function DecisionComparison({ judge, baseline, guardrails, label, ablation, contestHot, reliability }) {
   if (!baseline) return null;
   const same = baseline.conclusion === guardrails?.final_conclusion;
+  const abstained = !ablation && reliability?.stance === "abstain";
   return (
     <div className={`score-break${contestHot ? " contest-hot" : ""}`} data-contest="guardrail">
       <div className="score-break-hd">
@@ -342,13 +423,16 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation, cont
       </div>
       <ul>
         <li><span>规则对照</span><em>{CONC[baseline.conclusion] || baseline.conclusion} · {Number(baseline.score ?? 0).toFixed(2)}</em></li>
-        <li><span>慧查agent</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>AI 倾向档</span><em>{ablation ? "未启用" : CONC[judge?.disposition] || judge?.disposition || "—"}</em></li>
+        <li><span>系统可靠性</span><em>{ablation ? "—" : abstained ? "弃权" : "可签发倾向"}</em></li>
         <li><span>政策护栏后</span><em>{label}</em></li>
         <li><span>AI 自评把握度</span><em>{ablation ? "—" : Number(judge?.confidence ?? 0).toFixed(2)}</em></li>
       </ul>
       <div className="hint" style={{ margin: "6px 0 0" }}>
         {ablation
           ? "本案为慧查agent 关闭后的消融结果，仅展示规则对照。"
+          : abstained
+            ? `系统已弃权：上列为 AI 倾向档，不可直接签发。${reliability?.note || ""}`
           : same
             ? "AI 与规则对照一致，没有加权合成。把握度是「对结论有多确定」，不是风险高低。"
             : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。把握度不是风险分。"}
@@ -388,6 +472,33 @@ function conclusionTone(label) {
   return "risk";
 }
 
+function formatCount(n) {
+  if (n == null || n === "" || Number.isNaN(Number(n))) return "—";
+  return Number(n).toLocaleString("zh-CN");
+}
+
+function usageTokens(blob) {
+  if (!blob || typeof blob !== "object") return 0;
+  const total = Number(blob.total_tokens);
+  if (Number.isFinite(total)) return Math.max(0, total);
+  const prompt = Number(blob.prompt_tokens || 0);
+  const completion = Number(blob.completion_tokens || 0);
+  return Math.max(0, (Number.isFinite(prompt) ? prompt : 0) + (Number.isFinite(completion) ? completion : 0));
+}
+
+function investigationTokens(inv) {
+  if (!inv) return null;
+  if (inv.comparison?.tokens != null && inv.comparison.tokens !== "") {
+    const n = Number(inv.comparison.tokens);
+    if (Number.isFinite(n)) return n;
+  }
+  const usage = inv.llm?.usage || {};
+  const nested = usageTokens(usage.judge) + usageTokens(usage.reporter);
+  if (nested) return nested;
+  if (usage.total_tokens != null) return usageTokens(usage);
+  return (inv.trace || []).reduce((sum, row) => sum + Number(row?.tokens || 0), 0);
+}
+
 function MetricBoard({ metrics, feedback }) {
   const quality = metrics?.quality || {};
   const decided = feedback?.decisions
@@ -398,6 +509,7 @@ function MetricBoard({ metrics, feedback }) {
     ["拦截无效 Claim", quality.rejected_claims ?? "—", "伪造/跨案/谓词失败"],
     ["事实回查阻断", quality.fact_check_blocked ?? "—", "阻止直接签发"],
     ["平均调查耗时", quality.avg_investigation_ms == null ? "—" : `${quality.avg_investigation_ms} ms`, "从调查开始到草稿"],
+    ["消耗 Token", metrics?.tokens == null ? "—" : formatCount(metrics.tokens), "Judge + Reporter 合计"],
     ["人工采纳率", decided ? `${Math.round((feedback.decisions.confirm / decided) * 100)}%` : "—", decided ? `${decided} 次已处置` : "尚无人工样本"],
   ];
   return (
@@ -418,7 +530,11 @@ function MetricBoard({ metrics, feedback }) {
         ))}
       </dl>
       <div className="metric-foot">
+<<<<<<< HEAD
         草稿 {metrics?.drafts ?? "—"}　校验 {quality.audited_validations ?? "—"}　签发 {quality.human_decisions ?? "—"}
+=======
+        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 消耗 Token {formatCount(metrics?.tokens)} · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
       </div>
     </section>
   );
@@ -436,7 +552,8 @@ export default function App() {
   const [injectHallucination, setInjectHallucination] = useState(false);
   const [selected, setSelected] = useState("");
   const [openSteps, setOpenSteps] = useState({});
-  const [queueKind, setQueueKind] = useState("demo");
+  const [queueKind, setQueueKind] = useState(() => (readLabMode() ? "demo" : "todo"));
+  const [labMode, setLabMode] = useState(() => readLabMode());
   const [q, setQ] = useState("");
   const [clock, setClock] = useState(nowText());
   const [offline, setOffline] = useState(false);
@@ -458,6 +575,7 @@ export default function App() {
   const [kbLoading, setKbLoading] = useState(false);
   const [contestMode, setContestMode] = useState(false);
   const [contestStep, setContestStep] = useState("draft");
+  const [stageHint, setStageHint] = useState("");
   const openSeq = useRef(0);
   const startContestRef = useRef(null);
   const inv = detail?.investigation;
@@ -569,6 +687,7 @@ export default function App() {
         setManualOpen((v) => !v);
         return;
       }
+      if (!readLabMode()) return;
       if (e.key === "0") {
         startContestRef.current?.();
         return;
@@ -582,23 +701,44 @@ export default function App() {
 
   useEffect(() => {
     if (playback.phase === "done") {
-      message.success("调查草稿已生成，待人工签发");
+      message.success("调查草稿已生成，待提交复核");
     }
   }, [playback.phase]);
 
   async function onInvestigate(id = current) {
     if (!id || loading) return;
     setCurrent(id);
-    if (DEMOS.some((d) => d.id === id)) setQueueKind("demo");
+    if (id && labMode && DEMOS.some((d) => d.id === id)) setQueueKind("demo");
     setInvError(false);
     setLoading(true);
+    setStageHint("正在调查…");
     open(id).catch(() => {});
+    const opts = {
+      useChallenger: experimentMode ? currentChallengerEnabled : true,
+      injectHallucination,
+      experimentMode,
+    };
+    const stageLabels = {
+      Planner: "规划调查计划…",
+      Collector: "归集证据…",
+      Privacy: "进模脱敏…",
+      Analyst: "提取事实指标…",
+      Judge: "Judge 生成建议中…",
+      Skeptic: "引用校验与反事实…",
+      PolicyGuardrail: "政策护栏检查…",
+      Reporter: "生成调查底稿…",
+    };
     try {
-      await runInvestigate(id, {
-        useChallenger: experimentMode ? currentChallengerEnabled : true,
-        injectHallucination,
-        experimentMode,
-      });
+      try {
+        await streamInvestigate(id, opts, (ev) => {
+          if (ev?.status === "started" && ev.role && ev.role !== "Assemble") {
+            setStageHint(stageLabels[ev.role] || `${ev.role} 进行中…`);
+          }
+        });
+      } catch (e) {
+        if (!shouldFallbackInvestigate(e)) throw e;
+        await runInvestigate(id, opts);
+      }
       await open(id);
       await loadList();
       if (contestMode) setContestStep("evidence");
@@ -607,13 +747,14 @@ export default function App() {
       message.error(e.message || "调查失败");
     } finally {
       setLoading(false);
+      setStageHint("");
     }
   }
 
   async function onDecide(decision) {
     if (!current) return;
     if (!user) {
-      message.warning("请先登录后再签发或导出");
+      message.warning("请先登录后再提交或签发");
       setLoginOpen(true);
       return;
     }
@@ -621,7 +762,13 @@ export default function App() {
       await decide(current, decision, note);
       await open(current);
       await loadList();
-      message.success(`处置意见已由 ${user.name} 写入审计`);
+      if (!labMode) {
+        if (decision === "submit" && !isReviewer(user)) setQueueKind("done");
+        if ((decision === "confirm" || decision === "modify") && isReviewer(user)) setQueueKind("done");
+        if (decision === "reject") setQueueKind("todo");
+      }
+      const done = { submit: "已提交复核", confirm: "复核意见已写入审计", modify: "修改后签发已记录", reject: "已退回" };
+      message.success(done[decision] || `处置意见已由 ${user.name} 写入审计`);
       if (contestMode) setContestStep("sign");
     } catch (e) {
       if (String(e.message || "").includes("登录")) {
@@ -654,6 +801,32 @@ export default function App() {
     await logout();
     setUser(null);
     message.success("已退出登录");
+  }
+
+  async function onSwitchDemoUser() {
+    const targetId = user?.staff_id === "002183" ? "002201" : "002183";
+    setLoginLoading(true);
+    try {
+      const data = await login(targetId, "aml123");
+      setUser(data.user);
+      message.success(`已切换为${data.user.name}`);
+      loadList().catch(() => {});
+    } catch (e) {
+      loginForm.setFieldsValue({ staff_id: targetId, password: "aml123" });
+      setLoginOpen(true);
+      message.error(e.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  function setLab(on) {
+    persistLabMode(on);
+    setLabMode(on);
+    setContestMode(false);
+    setExperimentMode(false);
+    setInjectHallucination(false);
+    setQueueKind(on ? "demo" : "todo");
   }
 
   async function startContest() {
@@ -747,9 +920,14 @@ export default function App() {
 
   const demoCount = alerts.filter((a) => a.demo_tag).length;
   const normalCount = alerts.filter((a) => !a.demo_tag).length;
+  const todoCount = alerts.filter((a) => isTodoStatus(a.status, user)).length;
+  const doneCount = alerts.filter((a) => isDoneStatus(a.status, user)).length;
   const queue = alerts
-    .filter((a) => (queueKind === "demo" ? Boolean(a.demo_tag) : !a.demo_tag))
-    .filter((a) => !q || `${a.title}${a.customer_name}${a.alert_type}${a.id}`.includes(q));
+    .filter((a) => {
+      if (labMode) return queueKind === "demo" ? Boolean(a.demo_tag) : !a.demo_tag;
+      return queueKind === "done" ? isDoneStatus(a.status, user) : isTodoStatus(a.status, user);
+    })
+    .filter((a) => !q || `${a.title}${a.customer_name}${a.alert_type}${a.id}${a.case_no || ""}`.includes(q));
 
   return (
     <div className={`app${contestMode ? " is-contest" : ""}`}>
@@ -759,24 +937,43 @@ export default function App() {
           <div className="brand-text">
             <div className="brand-title-row">
               <strong>循证慧查</strong>
+<<<<<<< HEAD
               <span className="brand-unit">合规调查</span>
             </div>
             <span>告警池之后的调查与底稿</span>
+=======
+              {labMode ? <span className="brand-tag">实验室</span> : <span className="brand-tag">调查工作台</span>}
+            </div>
+            <span>{labMode ? "实验室 · 快捷键 0 进入比赛演示" : "反洗钱调查工作台 · 调查员提交 / 复核岗签发"}</span>
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
           </div>
         </div>
         <div className="staff">
           <span className="env-chip">演示环境 合成数据</span>
           <span className="top-clock">{clock}</span>
-          <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
-            <button type="button" className="ghost-btn primary" onClick={() => startContest()}>
-              比赛演示
-            </button>
-          </Tooltip>
+          {labMode && (
+            <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
+              <button type="button" className="ghost-btn primary" onClick={() => startContest()}>
+                比赛演示
+              </button>
+            </Tooltip>
+          )}
           <Tooltip title="按 H 也可打开">
             <button type="button" className="ghost-btn manual-btn" onClick={() => setManualOpen(true)}>
               系统说明书
             </button>
           </Tooltip>
+          {contestMode && (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={onSwitchDemoUser}
+              disabled={loginLoading}
+              title="复用演示登录，口令 aml123"
+            >
+              切换陈析 / 李审
+            </button>
+          )}
           {user ? (
             <div className="user-chip">
               <div className="user-meta">
@@ -794,12 +991,22 @@ export default function App() {
               登录
             </button>
           )}
+          <button
+            type="button"
+            className={`ghost-btn lab-toggle${labMode ? " on" : ""}`}
+            onClick={() => setLab(!labMode)}
+            title={labMode ? "回到调查工作台" : "打开比赛与实验开关"}
+          >
+            {labMode ? "退出实验室" : "实验室"}
+          </button>
         </div>
       </header>
 
       <SystemManual open={manualOpen} onClose={() => setManualOpen(false)} health={healthInfo} />
 
       <div className="toolbar-stack">
+      {labMode && (
+      <>
       <div className="toolbar">
         <span className={`ch-policy ${experimentMode ? "lab" : "on"}`}>
           {experimentMode ? "实验模式：用于慧查agent 消融实验" : "慧查agent · 已启用"}
@@ -872,11 +1079,17 @@ export default function App() {
           onExit={() => setContestMode(false)}
         />
       )}
+      </>
+      )}
       </div>
 
       <Modal
+<<<<<<< HEAD
         className="desk-modal"
         title="调查员登录"
+=======
+        title="登录工作台"
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
         open={loginOpen}
         onCancel={() => setLoginOpen(false)}
         footer={null}
@@ -884,7 +1097,7 @@ export default function App() {
         width={420}
       >
         <p className="hint" style={{ marginTop: 0 }}>
-          演示账号口令均为 <code>aml123</code>。签发结论将绑定当前登录人。
+          作业分岗：调查员提交复核，合规岗签发。口令均为 <code>aml123</code>。
         </p>
         {demoAccounts.length > 0 && (
           <div className="login-accounts">
@@ -967,43 +1180,56 @@ export default function App() {
       <div className="layout">
         <aside className="col">
           <div className="col-title">
+<<<<<<< HEAD
             <h3>待办告警</h3>
             <Chip>{queueKind === "demo" ? demoCount : normalCount} 条</Chip>
+=======
+            <h3>{labMode ? "待办告警" : "我的待办"}</h3>
+            <Tag>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : todoCount} 条</Tag>
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
           </div>
-          <div className="queue-filter" role="tablist" aria-label="告警筛选">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={queueKind === "demo"}
-              className={queueKind === "demo" ? "on" : ""}
-              onClick={() => setQueueKind("demo")}
-            >
-              示例 <em>{demoCount}</em>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={queueKind === "normal"}
-              className={queueKind === "normal" ? "on" : ""}
-              onClick={() => setQueueKind("normal")}
-            >
-              正常数据 <em>{normalCount}</em>
-            </button>
+          <div
+            className={`queue-filter${(labMode ? queueKind === "normal" : queueKind === "done") ? " is-right" : ""}`}
+            role="tablist"
+            aria-label="告警筛选"
+          >
+            <i className="queue-filter-thumb" aria-hidden="true" />
+            {labMode ? (
+              <>
+                <button type="button" role="tab" aria-selected={queueKind === "demo"} className={queueKind === "demo" ? "on" : ""} onClick={() => setQueueKind("demo")}>
+                  示例 <em>{demoCount}</em>
+                </button>
+                <button type="button" role="tab" aria-selected={queueKind === "normal"} className={queueKind === "normal" ? "on" : ""} onClick={() => setQueueKind("normal")}>
+                  正常数据 <em>{normalCount}</em>
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" role="tab" aria-selected={queueKind !== "done"} className={queueKind !== "done" ? "on" : ""} onClick={() => setQueueKind("todo")}>
+                  待办 <em>{todoCount}</em>
+                </button>
+                <button type="button" role="tab" aria-selected={queueKind === "done"} className={queueKind === "done" ? "on" : ""} onClick={() => setQueueKind("done")}>
+                  已办 <em>{doneCount}</em>
+                </button>
+              </>
+            )}
           </div>
           <div className="hint">
-            {queueKind === "demo"
-              ? "路演示例案，带 A/B/C/F/L 标签。"
-              : "其余合成告警，不是路演脚本。"}{" "}
-            本台只出草稿，不是监管结论。
+            {labMode
+              ? queueKind === "demo"
+                ? "路演示例案，带 A/B/C/F/L 标签。"
+                : "其余合成告警，不是路演脚本。"
+              : "调查员提交后进入已办；合规岗待办只看待复核件。系统不自动报送。"}
           </div>
-          {feedback && feedback.decisions && (
+          {labMode && feedback && feedback.decisions && (
             <div className="hint" style={{ marginBottom: 8 }}>
               反馈闭环：采纳 {feedback.decisions.confirm} · 修改 {feedback.decisions.modify} · 驳回{" "}
               {feedback.decisions.reject}
+              {feedback.decisions.submit ? ` · 待复核 ${feedback.decisions.submit}` : ""}
               {metrics?.labeled ? ` · 模板精标 ${metrics.labeled}` : ""}
             </div>
           )}
-          <MetricBoard metrics={metrics} feedback={feedback} />
+          {labMode && !contestMode && <MetricBoard metrics={metrics} feedback={feedback} />}
           <Input
             size="small"
             allowClear
@@ -1027,6 +1253,7 @@ export default function App() {
                 }}
               >
                 <div className="t">
+<<<<<<< HEAD
                   {a.demo_tag ? <span className="demo-stamp">{a.demo_tag}</span> : null}
                   {a.title}
                 </div>
@@ -1041,6 +1268,25 @@ export default function App() {
                     </Chip>
                   ) : null}
                   <Chip tone={st.tone}>{st.text}</Chip>
+=======
+                  <code className="case-no">{a.case_no || a.id}</code>
+                  {labMode && a.demo_tag ? (
+                    <Tag color="red" style={{ marginRight: 6 }}>
+                      {a.demo_tag}
+                    </Tag>
+                  ) : null}
+                  {a.title}
+                </div>
+                <div className="m">
+                  <span>
+                    {displayName(a.customer_name)} · {yuan(a.amount)}
+                    {a.account_masked ? ` · ${a.account_masked}` : ""}
+                  </span>
+                  <span className="queue-tags">
+                    {a.conclusion ? <Tag>{CONC[a.conclusion] || a.conclusion}</Tag> : null}
+                    <Tag color={st.color}>{st.text}</Tag>
+                  </span>
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
                 </div>
               </div>
             );
@@ -1074,9 +1320,13 @@ export default function App() {
           {current && !detail?.alert && (
             <div className="col-title">
               <h3>调查作业</h3>
+<<<<<<< HEAD
+=======
+              {detail?.alert && <span className="hint">{detail.alert.case_no || detail.alert.id}</span>}
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
             </div>
           )}
-          {!current && <WelcomeBrief />}
+          {!current && <WelcomeBrief labMode={labMode} />}
           {current && showTheater && (
             <InvestigateTheater
               playback={playback}
@@ -1113,11 +1363,21 @@ export default function App() {
                     {inv?.comparison ? `${inv.comparison.agent_ms} ms · ${inv.comparison.tools_called} 次` : "—"}
                   </div>
                 </div>
+                <div className="kpi-card">
+                  <div className="k">消耗 Token</div>
+                  <div className="v">{inv ? formatCount(investigationTokens(inv)) : "—"}</div>
+                  {inv?.llm?.usage ? (
+                    <div className="hint" style={{ margin: "6px 0 0" }}>
+                      Judge {formatCount(usageTokens(inv.llm.usage.judge))} · Reporter {formatCount(usageTokens(inv.llm.usage.reporter))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="dossier-actions">
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
-                  {inv ? "按当前策略重跑" : "开始调查"}
+                  {loading ? stageHint || "调查中…" : inv ? "重新调查" : "开始调查"}
                 </Button>
+<<<<<<< HEAD
                 <div className="dossier-flags">
                   {detail?.human_decision ? (
                     <Chip tone="brass">
@@ -1169,6 +1429,68 @@ export default function App() {
                 </dl>
               )}
               {inv && caseChallengerEnabled === false && (
+=======
+                {detail?.human_decision ? (
+                  <>
+                    <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
+                    {(detail.signed_by_name || detail.signed_by_id) && (
+                      <Tag color="blue">
+                        处理人 {detail.signed_by_name}
+                        {detail.signed_by_id ? ` · ${detail.signed_by_id}` : ""}
+                      </Tag>
+                    )}
+                  </>
+                ) : (
+                  <Tag>待提交</Tag>
+                )}
+                {!user && <Tag color="default">未登录</Tag>}
+                {inv && caseChallengerEnabled && labMode && (
+                  <>
+                    <Tag color="green">慧查agent 已参与本次调查</Tag>
+                    <Tag>自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Tag>
+                  </>
+                )}
+                {inv && caseChallengerEnabled === false && labMode && (
+                  <Tag color="orange">本案为消融结果</Tag>
+                )}
+                {inv?.inject_hallucination && labMode && <Tag color="red">已注入幻觉</Tag>}
+                {inv?.llm?.reporter || inv?.llm?.judge ? (
+                  labMode ? <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag> : null
+                ) : null}
+                {inv?.privacy && (
+                  <Tag color="geekblue">
+                    进模脱敏 姓名 {inv.privacy.masked_names ?? 0} · 账号 {inv.privacy.masked_accounts ?? 0}
+                    {inv.privacy.egress_calls ? ` · 出站 ${inv.privacy.egress_calls} 次已检漏` : ""}
+                  </Tag>
+                )}
+              </Space>
+              <div className="client-box">
+                {detail?.alert?.upstream}
+                {inv?.customer?.summary ? `。${inv.customer.summary}` : ""}
+                {inv?.comparison
+                  ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
+                  : ""}
+              </div>
+              {labMode && (
+              <div className="ch-state-strip">
+                <span>
+                  当前运行策略：
+                  {experimentMode
+                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} 慧查agent`
+                    : "正常模式 · 下次重跑默认启用慧查agent"}
+                </span>
+                {inv && (
+                  <span>
+                    本案历史结果：
+                    {caseChallengerEnabled
+                      ? "生成时已启用慧查agent"
+                      : "生成时未启用（消融结果，不是当前系统关闭）"}
+                  </span>
+                )}
+              </div>
+              )}
+              {inv && caseChallengerEnabled === false && labMode && (
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
                 <Alert
                   type="warning"
                   showIcon
@@ -1179,23 +1501,37 @@ export default function App() {
               )}
               {inv && (
                 <div className="viz-row">
-                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} />
+                  <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} reliability={inv.agent_reliability} />
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
+<<<<<<< HEAD
+=======
+              {inv?.case_v2 && (
+                <div className="client-box">
+                  案件 {detail?.alert?.case_no || inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level} · 须复核后报送，系统不自动报送
+                </div>
+              )}
+>>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
               {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
+              {inv && <VerifiedClaims rows={inv.verified_claims} onSelect={selectEvidence} />}
+              {inv && <EvidenceSufficiencyPanel data={inv.evidence_sufficiency} onSelect={selectEvidence} />}
               {inv && <RiskFactors risk={inv.risk} onSelect={selectEvidence} />}
               {inv && <TxTimeline rows={inv.timeline} onSelect={selectEvidence} />}
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
               {inv && <RejectedClaims rows={inv.rejected_claims} onSelect={selectEvidence} />}
-              {inv?.fact_issues?.length > 0 && (
+              {inv && !inv.can_sign && (
                 <Alert
                   type="error"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  message="事实回查未通过，禁止签发"
-                  description={inv.fact_issues.map((x) => x.token).join("、")}
+                  message={inv.fact_issues?.length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
+                  description={
+                    inv.fact_issues?.length
+                      ? inv.fact_issues.map((x) => x.token).join("、")
+                      : collectSignBlockers(inv).map((row) => row.message).join("；")
+                  }
                 />
               )}
 
@@ -1206,8 +1542,11 @@ export default function App() {
                   </Divider>
                   <Timeline
                     items={inv.steps.map((s) => {
-                      const defaultOpen = ["Analyst", "Judge", "慧查agent", "Skeptic", "Reporter"].includes(s.role);
+                      const defaultOpen = labMode && ["Analyst", "Judge", "慧查agent", "Skeptic", "Reporter"].includes(s.role);
                       const opened = openSteps[s.role] ?? defaultOpen;
+                      const stageTrace = (inv.trace || []).find((t) => t.role === s.role);
+                      const stageMs = stageTrace?.elapsed_ms;
+                      const stageTok = stageTrace?.tokens;
                       return {
                         color: (s.role === "Judge" || s.role === "慧查agent") && inv.use_challenger === false ? "gray" : "blue",
                         children: (
@@ -1223,6 +1562,11 @@ export default function App() {
                               }
                             >
                               {s.role} · {s.title} {opened ? "▾" : "▸"}
+                              {labMode && stageMs != null ? (
+                                <span style={{ color: "var(--muted)", fontWeight: 400, marginLeft: 8 }}>
+                                  {stageMs} ms{stageTok ? ` · ${formatCount(stageTok)} tok` : ""}
+                                </span>
+                              ) : null}
                             </button>
                             {opened && (
                               <>
@@ -1269,7 +1613,9 @@ export default function App() {
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
             onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
-            contestHot={contestMode && contestStep === "sign"}
+            contestHotAction={
+              contestMode && contestStep === "sign" ? (isReviewer(user) ? "confirm" : "submit") : ""
+            }
           />
         </main>
 
@@ -1459,15 +1805,12 @@ export default function App() {
       </Drawer>
       <footer className="footer">
         <span>
-          {contestMode ? "比赛演示 · 案例 L · " : ""}
-          内部演示系统　合成数据　不得当作真实监管结论　Agent 建议须人工签发
+          {labMode ? (contestMode ? "比赛演示 · 案例 L · 实验室　" : "实验室　") : ""}
+          反洗钱调查工作台　合成数据　不自动报送　调查员提交 / 复核岗签发
         </span>
         <span>
-          队列 {metrics?.alerts ?? "—"}　模板精标 {metrics?.labeled ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签{" "}
-          {metrics?.signed ?? "—"}
-          {feedback?.rates
-            ? `　采纳率 ${Math.round((feedback.rates.confirm || 0) * 100)}%`
-            : ""}
+          队列 {metrics?.alerts ?? "—"}　草稿 {metrics?.drafts ?? "—"}　已签 {metrics?.signed ?? "—"}　Token {formatCount(metrics?.tokens)}
+          {!contestMode && feedback?.rates ? `　签发率 ${Math.round((feedback.rates.confirm || 0) * 100)}%` : ""}
         </span>
       </footer>
     </div>

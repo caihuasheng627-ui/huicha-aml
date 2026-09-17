@@ -7,10 +7,8 @@ import {
   Form,
   Input,
   Modal,
-  Space,
   Switch,
   Table,
-  Tag,
   Timeline,
   Tooltip,
   message,
@@ -58,11 +56,18 @@ const EMPTY_KEYS = [
 function WelcomeBrief() {
   return (
     <div className="welcome">
-      <div className="welcome-logo">
-        <BrandLogo size={68} />
+      <div className="welcome-letterhead">
+        <div className="welcome-logo">
+          <BrandLogo size={52} />
+        </div>
+        <div>
+          <div className="welcome-title">循证慧查</div>
+          <p className="welcome-unit">合规调查工作台</p>
+        </div>
       </div>
-      <div className="welcome-title">循证慧查</div>
-      <div className="welcome-subtitle">证据约束的反洗钱 AI 调查工作台 · 快捷键 0 进入比赛演示</div>
+      <p className="welcome-subtitle">
+        从左侧告警池选定案件。系统只出调查草稿，签发由人工完成。快捷键 0 进入案例 L 演示主线。
+      </p>
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -137,13 +142,17 @@ const HUMAN = {
   reject: "已驳回",
 };
 
+function Chip({ tone = "idle", children }) {
+  return <span className={`st-chip ${tone}`}>{children}</span>;
+}
+
 const STATUS = {
-  pending: { text: "待调查", color: "default" },
-  investigating: { text: "调查中", color: "processing" },
-  closed: { text: "已排除关闭", color: "success" },
-  monitoring: { text: "持续监测", color: "warning" },
-  ready_to_file: { text: "待复核上报", color: "error" },
-  modified: { text: "人工已改", color: "warning" },
+  pending: { text: "待调查", tone: "idle" },
+  investigating: { text: "调查中", tone: "work" },
+  closed: { text: "已排除关闭", tone: "ok" },
+  monitoring: { text: "持续监测", tone: "watch" },
+  ready_to_file: { text: "待复核上报", tone: "risk" },
+  modified: { text: "人工已改", tone: "watch" },
 };
 
 const CONC = {
@@ -152,14 +161,50 @@ const CONC = {
   suggest_report: "建议上报",
 };
 
-const AUDIT_ACTION = {
+const AUDIT_TITLE = {
   investigate: "生成草稿",
-  decide: "人工处置",
-  tool: "调取工具",
-  tools: "调取工具",
+  decide: "人工签发",
   validator: "证据校验",
-  checklist: "补证清单",
+  checklist: "写入补证",
+  export: "导出底稿",
 };
+
+const TOOL_LABEL = {
+  get_alert: "告警",
+  get_customer: "客户资料",
+  get_accounts: "账户",
+  get_transactions: "交易流水",
+  get_timeline: "交易时序",
+  get_graph: "资金图谱",
+  get_related_accounts: "关联账户",
+  get_baseline: "行业基线",
+  check_watchlist: "关注名单",
+  search_knowledge: "制度",
+  search_regulation: "法规",
+};
+
+function isToolAudit(x) {
+  return x?.actor === "tool" || String(x?.action || "").startsWith("tool");
+}
+
+function parseAuditJson(detail) {
+  try {
+    return JSON.parse(detail);
+  } catch {
+    return null;
+  }
+}
+
+function uniqueLookups(logs) {
+  const seen = [];
+  for (const x of logs || []) {
+    if (!isToolAudit(x)) continue;
+    const name = String(x.action || "").replace(/^tool:/, "");
+    const label = TOOL_LABEL[name];
+    if (label && !seen.includes(label)) seen.push(label);
+  }
+  return seen;
+}
 
 const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
 const TOKEN_ONE = /^(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)$/;
@@ -202,21 +247,66 @@ function evidenceMatches(e, selected) {
   return false;
 }
 
-function auditText(x) {
-  let detail = x.detail || "";
-  try {
-    const j = JSON.parse(detail);
-    if (j.decision) detail = `${HUMAN[j.decision] || j.decision}${j.note ? `：${j.note}` : ""}`;
-    else if (j.summary) detail = j.summary;
-    else if (j.tool) detail = `${j.tool} ${j.records ?? ""} 条`;
-  } catch {
-    /* already human text */
+function auditText(x, lookups) {
+  const j = parseAuditJson(x.detail) || {};
+  const actor = x.actor === "agent" || x.actor === "tool" ? "系统" : x.actor || "调查员";
+  const time = x.created_at || "";
+
+  if (x.action === "investigate") {
+    const hit = String(j.summary || "").match(/建议结论「([^」]+)」/);
+    const conclusion = hit?.[1] || "";
+    const flags = [];
+    if (j.challenger_enabled === false) flags.push("未开慧查agent");
+    if (j.experiment_mode) flags.push("实验模式");
+    if (/幻觉演示开启/.test(j.summary || "")) flags.push("幻觉演示");
+    return {
+      title: AUDIT_TITLE.investigate,
+      actor,
+      time,
+      detail: [conclusion ? `建议${conclusion}` : "已写出调查草稿", ...flags].join("。"),
+      extra: lookups?.length ? `查阅 ${lookups.join("、")}` : "",
+    };
   }
-  const actor = x.actor === "agent" ? "系统" : x.actor || "调查员";
+  if (x.action === "validator") {
+    return {
+      title: AUDIT_TITLE.validator,
+      actor: "系统",
+      time,
+      detail: "拦截了无效引用，草稿不能直接签发",
+    };
+  }
+  if (x.action === "checklist") {
+    const n = Array.isArray(j.item_ids) ? j.item_ids.length : 0;
+    return {
+      title: AUDIT_TITLE.checklist,
+      actor,
+      time,
+      detail: n ? `把 ${n} 条待补材料写入备注` : "已写入补证备注",
+    };
+  }
+  if (x.action === "decide") {
+    const decision = HUMAN[j.human_decision] || j.summary || "已记录";
+    const note = String(j.summary || "").includes("：") ? String(j.summary).split("：").slice(1).join("：") : "";
+    return {
+      title: AUDIT_TITLE.decide,
+      actor,
+      time,
+      detail: note ? `${decision}：${note}` : decision,
+    };
+  }
+  if (x.action === "export") {
+    return {
+      title: AUDIT_TITLE.export,
+      actor,
+      time,
+      detail: "导出调查底稿，不是报送报文",
+    };
+  }
   return {
-    title: `${actor} · ${AUDIT_ACTION[x.action] || x.action}`,
-    detail,
-    time: x.created_at || "",
+    title: AUDIT_TITLE[x.action] || "其他记录",
+    actor,
+    time,
+    detail: j.summary || "",
   };
 }
 
@@ -294,7 +384,7 @@ function FlowBars({ baseline }) {
 
 function conclusionTone(label) {
   if (label === "排除") return "ok";
-  if (label === "继续观察") return "warn";
+  if (label === "继续观察" || label === "观察") return "watch";
   return "risk";
 }
 
@@ -313,23 +403,22 @@ function MetricBoard({ metrics, feedback }) {
   return (
     <section className="metric-board" aria-label="系统成效指标">
       <div className="metric-board-hd">
-        <div>
-          <b>系统成效</b>
-          <span>把防错机制变成可核验指标</span>
-        </div>
-        <em>synthetic · 非生产准确率</em>
+        <b>系统成效</b>
+        <em>合成样本 · 非生产准确率</em>
       </div>
-      <div className="metric-grid">
+      <dl className="metric-ledger">
         {cards.map(([label, value, note]) => (
-          <div className="metric-card" key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-            <small>{note}</small>
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>
+              <strong>{value}</strong>
+              <small>{note}</small>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
       <div className="metric-foot">
-        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
+        草稿 {metrics?.drafts ?? "—"}　校验 {quality.audited_validations ?? "—"}　签发 {quality.human_decisions ?? "—"}
       </div>
     </section>
   );
@@ -670,12 +759,13 @@ export default function App() {
           <div className="brand-text">
             <div className="brand-title-row">
               <strong>循证慧查</strong>
-              <span className="brand-tag">AML JUDGE</span>
+              <span className="brand-unit">合规调查</span>
             </div>
-            <span>证据约束的反洗钱 AI 调查工作台 · 快捷键 0 进入比赛演示</span>
+            <span>告警池之后的调查与底稿</span>
           </div>
         </div>
         <div className="staff">
+          <span className="env-chip">演示环境 合成数据</span>
           <span className="top-clock">{clock}</span>
           <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
             <button type="button" className="ghost-btn primary" onClick={() => startContest()}>
@@ -753,8 +843,8 @@ export default function App() {
             <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
           </label>
         )}
-        <span className="hint" style={{ margin: 0 }}>
-          快捷键 0 比赛演示 · 1–6 打开历史案（不重跑）。签发与导出须登录；AI 不得自动报送。
+        <span className="hint toolbar-keys">
+          <kbd>0</kbd> 比赛演示　<kbd>1</kbd>–<kbd>6</kbd> 历史案　<kbd>H</kbd> 说明书
         </span>
       </div>
       {contestMode && (
@@ -785,6 +875,7 @@ export default function App() {
       </div>
 
       <Modal
+        className="desk-modal"
         title="调查员登录"
         open={loginOpen}
         onCancel={() => setLoginOpen(false)}
@@ -877,7 +968,7 @@ export default function App() {
         <aside className="col">
           <div className="col-title">
             <h3>待办告警</h3>
-            <Tag>{queueKind === "demo" ? demoCount : normalCount} 条</Tag>
+            <Chip>{queueKind === "demo" ? demoCount : normalCount} 条</Chip>
           </div>
           <div className="queue-filter" role="tablist" aria-label="告警筛选">
             <button
@@ -936,21 +1027,20 @@ export default function App() {
                 }}
               >
                 <div className="t">
-                  {a.demo_tag ? (
-                    <Tag color="red" style={{ marginRight: 6 }}>
-                      {a.demo_tag}
-                    </Tag>
-                  ) : null}
+                  {a.demo_tag ? <span className="demo-stamp">{a.demo_tag}</span> : null}
                   {a.title}
                 </div>
                 <div className="m">
-                  <span>
-                    {a.customer_name} · {yuan(a.amount)}
-                  </span>
-                  <span>
-                    {a.conclusion ? <Tag>{CONC[a.conclusion] || a.conclusion}</Tag> : null}
-                    <Tag color={st.color}>{st.text}</Tag>
-                  </span>
+                  <span className="q-who">{a.customer_name}</span>
+                  <span className="q-amt">{yuan(a.amount)}</span>
+                </div>
+                <div className="q-flags">
+                  {a.conclusion ? (
+                    <Chip tone={conclusionTone(CONC[a.conclusion] || a.conclusion)}>
+                      {CONC[a.conclusion] || a.conclusion}
+                    </Chip>
+                  ) : null}
+                  <Chip tone={st.tone}>{st.text}</Chip>
                 </div>
               </div>
             );
@@ -959,10 +1049,31 @@ export default function App() {
 
         <main className={`col is-stage${!current ? " is-welcome" : ""}`}>
           <div className="stage-body">
-          {current && (
+          {current && detail?.alert && (
+            <div className="dossier-hd">
+              <div className="dossier-hd-main">
+                <div className="dossier-title">
+                  {detail.alert.demo_tag ? <span className="demo-stamp">{detail.alert.demo_tag}</span> : null}
+                  <h3>{detail.alert.title}</h3>
+                </div>
+                <div className="dossier-meta">
+                  <span>{detail.alert.alert_type}</span>
+                  {inv?.customer?.name ? <span>{inv.customer.name}</span> : null}
+                  <span>{yuan(detail.alert.amount)}</span>
+                  {detail.alert.created_at ? <span>{String(detail.alert.created_at).slice(0, 10)}</span> : null}
+                </div>
+              </div>
+              <div className="dossier-hd-side">
+                <code>{detail.alert.id}</code>
+                <Chip tone={(STATUS[detail.alert.status] || STATUS.pending).tone}>
+                  {(STATUS[detail.alert.status] || STATUS.pending).text}
+                </Chip>
+              </div>
+            </div>
+          )}
+          {current && !detail?.alert && (
             <div className="col-title">
               <h3>调查作业</h3>
-              {detail?.alert && <span className="hint">{detail.alert.id}</span>}
             </div>
           )}
           {!current && <WelcomeBrief />}
@@ -1003,67 +1114,60 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              <Space wrap style={{ marginBottom: 10 }}>
+              <div className="dossier-actions">
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
                   {inv ? "按当前策略重跑" : "开始调查"}
                 </Button>
-                {detail?.human_decision ? (
-                  <>
-                    <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
-                    {(detail.signed_by_name || detail.signed_by_id) && (
-                      <Tag color="blue">
-                        签发人 {detail.signed_by_name}
-                        {detail.signed_by_id ? ` · ${detail.signed_by_id}` : ""}
-                      </Tag>
-                    )}
-                  </>
-                ) : (
-                  <Tag>待签发</Tag>
-                )}
-                {!user && <Tag color="default">未登录 · 不可签发</Tag>}
-                {inv && caseChallengerEnabled && (
-                  <>
-                    <Tag color="green">慧查agent 已参与本次调查</Tag>
-                    <Tag>自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Tag>
-                  </>
-                )}
-                {inv && caseChallengerEnabled === false && (
-                  <Tag color="orange">本案为消融结果</Tag>
-                )}
-                {inv?.inject_hallucination && <Tag color="red">已注入幻觉</Tag>}
-                {inv?.llm?.reporter || inv?.llm?.judge ? (
-                  <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag>
-                ) : null}
-                {inv?.privacy && (
-                  <Tag color="geekblue">
-                    进模脱敏 姓名 {inv.privacy.masked_names ?? 0} · 账号 {inv.privacy.masked_accounts ?? 0}
-                    {inv.privacy.egress_calls ? ` · 出站 ${inv.privacy.egress_calls} 次已检漏` : ""}
-                  </Tag>
-                )}
-              </Space>
-              <div className="client-box">
-                {detail?.alert?.upstream}
-                {inv?.customer?.summary ? `。${inv.customer.summary}` : ""}
-                {inv?.comparison
-                  ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
-                  : ""}
+                <div className="dossier-flags">
+                  {detail?.human_decision ? (
+                    <Chip tone="brass">
+                      {HUMAN[detail.human_decision]}
+                      {detail.signed_by_name ? ` · ${detail.signed_by_name}` : ""}
+                    </Chip>
+                  ) : (
+                    <Chip>待签发</Chip>
+                  )}
+                  {!user && <Chip tone="watch">未登录</Chip>}
+                  {inv && caseChallengerEnabled === false && <Chip tone="watch">消融结果</Chip>}
+                  {inv?.inject_hallucination && <Chip tone="risk">已注入幻觉</Chip>}
+                  {experimentMode && (
+                    <Chip tone="brass">实验模式 · 下次重跑{currentChallengerEnabled ? "启用" : "关闭"}慧查agent</Chip>
+                  )}
+                </div>
               </div>
-              <div className="ch-state-strip">
-                <span>
-                  当前运行策略：
-                  {experimentMode
-                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} 慧查agent`
-                    : "正常模式 · 下次重跑默认启用慧查agent"}
-                </span>
-                {inv && (
-                  <span>
-                    本案历史结果：
-                    {caseChallengerEnabled
-                      ? "生成时已启用慧查agent"
-                      : "生成时未启用（消融结果，不是当前系统关闭）"}
-                  </span>
-                )}
-              </div>
+              {inv && (
+                <dl className="dossier-sum">
+                  <div>
+                    <dt>上游来源</dt>
+                    <dd>{detail?.alert?.upstream || "—"}</dd>
+                  </div>
+                  {inv.customer?.summary ? (
+                    <div>
+                      <dt>客户摘要</dt>
+                      <dd>{inv.customer.summary}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>本次生成</dt>
+                    <dd>
+                      {caseChallengerEnabled ? "慧查agent 已参与" : "未启用慧查agent"}
+                      {inv.llm?.model ? `，模型 ${inv.llm.model}` : ""}
+                      {inv.comparison
+                        ? `，调用工具 ${inv.comparison.tools_called} 次，要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total}`
+                        : ""}
+                    </dd>
+                  </div>
+                  {inv.privacy ? (
+                    <div>
+                      <dt>进模脱敏</dt>
+                      <dd>
+                        姓名 {inv.privacy.masked_names ?? 0} 个，账号 {inv.privacy.masked_accounts ?? 0} 个
+                        {inv.privacy.egress_calls ? `，出站 ${inv.privacy.egress_calls} 次均已检漏` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
               {inv && caseChallengerEnabled === false && (
                 <Alert
                   type="warning"
@@ -1077,12 +1181,6 @@ export default function App() {
                 <div className="viz-row">
                   <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} />
                   <FlowBars baseline={inv.baseline} />
-                </div>
-              )}
-              {inv?.case_v2 && (
-                <div className="client-box">
-                  案件 {inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level} ·
-                  数据 {inv.data_note || "synthetic"} · Agent 不得自动报送
                 </div>
               )}
               {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
@@ -1232,8 +1330,8 @@ export default function App() {
                     }}
                   >
                     <code>{h.id}</code>
-                    <Tag style={{ marginLeft: 6 }}>{h.kind_label}</Tag>
-                    {h.article ? <Tag style={{ marginLeft: 4 }}>{h.article}</Tag> : null}
+                    <Chip>{h.kind_label}</Chip>
+                    {h.article ? <Chip>{h.article}</Chip> : null}
                     <div style={{ fontWeight: 650, margin: "4px 0 2px" }}>{h.title}</div>
                     <div className="hint" style={{ margin: "0 0 4px" }}>
                       {h.source}
@@ -1277,16 +1375,22 @@ export default function App() {
               <Divider plain orientation="left">
                 操作审计
               </Divider>
+              <p className="hint">本案的生成与签发记录。</p>
               {(detail?.audit || [])
-                .filter((x) => x.action !== "tool")
-                .slice(-6)
+                .filter((x) => !isToolAudit(x))
+                .slice(-8)
                 .map((x) => {
-                  const line = auditText(x);
+                  const lookups = x.action === "investigate" ? uniqueLookups(detail?.audit) : [];
+                  const line = auditText(x, lookups);
                   return (
-                    <div className="ev" key={x.id} style={{ cursor: "default" }}>
-                      <code>{line.title}</code>
-                      {line.time ? <span className="hint" style={{ margin: "0 0 0 8px" }}>{line.time}</span> : null}
-                      <div>{line.detail}</div>
+                    <div className="audit-line" key={x.id}>
+                      <div className="audit-hd">
+                        <b>{line.title}</b>
+                        <span>{line.actor}</span>
+                        {line.time ? <span>{line.time}</span> : null}
+                      </div>
+                      {line.detail ? <p>{line.detail}</p> : null}
+                      {line.extra ? <p className="audit-extra">{line.extra}</p> : null}
                     </div>
                   );
                 })}
@@ -1308,8 +1412,12 @@ export default function App() {
         {kbArticle && (
           <article className="kb-article">
             <div className="kb-article-meta">
-              {kbArticle.kind_label ? <Tag>{kbArticle.kind_label}</Tag> : null}
-              {kbArticle.data_note === "official-statute" ? <Tag color="blue">官方条款</Tag> : <Tag>作业转述</Tag>}
+              {kbArticle.kind_label ? <Chip>{kbArticle.kind_label}</Chip> : null}
+              {kbArticle.data_note === "official-statute" ? (
+                <Chip tone="navy">官方条款</Chip>
+              ) : (
+                <Chip>作业转述</Chip>
+              )}
               <span>{kbArticle.source || "演示知识库"}</span>
             </div>
             <h4>{kbArticle.title || kbArticle.id}</h4>

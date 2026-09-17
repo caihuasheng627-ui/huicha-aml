@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .reliability import compute_reliability
 from .schema import EvidenceSufficiency
 
 MAX_CANDIDATES = 4
@@ -148,6 +149,20 @@ def build_candidates(
     return candidates[: max(0, int(max_candidates))]
 
 
+def _cf_reliability_committed(cf_judge: dict | None, cf_valid: dict | None, baseline: dict | None, leftover: list[str]) -> bool:
+    """同一档且引用通过时，再看 CF 本身能否形成可签发倾向；弃权则视为该簇仍必要。"""
+    dummy = {"verified": True, "necessary_ids": list(leftover) or ["_cf_probe"]}
+    reliability = compute_reliability(
+        use_challenger=True,
+        judge=cf_judge or {},
+        judge_validation=cf_valid or {},
+        baseline=baseline or {},
+        counterfactual={"performed": False},
+        evidence_sufficiency=dummy,
+    )
+    return reliability.get("stance") == "committed"
+
+
 def search_minimal_set(
     *,
     judge: dict,
@@ -156,6 +171,7 @@ def search_minimal_set(
     run_round,
     max_candidates: int = MAX_CANDIDATES,
     max_rounds: int = MAX_ROUNDS,
+    baseline: dict | None = None,
 ) -> tuple[dict, dict]:
     """反向贪心删除。run_round(removed_ids, message) -> {judge, validation, error}。"""
     original_disp = judge.get("disposition") or ""
@@ -205,7 +221,8 @@ def search_minimal_set(
                 break
         passed = bool(mapped.get("validated"))
         same = mapped.get("counterfactual_conclusion") == original_disp
-        if mapped.get("performed") and passed and same:
+        cf_committed = _cf_reliability_committed(cf_judge, cf_valid, baseline, leftover) if (mapped.get("performed") and passed and same) else False
+        if mapped.get("performed") and passed and same and cf_committed:
             cand["status"] = "redundant"
             for eid in leftover:
                 if eid not in redundant:

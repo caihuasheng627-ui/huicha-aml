@@ -90,6 +90,30 @@ def render_report(
     }
 
 
+def apply_abstain_tone(report: dict, conclusion: str) -> None:
+    """弃权时改写结论段：保留 AI 倾向，不再把三档结论写成可直接签发表述。"""
+    label = CONCLUSION_LABEL.get(conclusion) or conclusion or "未知"
+    reason = (
+        f"系统已弃权：以上仅为 AI 倾向档（倾向「{label}」），未形成可直接签发结论，须人工签发，提交复核须调查员说明。"
+    )
+    report["reason"] = reason
+    rebuilt: list[str] = []
+    found = False
+    for line in (report.get("full_text") or "").split("\n"):
+        if line.startswith("【结论与理由】"):
+            rebuilt.append(f"【结论与理由】AI 倾向、未形成可直接签发结论。{reason}")
+            found = True
+        else:
+            rebuilt.append(line)
+    if not found:
+        rebuilt.append(f"【结论与理由】AI 倾向、未形成可直接签发结论。{reason}")
+    report["full_text"] = "\n".join(rebuilt)
+    report["elements"] = [
+        e if e.get("key") != "可疑/排除理由" else {"key": e["key"], "value": reason}
+        for e in (report.get("elements") or [])
+    ]
+
+
 def apply_reason(report: dict, polished: str, conclusion: str) -> None:
     report["reason"] = polished
     report["elements"] = [

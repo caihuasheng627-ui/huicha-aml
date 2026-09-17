@@ -278,3 +278,49 @@ def test_abstain_case_submit_confirm_modify_reject(client, monkeypatch):
         headers=rev_h,
     )
     assert rejected.status_code == 200, rejected.text
+
+
+def test_blocked_sign_can_write_note_without_deciding(client):
+    inv_h = _login(client)
+    no_draft = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "先记一笔"},
+        headers=inv_h,
+    )
+    assert no_draft.status_code == 400
+
+    data = client.post(
+        "/api/alerts/ALT-A-20260910/investigate",
+        params={"use_challenger": True, "inject_hallucination": True},
+    ).json()
+    assert data["can_sign"] is False
+
+    unauth = client.post("/api/alerts/ALT-A-20260910/note", json={"note": "未登录"})
+    assert unauth.status_code == 401
+
+    empty = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "  "},
+        headers=inv_h,
+    )
+    assert empty.status_code == 400
+
+    saved = client.post(
+        "/api/alerts/ALT-A-20260910/note",
+        json={"note": "幻觉账号已人工核对，维持观察待补证"},
+        headers=inv_h,
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["final_action"] == "draft_only"
+    assert body["human_decision"] == ""
+    assert body["can_sign"] is False
+    assert "未改变签发状态" in body["note"]
+
+    detail = client.get("/api/alerts/ALT-A-20260910").json()
+    assert detail["human_decision"] in {"", None}
+    assert detail["human_note"] == "幻觉账号已人工核对，维持观察待补证"
+    assert detail["alert"]["status"] not in {"ready_to_file", "closed", "modified"}
+    report = (detail.get("investigation") or {}).get("report") or {}
+    assert "【补证备注】幻觉账号已人工核对，维持观察待补证" in (report.get("full_text") or "")
+    assert (detail.get("investigation") or {}).get("human_review", {}).get("note") == "幻觉账号已人工核对，维持观察待补证"

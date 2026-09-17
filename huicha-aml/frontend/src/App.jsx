@@ -7,8 +7,10 @@ import {
   Form,
   Input,
   Modal,
+  Space,
   Switch,
   Table,
+  Tag,
   Timeline,
   Tooltip,
   message,
@@ -32,6 +34,7 @@ import {
   login,
   logout,
   runInvestigate,
+  saveNote,
   streamInvestigate,
   shouldFallbackInvestigate,
   setDemoToken,
@@ -78,23 +81,11 @@ function WelcomeBrief({ labMode }) {
   }
   return (
     <div className="welcome">
-      <div className="welcome-letterhead">
-        <div className="welcome-logo">
-          <BrandLogo size={52} />
-        </div>
-        <div>
-          <div className="welcome-title">循证慧查</div>
-          <p className="welcome-unit">合规调查工作台</p>
-        </div>
+      <div className="welcome-logo">
+        <BrandLogo size={68} />
       </div>
-<<<<<<< HEAD
-      <p className="welcome-subtitle">
-        从左侧告警池选定案件。系统只出调查草稿，签发由人工完成。快捷键 0 进入案例 L 演示主线。
-      </p>
-=======
       <div className="welcome-title">循证慧查</div>
       <div className="welcome-subtitle">实验室 · 快捷键 0 进入比赛演示</div>
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -109,7 +100,7 @@ function WelcomeBrief({ labMode }) {
   );
 }
 
-function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin, onExport, contestHotAction }) {
+function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSaveNote, onDecide, onLogin, onExport, contestHotAction }) {
   const hasDraft = Boolean(inv?.report);
   const factOk = Boolean(hasDraft && inv.can_sign);
   const blockText = signBlockerText(inv);
@@ -123,6 +114,7 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
   const canConfirm = Boolean(reviewer && submitted && factOk && !finalized);
   const canModify = Boolean(reviewer && submitted && !finalized);
   const canReject = Boolean(user && hasDraft && !finalized);
+  const canWriteNote = Boolean(user && hasDraft && note.trim());
   let status = "先选左侧告警";
   if (current) {
     if (!hasDraft) status = "尚无草稿";
@@ -131,22 +123,27 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
       status = reviewer
         ? factOk
           ? "待复核签发"
-          : `${blockText}，不能直接同意签发`
+          : `${blockText}，不能直接同意签发，可先写入备注`
         : "已提交，等待复核";
     }
     else if (!user) status = "登录后才能提交或签发";
     else if (reviewer) status = "等待调查员提交复核";
     else if (!factOk) status = abstained
-      ? `系统已弃权，${blockText}，提交须填写说明`
-      : `${blockText}，提交须填写说明`;
-    else status = "待提交复核";
+      ? `系统已弃权，${blockText}，先写入备注或带说明提交`
+      : `${blockText}，先写入备注或带说明提交`;
+    else status = abstained ? "系统已弃权，倾向档仅供参考" : "待提交复核";
   }
   return (
-    <div className="sign-dock" data-contest="sign">
+    <div className={`sign-dock${!factOk && hasDraft ? " is-blocked" : ""}`} data-contest="sign">
+      {!factOk && hasDraft ? <p className="sign-dock-block">{blockedSignNoteHint(inv)}</p> : null}
       <Input.TextArea
         id="investigator-note"
         rows={4}
-        placeholder="处理意见（提交说明 / 复核意见 / 退回原因）"
+        placeholder={
+          !factOk && hasDraft
+            ? "不能直接签发。写明人工判断后点「写入备注」，或带说明提交复核。"
+            : "处理意见（提交说明 / 复核意见 / 退回原因）"
+        }
         value={note}
         onChange={(e) => onNote(e.target.value)}
         disabled={!current}
@@ -181,6 +178,9 @@ function SignDock({ current, inv, user, note, signed, onNote, onDecide, onLogin,
           <Button danger disabled={!canReject} onClick={() => onDecide("reject")}>
             {reviewer ? "退回调查" : "退回重查"}
           </Button>
+          <Button disabled={!canWriteNote || savingNote} onClick={onSaveNote}>
+            {savingNote ? "写入中…" : "写入备注"}
+          </Button>
           <Button disabled={!hasDraft || !user} onClick={onExport}>
             导出底稿
           </Button>
@@ -209,19 +209,7 @@ const HUMAN = {
   reject: "已退回",
 };
 
-function Chip({ tone = "idle", children }) {
-  return <span className={`st-chip ${tone}`}>{children}</span>;
-}
-
 const STATUS = {
-<<<<<<< HEAD
-  pending: { text: "待调查", tone: "idle" },
-  investigating: { text: "调查中", tone: "work" },
-  closed: { text: "已排除关闭", tone: "ok" },
-  monitoring: { text: "持续监测", tone: "watch" },
-  ready_to_file: { text: "待复核上报", tone: "risk" },
-  modified: { text: "人工已改", tone: "watch" },
-=======
   pending: { text: "待调查", color: "default" },
   investigating: { text: "调查中", color: "processing" },
   pending_review: { text: "待复核", color: "warning" },
@@ -229,7 +217,6 @@ const STATUS = {
   monitoring: { text: "持续监测", color: "warning" },
   ready_to_file: { text: "待报送", color: "error" },
   modified: { text: "复核已改", color: "warning" },
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
 };
 
 const CONC = {
@@ -238,58 +225,18 @@ const CONC = {
   suggest_report: "建议上报",
 };
 
-const AUDIT_TITLE = {
+const AUDIT_ACTION = {
   investigate: "生成草稿",
-  decide: "人工签发",
+  decide: "人工处置",
+  tool: "调取工具",
+  tools: "调取工具",
   validator: "证据校验",
-  checklist: "写入补证",
-  export: "导出底稿",
+  checklist: "补证清单",
+  note: "写入备注",
 };
 
-<<<<<<< HEAD
-const TOOL_LABEL = {
-  get_alert: "告警",
-  get_customer: "客户资料",
-  get_accounts: "账户",
-  get_transactions: "交易流水",
-  get_timeline: "交易时序",
-  get_graph: "资金图谱",
-  get_related_accounts: "关联账户",
-  get_baseline: "行业基线",
-  check_watchlist: "关注名单",
-  search_knowledge: "制度",
-  search_regulation: "法规",
-};
-
-function isToolAudit(x) {
-  return x?.actor === "tool" || String(x?.action || "").startsWith("tool");
-}
-
-function parseAuditJson(detail) {
-  try {
-    return JSON.parse(detail);
-  } catch {
-    return null;
-  }
-}
-
-function uniqueLookups(logs) {
-  const seen = [];
-  for (const x of logs || []) {
-    if (!isToolAudit(x)) continue;
-    const name = String(x.action || "").replace(/^tool:/, "");
-    const label = TOOL_LABEL[name];
-    if (label && !seen.includes(label)) seen.push(label);
-  }
-  return seen;
-}
-
-const TOKEN_SPLIT = /(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)/;
-const TOKEN_ONE = /^(EV-[A-Z0-9\-]+|TX-[A-Z0-9\-]+|6222-[A-Z0-9\-]+|CASH-\d+|C-[A-Z0-9]+|KB-[A-Z0-9\-]+)$/;
-=======
-import { collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
 
 const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
@@ -329,66 +276,21 @@ function evidenceMatches(e, selected) {
   return false;
 }
 
-function auditText(x, lookups) {
-  const j = parseAuditJson(x.detail) || {};
-  const actor = x.actor === "agent" || x.actor === "tool" ? "系统" : x.actor || "调查员";
-  const time = x.created_at || "";
-
-  if (x.action === "investigate") {
-    const hit = String(j.summary || "").match(/建议结论「([^」]+)」/);
-    const conclusion = hit?.[1] || "";
-    const flags = [];
-    if (j.challenger_enabled === false) flags.push("未开慧查agent");
-    if (j.experiment_mode) flags.push("实验模式");
-    if (/幻觉演示开启/.test(j.summary || "")) flags.push("幻觉演示");
-    return {
-      title: AUDIT_TITLE.investigate,
-      actor,
-      time,
-      detail: [conclusion ? `建议${conclusion}` : "已写出调查草稿", ...flags].join("。"),
-      extra: lookups?.length ? `查阅 ${lookups.join("、")}` : "",
-    };
+function auditText(x) {
+  let detail = x.detail || "";
+  try {
+    const j = JSON.parse(detail);
+    if (j.decision) detail = `${HUMAN[j.decision] || j.decision}${j.note ? `：${j.note}` : ""}`;
+    else if (j.summary) detail = j.summary;
+    else if (j.tool) detail = `${j.tool} ${j.records ?? ""} 条`;
+  } catch {
+    /* already human text */
   }
-  if (x.action === "validator") {
-    return {
-      title: AUDIT_TITLE.validator,
-      actor: "系统",
-      time,
-      detail: "拦截了无效引用，草稿不能直接签发",
-    };
-  }
-  if (x.action === "checklist") {
-    const n = Array.isArray(j.item_ids) ? j.item_ids.length : 0;
-    return {
-      title: AUDIT_TITLE.checklist,
-      actor,
-      time,
-      detail: n ? `把 ${n} 条待补材料写入备注` : "已写入补证备注",
-    };
-  }
-  if (x.action === "decide") {
-    const decision = HUMAN[j.human_decision] || j.summary || "已记录";
-    const note = String(j.summary || "").includes("：") ? String(j.summary).split("：").slice(1).join("：") : "";
-    return {
-      title: AUDIT_TITLE.decide,
-      actor,
-      time,
-      detail: note ? `${decision}：${note}` : decision,
-    };
-  }
-  if (x.action === "export") {
-    return {
-      title: AUDIT_TITLE.export,
-      actor,
-      time,
-      detail: "导出调查底稿，不是报送报文",
-    };
-  }
+  const actor = x.actor === "agent" ? "系统" : x.actor || "调查员";
   return {
-    title: AUDIT_TITLE[x.action] || "其他记录",
-    actor,
-    time,
-    detail: j.summary || "",
+    title: `${actor} · ${AUDIT_ACTION[x.action] || x.action}`,
+    detail,
+    time: x.created_at || "",
   };
 }
 
@@ -470,7 +372,7 @@ function FlowBars({ baseline }) {
 
 function conclusionTone(label) {
   if (label === "排除") return "ok";
-  if (label === "继续观察" || label === "观察") return "watch";
+  if (label === "继续观察") return "warn";
   return "risk";
 }
 
@@ -517,26 +419,23 @@ function MetricBoard({ metrics, feedback }) {
   return (
     <section className="metric-board" aria-label="系统成效指标">
       <div className="metric-board-hd">
-        <b>系统成效</b>
-        <em>合成样本 · 非生产准确率</em>
+        <div>
+          <b>系统成效</b>
+          <span>把防错机制变成可核验指标</span>
+        </div>
+        <em>synthetic · 非生产准确率</em>
       </div>
-      <dl className="metric-ledger">
+      <div className="metric-grid">
         {cards.map(([label, value, note]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>
-              <strong>{value}</strong>
-              <small>{note}</small>
-            </dd>
+          <div className="metric-card" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{note}</small>
           </div>
         ))}
-      </dl>
+      </div>
       <div className="metric-foot">
-<<<<<<< HEAD
-        草稿 {metrics?.drafts ?? "—"}　校验 {quality.audited_validations ?? "—"}　签发 {quality.human_decisions ?? "—"}
-=======
         已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 消耗 Token {formatCount(metrics?.tokens)} · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
       </div>
     </section>
   );
@@ -549,6 +448,7 @@ export default function App() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const [currentChallengerEnabled, setCurrentChallengerEnabled] = useState(true);
   const [experimentMode, setExperimentMode] = useState(false);
   const [injectHallucination, setInjectHallucination] = useState(false);
@@ -753,6 +653,35 @@ export default function App() {
     }
   }
 
+  async function onSaveNote() {
+    if (!current) return;
+    if (!user) {
+      message.warning("请先登录后再写入备注");
+      setLoginOpen(true);
+      return;
+    }
+    if (!note.trim()) {
+      message.warning("请先填写处理意见");
+      document.getElementById("investigator-note")?.focus();
+      return;
+    }
+    setSavingNote(true);
+    try {
+      await saveNote(current, note);
+      await open(current);
+      message.success("已写入草稿备注，未改变签发状态");
+    } catch (e) {
+      if (String(e.message || "").includes("登录")) {
+        clearSession();
+        setUser(null);
+        setLoginOpen(true);
+      }
+      message.error(e.message);
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
   async function onDecide(decision) {
     if (!current) return;
     if (!user) {
@@ -939,19 +868,12 @@ export default function App() {
           <div className="brand-text">
             <div className="brand-title-row">
               <strong>循证慧查</strong>
-<<<<<<< HEAD
-              <span className="brand-unit">合规调查</span>
-            </div>
-            <span>告警池之后的调查与底稿</span>
-=======
               {labMode ? <span className="brand-tag">实验室</span> : <span className="brand-tag">调查工作台</span>}
             </div>
             <span>{labMode ? "实验室 · 快捷键 0 进入比赛演示" : "反洗钱调查工作台 · 调查员提交 / 复核岗签发"}</span>
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
           </div>
         </div>
         <div className="staff">
-          <span className="env-chip">演示环境 合成数据</span>
           <span className="top-clock">{clock}</span>
           {labMode && (
             <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
@@ -1052,8 +974,8 @@ export default function App() {
             <Switch size="small" checked={injectHallucination} onChange={setInjectHallucination} />
           </label>
         )}
-        <span className="hint toolbar-keys">
-          <kbd>0</kbd> 比赛演示　<kbd>1</kbd>–<kbd>6</kbd> 历史案　<kbd>H</kbd> 说明书
+        <span className="hint" style={{ margin: 0 }}>
+          快捷键 0 比赛演示 · 1–6 打开历史案（不重跑）。签发与导出须登录；AI 不得自动报送。
         </span>
       </div>
       {contestMode && (
@@ -1086,12 +1008,7 @@ export default function App() {
       </div>
 
       <Modal
-<<<<<<< HEAD
-        className="desk-modal"
-        title="调查员登录"
-=======
         title="登录工作台"
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
         open={loginOpen}
         onCancel={() => setLoginOpen(false)}
         footer={null}
@@ -1182,13 +1099,8 @@ export default function App() {
       <div className="layout">
         <aside className="col">
           <div className="col-title">
-<<<<<<< HEAD
-            <h3>待办告警</h3>
-            <Chip>{queueKind === "demo" ? demoCount : normalCount} 条</Chip>
-=======
             <h3>{labMode ? "待办告警" : "我的待办"}</h3>
             <Tag>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : todoCount} 条</Tag>
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
           </div>
           <div
             className={`queue-filter${(labMode ? queueKind === "normal" : queueKind === "done") ? " is-right" : ""}`}
@@ -1255,22 +1167,6 @@ export default function App() {
                 }}
               >
                 <div className="t">
-<<<<<<< HEAD
-                  {a.demo_tag ? <span className="demo-stamp">{a.demo_tag}</span> : null}
-                  {a.title}
-                </div>
-                <div className="m">
-                  <span className="q-who">{a.customer_name}</span>
-                  <span className="q-amt">{yuan(a.amount)}</span>
-                </div>
-                <div className="q-flags">
-                  {a.conclusion ? (
-                    <Chip tone={conclusionTone(CONC[a.conclusion] || a.conclusion)}>
-                      {CONC[a.conclusion] || a.conclusion}
-                    </Chip>
-                  ) : null}
-                  <Chip tone={st.tone}>{st.text}</Chip>
-=======
                   <code className="case-no">{a.case_no || a.id}</code>
                   {labMode && a.demo_tag ? (
                     <Tag color="red" style={{ marginRight: 6 }}>
@@ -1288,7 +1184,6 @@ export default function App() {
                     {a.conclusion ? <Tag>{CONC[a.conclusion] || a.conclusion}</Tag> : null}
                     <Tag color={st.color}>{st.text}</Tag>
                   </span>
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
                 </div>
               </div>
             );
@@ -1297,35 +1192,10 @@ export default function App() {
 
         <main className={`col is-stage${!current ? " is-welcome" : ""}`}>
           <div className="stage-body">
-          {current && detail?.alert && (
-            <div className="dossier-hd">
-              <div className="dossier-hd-main">
-                <div className="dossier-title">
-                  {detail.alert.demo_tag ? <span className="demo-stamp">{detail.alert.demo_tag}</span> : null}
-                  <h3>{detail.alert.title}</h3>
-                </div>
-                <div className="dossier-meta">
-                  <span>{detail.alert.alert_type}</span>
-                  {inv?.customer?.name ? <span>{inv.customer.name}</span> : null}
-                  <span>{yuan(detail.alert.amount)}</span>
-                  {detail.alert.created_at ? <span>{String(detail.alert.created_at).slice(0, 10)}</span> : null}
-                </div>
-              </div>
-              <div className="dossier-hd-side">
-                <code>{detail.alert.id}</code>
-                <Chip tone={(STATUS[detail.alert.status] || STATUS.pending).tone}>
-                  {(STATUS[detail.alert.status] || STATUS.pending).text}
-                </Chip>
-              </div>
-            </div>
-          )}
-          {current && !detail?.alert && (
+          {current && (
             <div className="col-title">
               <h3>调查作业</h3>
-<<<<<<< HEAD
-=======
               {detail?.alert && <span className="hint">{detail.alert.case_no || detail.alert.id}</span>}
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
             </div>
           )}
           {!current && <WelcomeBrief labMode={labMode} />}
@@ -1375,63 +1245,10 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
-              <div className="dossier-actions">
+              <Space wrap style={{ marginBottom: 10 }}>
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
                   {loading ? stageHint || "调查中…" : inv ? "重新调查" : "开始调查"}
                 </Button>
-<<<<<<< HEAD
-                <div className="dossier-flags">
-                  {detail?.human_decision ? (
-                    <Chip tone="brass">
-                      {HUMAN[detail.human_decision]}
-                      {detail.signed_by_name ? ` · ${detail.signed_by_name}` : ""}
-                    </Chip>
-                  ) : (
-                    <Chip>待签发</Chip>
-                  )}
-                  {!user && <Chip tone="watch">未登录</Chip>}
-                  {inv && caseChallengerEnabled === false && <Chip tone="watch">消融结果</Chip>}
-                  {inv?.inject_hallucination && <Chip tone="risk">已注入幻觉</Chip>}
-                  {experimentMode && (
-                    <Chip tone="brass">实验模式 · 下次重跑{currentChallengerEnabled ? "启用" : "关闭"}慧查agent</Chip>
-                  )}
-                </div>
-              </div>
-              {inv && (
-                <dl className="dossier-sum">
-                  <div>
-                    <dt>上游来源</dt>
-                    <dd>{detail?.alert?.upstream || "—"}</dd>
-                  </div>
-                  {inv.customer?.summary ? (
-                    <div>
-                      <dt>客户摘要</dt>
-                      <dd>{inv.customer.summary}</dd>
-                    </div>
-                  ) : null}
-                  <div>
-                    <dt>本次生成</dt>
-                    <dd>
-                      {caseChallengerEnabled ? "慧查agent 已参与" : "未启用慧查agent"}
-                      {inv.llm?.model ? `，模型 ${inv.llm.model}` : ""}
-                      {inv.comparison
-                        ? `，调用工具 ${inv.comparison.tools_called} 次，要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total}`
-                        : ""}
-                    </dd>
-                  </div>
-                  {inv.privacy ? (
-                    <div>
-                      <dt>进模脱敏</dt>
-                      <dd>
-                        姓名 {inv.privacy.masked_names ?? 0} 个，账号 {inv.privacy.masked_accounts ?? 0} 个
-                        {inv.privacy.egress_calls ? `，出站 ${inv.privacy.egress_calls} 次均已检漏` : ""}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              )}
-              {inv && caseChallengerEnabled === false && (
-=======
                 {detail?.human_decision ? (
                   <>
                     <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
@@ -1492,7 +1309,6 @@ export default function App() {
               </div>
               )}
               {inv && caseChallengerEnabled === false && labMode && (
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
                 <Alert
                   type="warning"
                   showIcon
@@ -1507,14 +1323,11 @@ export default function App() {
                   <FlowBars baseline={inv.baseline} />
                 </div>
               )}
-<<<<<<< HEAD
-=======
               {inv?.case_v2 && (
                 <div className="client-box">
                   案件 {detail?.alert?.case_no || inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level} · 须复核后报送，系统不自动报送
                 </div>
               )}
->>>>>>> bc0b166cf5c3232859d6a930289c51c9f3a0bfb9
               {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
               {inv && <VerifiedClaims rows={inv.verified_claims} onSelect={selectEvidence} />}
               {inv && <EvidenceSufficiencyPanel data={inv.evidence_sufficiency} onSelect={selectEvidence} />}
@@ -1530,9 +1343,25 @@ export default function App() {
                   style={{ marginBottom: 12 }}
                   message={inv.fact_issues?.length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
                   description={
-                    inv.fact_issues?.length
-                      ? inv.fact_issues.map((x) => x.token).join("、")
-                      : collectSignBlockers(inv).map((row) => row.message).join("；")
+                    <>
+                      <div>
+                        {inv.fact_issues?.length
+                          ? inv.fact_issues.map((x) => x.token).join("、")
+                          : collectSignBlockers(inv).map((row) => row.message).join("；")}
+                      </div>
+                      <p className="sign-block-note-hint">不能直接签发。把人工判断写入草稿备注，不改变处置状态。</p>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          document.getElementById("investigator-note")?.focus();
+                          if (note.trim()) onSaveNote();
+                          else message.info("请在底部签发栏填写处理意见后点「写入备注」");
+                        }}
+                      >
+                        写入备注
+                      </Button>
+                    </>
                   }
                 />
               )}
@@ -1611,7 +1440,9 @@ export default function App() {
             user={user}
             note={note}
             signed={detail}
+            savingNote={savingNote}
             onNote={setNote}
+            onSaveNote={onSaveNote}
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
             onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
@@ -1678,8 +1509,8 @@ export default function App() {
                     }}
                   >
                     <code>{h.id}</code>
-                    <Chip>{h.kind_label}</Chip>
-                    {h.article ? <Chip>{h.article}</Chip> : null}
+                    <Tag style={{ marginLeft: 6 }}>{h.kind_label}</Tag>
+                    {h.article ? <Tag style={{ marginLeft: 4 }}>{h.article}</Tag> : null}
                     <div style={{ fontWeight: 650, margin: "4px 0 2px" }}>{h.title}</div>
                     <div className="hint" style={{ margin: "0 0 4px" }}>
                       {h.source}
@@ -1723,22 +1554,16 @@ export default function App() {
               <Divider plain orientation="left">
                 操作审计
               </Divider>
-              <p className="hint">本案的生成与签发记录。</p>
               {(detail?.audit || [])
-                .filter((x) => !isToolAudit(x))
-                .slice(-8)
+                .filter((x) => x.action !== "tool")
+                .slice(-6)
                 .map((x) => {
-                  const lookups = x.action === "investigate" ? uniqueLookups(detail?.audit) : [];
-                  const line = auditText(x, lookups);
+                  const line = auditText(x);
                   return (
-                    <div className="audit-line" key={x.id}>
-                      <div className="audit-hd">
-                        <b>{line.title}</b>
-                        <span>{line.actor}</span>
-                        {line.time ? <span>{line.time}</span> : null}
-                      </div>
-                      {line.detail ? <p>{line.detail}</p> : null}
-                      {line.extra ? <p className="audit-extra">{line.extra}</p> : null}
+                    <div className="ev" key={x.id} style={{ cursor: "default" }}>
+                      <code>{line.title}</code>
+                      {line.time ? <span className="hint" style={{ margin: "0 0 0 8px" }}>{line.time}</span> : null}
+                      <div>{line.detail}</div>
                     </div>
                   );
                 })}
@@ -1760,12 +1585,8 @@ export default function App() {
         {kbArticle && (
           <article className="kb-article">
             <div className="kb-article-meta">
-              {kbArticle.kind_label ? <Chip>{kbArticle.kind_label}</Chip> : null}
-              {kbArticle.data_note === "official-statute" ? (
-                <Chip tone="navy">官方条款</Chip>
-              ) : (
-                <Chip>作业转述</Chip>
-              )}
+              {kbArticle.kind_label ? <Tag>{kbArticle.kind_label}</Tag> : null}
+              {kbArticle.data_note === "official-statute" ? <Tag color="blue">官方条款</Tag> : <Tag>作业转述</Tag>}
               <span>{kbArticle.source || "演示知识库"}</span>
             </div>
             <h4>{kbArticle.title || kbArticle.id}</h4>

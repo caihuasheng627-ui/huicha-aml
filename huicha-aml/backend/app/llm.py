@@ -261,8 +261,26 @@ def _offline_stub_chat(messages: list[dict]) -> tuple[str, dict]:
 
 
 def _cache_key(kind: str, payload: dict, *, model: str | None = None) -> str:
-    raw = json.dumps({"kind": kind, "model": model or llm_model(), "payload": payload}, ensure_ascii=False, sort_keys=True)
+    raw = json.dumps(
+        {
+            "kind": kind,
+            "model": model or llm_model(),
+            "stub": llm_stub_enabled(),
+            "payload": payload,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def cached_usage_ok(usage: dict | None) -> bool:
+    """Stub 结果不得在真实模型模式下命中缓存，否则 Token 会一直是 24。"""
+    if not isinstance(usage, dict):
+        return False
+    if usage.get("model") == "stub" and not llm_stub_enabled():
+        return False
+    return True
 
 
 def _cache_get(db: Session | None, key: str) -> tuple[str, dict] | None:
@@ -277,6 +295,8 @@ def _cache_get(db: Session | None, key: str) -> tuple[str, dict] | None:
         usage = json.loads(row.usage_json or "{}")
     except json.JSONDecodeError:
         usage = {}
+    if not cached_usage_ok(usage):
+        return None
     return row.response_text, {**usage, "cached": True}
 
 
@@ -466,7 +486,8 @@ def call_json(
     """脱敏 → 缓存 → chat → 解析 JSON → 反脱敏。"""
     payload = privacy.prepare_for_llm(context) if privacy else context
     resolved = model or llm_model(role)
-    key = _cache_key(kind, payload, model=resolved) if cacheable else None
+    use_cache = cacheable and not llm_stub_enabled()
+    key = _cache_key(kind, payload, model=resolved) if use_cache else None
     cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
@@ -503,7 +524,8 @@ def call_text(
     """脱敏 → 缓存 → chat → 去围栏 → 反脱敏。"""
     payload = privacy.prepare_for_llm(context) if privacy else context
     resolved = model or llm_model(role)
-    key = _cache_key(kind, payload, model=resolved) if cacheable else None
+    use_cache = cacheable and not llm_stub_enabled()
+    key = _cache_key(kind, payload, model=resolved) if use_cache else None
     cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
@@ -639,8 +661,8 @@ def enrich_challenger(
     if privacy:
         context = privacy.prepare_for_llm(context)
 
-    key = _cache_key("challenger_v3", context)
-    cached = _cache_get(db, key)
+    key = None if llm_stub_enabled() else _cache_key("challenger_v3", context)
+    cached = _cache_get(db, key) if key else None
     if cached:
         text, usage = cached
     else:
@@ -712,7 +734,7 @@ def enrich_report_reason(
     if privacy:
         context = privacy.prepare_for_llm(context)
 
-    key = None if prior_issues else _cache_key("reporter_v2", context)
+    key = None if prior_issues or llm_stub_enabled() else _cache_key("reporter_v2", context)
     if key:
         cached = _cache_get(db, key)
         if cached:

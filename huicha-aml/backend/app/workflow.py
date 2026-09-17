@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from .security import AuthUser
+from .tools import hard_fact_issues
 
 ROLE_INVESTIGATOR = "反洗钱调查员"
 ROLE_REVIEWER = "合规复核"
@@ -20,7 +21,7 @@ def collect_sign_blockers(
     reliability: dict | None = None,
 ) -> list[dict]:
     blockers: list[dict] = []
-    if fact_issues:
+    if hard_fact_issues(fact_issues):
         blockers.append({"code": "fact_check", "message": "事实回查未通过"})
     for row in (reliability or {}).get("reasons") or []:
         if not isinstance(row, dict):

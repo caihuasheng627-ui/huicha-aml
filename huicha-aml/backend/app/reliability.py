@@ -96,7 +96,9 @@ def compute_reliability(
     ):
         reasons.append(_reason("cf_not_dependent", "soft", "建议上报未形成对其声明证据的依赖，系统弃权"))
 
-    if sufficiency and sufficiency.get("verified") is False and not necessary:
+    # 排除档：规则与模型一致时，「没有可疑证据核心」是预期结果，不能据此弃权。
+    both_exclude = rule_conc == "exclude" and judge_conc == "exclude"
+    if sufficiency and sufficiency.get("verified") is False and not necessary and not both_exclude:
         reasons.append(_reason("evidence_core_unverified", "soft", "有界证据搜索未形成稳定核心，系统弃权"))
 
     seen: set[str] = set()

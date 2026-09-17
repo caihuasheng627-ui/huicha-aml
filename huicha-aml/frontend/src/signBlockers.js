@@ -1,3 +1,7 @@
+export function hardFactIssues(inv) {
+  return (inv?.fact_issues || []).filter((row) => (row?.severity || "hard") !== "soft");
+}
+
 export function collectSignBlockers(inv) {
   if (!inv) return [];
   const rows = [];
@@ -10,7 +14,7 @@ export function collectSignBlockers(inv) {
   for (const row of inv.sign_blockers || []) {
     push(row.code, row.message);
   }
-  if (inv.fact_issues?.length) {
+  if (hardFactIssues(inv).length) {
     push("fact_check", "事实回查未通过");
   }
   const reliability = inv.agent_reliability || {};

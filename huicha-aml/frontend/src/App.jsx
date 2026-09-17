@@ -235,7 +235,7 @@ const AUDIT_ACTION = {
   note: "写入备注",
 };
 
-import { blockedSignNoteHint, collectSignBlockers, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, reliabilityStance, signBlockerText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
@@ -336,7 +336,9 @@ function DecisionComparison({ judge, baseline, guardrails, label, ablation, cont
         {ablation
           ? "本案为慧查agent 关闭后的消融结果，仅展示规则对照。"
           : abstained
-            ? `系统已弃权：上列为 AI 倾向档，不可直接签发。${reliability?.note || ""}`
+            ? same
+              ? `规则与模型同档，但系统弃权：证据核验未完成，上列倾向档不可直接签发。${reliability?.note || ""}`
+              : `系统已弃权：上列为 AI 倾向档，不可直接签发。${reliability?.note || ""}`
           : same
             ? "AI 与规则对照一致，没有加权合成。把握度是「对结论有多确定」，不是风险高低。"
             : "AI 与规则对照存在分歧，须由调查员结合引用证据裁决。把握度不是风险分。"}
@@ -401,6 +403,12 @@ function investigationTokens(inv) {
   if (nested) return nested;
   if (usage.total_tokens != null) return usageTokens(usage);
   return (inv.trace || []).reduce((sum, row) => sum + Number(row?.tokens || 0), 0);
+}
+
+function isStubInvestigation(inv, health) {
+  if (health?.llm === "stub") return true;
+  const usage = inv?.llm?.usage || {};
+  return usage.judge?.model === "stub" || usage.reporter?.model === "stub" || inv?.llm?.model === "stub" || (inv?.llm?.provider || "").includes("stub");
 }
 
 function MetricBoard({ metrics, feedback }) {
@@ -1067,7 +1075,7 @@ export default function App() {
           banner
           showIcon
           message="无法连接调查服务"
-          description="请先启动后端：huicha-aml/backend 下执行 py -m uvicorn app.main:app --reload --port 8000"
+          description="请先启动后端：huicha-aml/backend 下执行 py -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app。不要用管理员窗口；若仍报 WinError 10013，先关掉占用 8000 的旧进程。"
         />
       )}
       {!offline && llmOff && (
@@ -1077,6 +1085,15 @@ export default function App() {
           showIcon
           message="未配置模型密钥"
           description="慧查agent / Reporter 需要 DEEPSEEK_API_KEY、DASHSCOPE_API_KEY 或 ZHIPU_API_KEY。也可设 HUICHA_LLM_STUB=1 走内置 stub。"
+        />
+      )}
+      {!offline && healthInfo?.llm === "stub" && (
+        <Alert
+          type="warning"
+          banner
+          showIcon
+          message="当前走内置 stub，不是真实模型"
+          description="Token 会固定显示约 24×调用次数。请关掉 HUICHA_LLM_STUB，并用普通权限重新启动 API 窗口后再点「重新调查」。"
         />
       )}
       {needsToken && (
@@ -1240,7 +1257,9 @@ export default function App() {
                   <div className="v">{inv ? formatCount(investigationTokens(inv)) : "—"}</div>
                   {inv?.llm?.usage ? (
                     <div className="hint" style={{ margin: "6px 0 0" }}>
-                      Judge {formatCount(usageTokens(inv.llm.usage.judge))} · Reporter {formatCount(usageTokens(inv.llm.usage.reporter))}
+                      {isStubInvestigation(inv, healthInfo)
+                        ? "内置 stub 写死 24+24，不是模型账单"
+                        : `Judge ${formatCount(usageTokens(inv.llm.usage.judge))} · Reporter ${formatCount(usageTokens(inv.llm.usage.reporter))}`}
                     </div>
                   ) : null}
                 </div>
@@ -1341,12 +1360,12 @@ export default function App() {
                   type="error"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  message={inv.fact_issues?.length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
+                  message={hardFactIssues(inv).length ? "事实回查未通过，禁止直接签发" : `${signBlockerText(inv)}，禁止直接同意签发`}
                   description={
                     <>
                       <div>
-                        {inv.fact_issues?.length
-                          ? inv.fact_issues.map((x) => x.token).join("、")
+                        {hardFactIssues(inv).length
+                          ? hardFactIssues(inv).map((x) => x.token).join("、")
                           : collectSignBlockers(inv).map((row) => row.message).join("；")}
                       </div>
                       <p className="sign-block-note-hint">不能直接签发。把人工判断写入草稿备注，不改变处置状态。</p>

@@ -11,7 +11,7 @@ from ...logging_util import audit, warning
 from ...prompts import prompt_version
 from ...risk import CONCLUSION_TO_RECO, RECO_LABEL
 from ...schema import InvestigationPlan, PlanStep, StructuredReport
-from ...tools import ALLOWED_TOOLS, yuan
+from ...tools import ALLOWED_TOOLS, hard_fact_issues, yuan
 from ...typology import tags_from_findings
 from ...workflow import collect_sign_blockers
 from ..cites import regulation_cites
@@ -295,7 +295,7 @@ class AssembleStage:
                 reliability=agent_reliability,
             ),
             "can_sign": (
-                len(fact_issues) == 0
+                len(hard_fact_issues(fact_issues)) == 0
                 and (judge_validation["passed"] or not use_challenger)
                 and ((not use_challenger) or agent_reliability.get("stance", "committed") == "committed")
             ),

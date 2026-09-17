@@ -197,6 +197,20 @@ def test_usage_and_investigation_tokens():
     }) == 15
 
 
+def test_stub_cache_not_reused_for_real_model(monkeypatch):
+    monkeypatch.delenv("HUICHA_LLM_STUB", raising=False)
+    import app.llm as llm_mod
+
+    llm_mod._ENV_LOADED = False
+    from app.llm import cached_usage_ok
+
+    assert cached_usage_ok({"model": "deepseek-chat", "total_tokens": 1800})
+    assert not cached_usage_ok({"model": "stub", "total_tokens": 24})
+    monkeypatch.setenv("HUICHA_LLM_STUB", "1")
+    llm_mod._ENV_LOADED = False
+    assert cached_usage_ok({"model": "stub", "total_tokens": 24})
+
+
 def _judge_inputs() -> dict:
     return {
         "alert": {"alert_type": "大额转账", "upstream": "monitoring"},

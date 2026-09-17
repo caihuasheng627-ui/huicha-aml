@@ -55,7 +55,12 @@ for _peer in PEER_BASELINE.values():
 THRESHOLD_WANS = (4.9, 5, 8, 10, 12, 20, 30, 80, 100, 170, 200, 240, 400, 800)
 REFERENCE_YUAN = set(REFERENCE_AMOUNTS) | {w * 10000 for w in THRESHOLD_WANS}
 
-APPROX_PREFIX_WORDS = ("约", "近", "左右", "上下", "量级", "区间", "阈值", "申报", "常见", "备货", "同业", "属")
+# 监管/类型学口径：出现在阈值、同业、约数附近时，不要求等于本案流水。
+LEXICON_WORDS = ("约", "近", "左右", "上下", "量级", "区间", "阈值", "申报", "常见", "备货", "同业", "属", "贴线", "规避", "下方")
+# 把金额写成「本案又转出/发现一笔」时，必须能在工具事实里对上。
+CASE_ASSERT_WORDS = ("转出", "转入", "存入", "流入", "流出", "合计", "金额为", "金额是", "一笔", "该笔")
+INVENTED_CLAIM_WORDS = ("另发现", "另转出", "另转入", "另存入", "发现金额")
+APPROX_PREFIX_WORDS = LEXICON_WORDS
 
 
 def yuan(n) -> str:
@@ -510,12 +515,17 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
     }
 
 
+def _token_window(text: str, start: int, end: int, *, before: int = 28, after: int = 18) -> str:
+    return text[max(0, start - before) : min(len(text), end + after)]
+
+
+def _has_any(text: str, words: tuple[str, ...]) -> bool:
+    return any(word in text for word in words)
+
+
 def _approx_context(text: str, start: int, end: int) -> bool:
-    prefix = text[max(0, start - 20) : start]
-    suffix = text[end : min(len(text), end + 6)]
-    if any(w in prefix for w in APPROX_PREFIX_WORDS):
-        return True
-    return "量级" in suffix or "左右" in suffix or "上下" in suffix
+    """兼容旧调用：监管口径看金额两侧，不单看前缀。"""
+    return _has_any(_token_window(text, start, end), LEXICON_WORDS)
 
 
 def _parse_amount_token(token: str) -> float | None:
@@ -535,20 +545,32 @@ def _amount_in_reference(value: float) -> bool:
     return any(abs(value - r) < 1e-6 for r in REFERENCE_YUAN)
 
 
-def _wan_token_ok(token: str, known: set[str], text: str, start: int, end: int) -> bool:
+def _amount_in_known(token: str, known: set[str]) -> bool:
     num = token.replace("万元", "").replace(",", "").strip()
-    if (
+    return (
         token in known
         or token.replace(" ", "") in known
         or num in known
         or f"{num} 万元" in known
         or f"{num}万元" in known
-    ):
+    )
+
+
+def _wan_token_ok(token: str, known: set[str], text: str, start: int, end: int) -> bool:
+    """本案流水金额必须对上；阈值/同业口径只在不像「另转出一笔」时放行。"""
+    if _amount_in_known(token, known):
         return True
     value = _parse_amount_token(token)
     if value is None:
         return False
-    return _approx_context(text, start, end) and _amount_in_reference(value)
+    window = _token_window(text, start, end)
+    if _has_any(window, INVENTED_CLAIM_WORDS):
+        return False
+    if not _amount_in_reference(value):
+        return False
+    if _has_any(window, LEXICON_WORDS):
+        return True
+    return not _has_any(window, CASE_ASSERT_WORDS)
 
 
 def _looks_plain_amount(token: str) -> bool:
@@ -559,8 +581,20 @@ def _looks_plain_amount(token: str) -> bool:
     return body.isdigit() and len(body) >= 5
 
 
+def hard_fact_issues(issues: list | None) -> list[dict]:
+    """只有硬问题阻断签发。监管口径金额不应再一票否决。"""
+    rows = []
+    for item in issues or []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("severity") or "hard") == "soft":
+            continue
+        rows.append(item)
+    return rows
+
+
 def fact_check(text: str, facts: dict) -> list[dict]:
-    """金额/账号/编号须在工具事实中。阈值/概数白名单只在带「约/阈值/量级」等措辞时放行。"""
+    """编号/账号/本案金额必须能对上工具事实；阈值与同业口径按语境放行。"""
     known: set[str] = set()
     for amt in facts.get("amounts", []):
         known.update(amount_known_forms(amt))
@@ -583,17 +617,17 @@ def fact_check(text: str, facts: dict) -> list[dict]:
         seen.add(token)
         normalized = token.replace(",", "").replace(" ", "")
         ok = token in known or normalized in known
+        kind = "id"
+        if "万元" in token or _looks_plain_amount(token):
+            kind = "amount"
+        elif token.startswith("6222-") or token.startswith("UNK-"):
+            kind = "account"
         if not ok and "万元" in token:
             ok = _wan_token_ok(token, known, text, m.start(), m.end())
         elif not ok and _looks_plain_amount(token):
-            value = _parse_amount_token(token)
-            ok = (
-                value is not None
-                and _approx_context(text, m.start(), m.end())
-                and _amount_in_reference(value)
-            )
+            ok = _wan_token_ok(token, known, text, m.start(), m.end())
         if not ok:
             if token.isdigit() and len(token) == 4 and token.startswith("20"):
                 continue
-            issues.append({"token": token, "reason": "未在工具返回值中出现"})
+            issues.append({"token": token, "reason": "未在工具返回值中出现", "severity": "hard", "kind": kind})
     return issues

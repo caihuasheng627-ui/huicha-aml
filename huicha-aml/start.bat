@@ -20,8 +20,9 @@ if not defined PYTHON (
 )
 
 echo 使用解释器: %PYTHON%
+echo 请用普通用户运行，不要「以管理员身份」。WinError 10013 时换 --host 127.0.0.1。
 cd /d "%~dp0backend"
-start "循证慧查-API" cmd /k %PYTHON% -m uvicorn app.main:app --reload --port 8000
+start "循证慧查-API" cmd /k %PYTHON% -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app
 cd /d "%~dp0frontend"
 if not exist "node_modules\" (
   echo 前端依赖未安装，正在 npm install ...

@@ -34,10 +34,34 @@ def test_fact_check_allows_llm_threshold_and_approx_phrasing():
     }
     assert fact_check("大额申报阈值为 5 万元,本案无接近阈值的拆分特征。", facts) == []
     assert fact_check("月度流入约 200 万元量级。", facts) == []
+    assert fact_check("落在 5 万元大额申报阈值下方 99% 区间。", facts) == []
+    assert fact_check("连续贴线拆分，单笔接近 5 万元阈值。", facts) == []
     issues = fact_check("另转出 88.88 万元至陌生账户。", facts)
     assert any("88.88" in i["token"] for i in issues)
     issues20 = fact_check("另转出 20 万元至陌生账户。", facts)
     assert any("20" in i["token"] for i in issues20)
+    issues5 = fact_check("另转出 5 万元至陌生账户。", facts)
+    assert any(i["token"].replace(" ", "") == "5万元" for i in issues5)
+
+
+def test_fact_check_keeps_case_money_but_allows_threshold_talk():
+    facts = {
+        "amounts": [49500.0, 440000.0, 445500.0],
+        "tx_ids": ["TX-X22-IN-01", "TX-X22-OUT-01"],
+        "accounts": ["6222-X22", "UNK-OUT-22"],
+        "dates": ["2026-09-01"],
+        "names": ["演示拆分户22"],
+        "kb_ids": ["KB-TYP-01"],
+        "ref_ids": ["ALT-EXT-22"],
+    }
+    draft = (
+        "近窗流入 9 笔合计 44.55 万元，流出 1 笔合计 44 万元。"
+        "9 笔现金存入金额均为 49,500 元，落在 5 万元大额申报阈值下方 99% 区间。"
+        "随后一次性网银转出 44 万元至 UNK-OUT-22。"
+    )
+    assert fact_check(draft, facts) == []
+    fake8 = fact_check("现金存入8万元后夜间转出。", facts)
+    assert any(i["token"].replace(" ", "") == "8万元" for i in fake8)
 
 
 def test_fact_check_treats_alert_and_evidence_ids_as_whole_tokens():

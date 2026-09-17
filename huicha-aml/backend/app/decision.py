@@ -9,6 +9,7 @@ from .checklist import material_gap_titles
 from .predicates import _as_str_list, pick_true_predicate
 from .risk import CONCLUSION_TO_RECO, RECO_LABEL
 from .schema import JudgeDecision, JudgeRationale, ValidationResult
+from .tools import hard_fact_issues
 from .validator import validate_claim
 
 DISPOSITIONS = {"exclude", "observe", "suggest_report"}
@@ -383,7 +384,7 @@ def apply_guardrails(decision: dict, *, watch_hits: list[dict], fact_issues: lis
                 "effect": "最低提升为继续观察",
             }
         )
-    if fact_issues:
+    if hard_fact_issues(fact_issues):
         checks.append(
             {
                 "code": "fact-check-block",

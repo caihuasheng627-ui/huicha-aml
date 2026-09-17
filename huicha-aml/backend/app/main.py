@@ -19,6 +19,15 @@ from .checklist import (
     generate_checklist,
     merge_note,
 )
+from .notes import (
+    FINALIZED,
+    NOTE_MAX_LEN,
+    check_note_facts,
+    compose_human_note,
+    note_metrics,
+    sanitize_note,
+    snapshot_blockers,
+)
 from .database import Base, SessionLocal, engine, get_db, migrate_sqlite
 from .display import case_no, mask_account
 from .knowledge import corpus_size, get_knowledge, list_knowledge, retrieval_mode, search_knowledge, search_unit_count
@@ -656,8 +665,8 @@ def append_checklist(alert_id: str, body: ChecklistAppendBody, request: Request,
         "text": note,
     }
     report = payload.setdefault("report", {})
-    apply_remarks_to_report(report, note)
     review = payload.setdefault("human_review", {})
+    apply_remarks_to_report(report, note, entries=review.get("notes") or None)
     review["note"] = note
     peers = enrich_counterparties(
         db,
@@ -706,26 +715,54 @@ def save_human_note(alert_id: str, body: NoteBody, request: Request, db: Session
     inv = get_investigation(db, alert_id)
     if not alert or not inv:
         raise HTTPException(400, "请先生成调查草稿")
-    note = (body.note or "").strip()
+    if (inv.human_decision or "") in FINALIZED:
+        raise HTTPException(400, "本案已签发，不能改写草稿备注")
+    note = sanitize_note(body.note or "")
     if not note:
         raise HTTPException(400, "请填写备注")
+    if len(note) > NOTE_MAX_LEN:
+        raise HTTPException(400, f"备注不超过{NOTE_MAX_LEN}字")
     payload = json.loads(inv.payload_json)
-    inv.human_note = note
-    report = payload.setdefault("report", {})
-    apply_remarks_to_report(report, note)
     review = dict(payload.get("human_review") or {})
+    entries = [row for row in (review.get("notes") or []) if isinstance(row, dict)]
+    last = entries[-1] if entries else None
+    blockers = snapshot_blockers(payload)
+    warnings = check_note_facts(note, payload)
+    stamped = format_cn(utcnow())
+    if not last or (last.get("text") or "").strip() != note:
+        entries.append(
+            {
+                "text": note,
+                "at": stamped,
+                "by_id": user.staff_id,
+                "by_name": user.name,
+                "blockers": blockers,
+                "fact_warnings": warnings,
+            }
+        )
+    else:
+        last["at"] = stamped
+        last["by_id"] = user.staff_id
+        last["by_name"] = user.name
+        last["blockers"] = blockers
+        last["fact_warnings"] = warnings
+    review["notes"] = entries
     review["note"] = note
-    review["note_at"] = format_cn(utcnow())
+    review["note_at"] = stamped
     review["note_by_id"] = user.staff_id
     review["note_by_name"] = user.name
+    review["note_blockers"] = blockers
     payload["human_review"] = review
+    inv.human_note = compose_human_note(inv.human_note or "", note)
+    report = payload.setdefault("report", {})
+    apply_remarks_to_report(report, inv.human_note, entries=entries)
     peers = enrich_counterparties(
         db,
         (payload.get("alert") or {}).get("account_id") or alert.account_id,
         payload.get("transactions") or [],
         payload.get("graph") or {},
     )
-    attach_checklist(payload, counterparties=peers, human_note=note)
+    attach_checklist(payload, counterparties=peers, human_note=inv.human_note or "")
     inv.payload_json = json.dumps(payload, ensure_ascii=False)
     write_audit(
         db,
@@ -738,6 +775,9 @@ def save_human_note(alert_id: str, body: NoteBody, request: Request, db: Session
                 "case_id": alert_id,
                 "human_decision": inv.human_decision or "",
                 "can_sign": bool(payload.get("can_sign")),
+                "note": note,
+                "blockers": blockers,
+                "fact_warnings": warnings,
                 "data_note": "synthetic",
             },
             ensure_ascii=False,
@@ -747,9 +787,12 @@ def save_human_note(alert_id: str, body: NoteBody, request: Request, db: Session
     return {
         "ok": True,
         "alert_id": alert_id,
-        "human_note": note,
+        "human_note": inv.human_note or "",
         "human_decision": inv.human_decision or "",
         "can_sign": bool(payload.get("can_sign")),
+        "notes": entries,
+        "note_blockers": blockers,
+        "note_fact_warnings": warnings,
         "final_action": "draft_only",
         "note": "已写入草稿备注，未改变签发状态，系统不会自动报送。",
     }
@@ -868,12 +911,13 @@ def metrics(db: Session = Depends(get_db)):
         by_status[a.status] = by_status.get(a.status, 0) + 1
     signed = sum(1 for i in invs if i.human_decision == "confirm")
     labeled = sum(1 for a in alerts if (a.gold_label or ""))
-    parsed_payloads = []
+    parsed_pairs = []
     for inv in invs:
         try:
-            parsed_payloads.append(json.loads(inv.payload_json or "{}"))
+            parsed_pairs.append((inv, json.loads(inv.payload_json or "{}")))
         except (TypeError, json.JSONDecodeError):
             continue
+    parsed_payloads = [payload for _inv, payload in parsed_pairs]
     validations = [p.get("judge_validation") or {} for p in parsed_payloads]
     validated = [v for v in validations if v.get("score_kind") == "evidence_contract"]
     rejected_claims = [
@@ -886,6 +930,7 @@ def metrics(db: Session = Depends(get_db)):
     tokens = sum(investigation_tokens(p) for p in parsed_payloads)
     validation_audits = db.query(AuditLog).filter(AuditLog.action == "validator").count()
     decision_audits = db.query(AuditLog).filter(AuditLog.action == "decide").count()
+    closed = note_metrics(parsed_pairs)
     return {
         "alerts": len(alerts),
         "labeled": labeled,
@@ -905,6 +950,7 @@ def metrics(db: Session = Depends(get_db)):
             "avg_investigation_ms": round(sum(elapsed) / len(elapsed)) if elapsed else None,
             "audited_validations": validation_audits,
             "human_decisions": decision_audits,
+            **closed,
         },
         "quality_note": "质量指标来自当前合成案件草稿与审计记录，不代表生产准确率",
     }
@@ -982,6 +1028,20 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         for c in (payload.get("challenger") or [])
         if (c.get("validation") or {}).get("score_kind") == "predicate_verified"
     ]
+    note_entries = [row for row in (review.get("notes") or []) if isinstance(row, dict) and (row.get("text") or "").strip()]
+    note_history = []
+    if note_entries:
+        note_history.append("- 备注记录：")
+        for row in note_entries:
+            who = " ".join(part for part in (row.get("at") or "", row.get("by_name") or "") if part)
+            note_history.append(f"  - {who}：{row.get('text')}" if who else f"  - {row.get('text')}")
+            codes = "、".join(
+                str(b.get("code") or "")
+                for b in (row.get("blockers") or [])
+                if isinstance(b, dict) and b.get("code")
+            )
+            if codes:
+                note_history.append(f"    当时拦截：{codes}")
     lines = [
         "# 循证慧查 可疑交易调查草稿（非报送报文）",
         "",
@@ -996,6 +1056,7 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         f"- 提交人：{submitted_name}",
         f"- 签发人：{signer}",
         f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
+        *note_history,
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
         f"- 数据：{payload.get('data_note') or 'synthetic'}",

@@ -41,3 +41,37 @@ export function blockedSignNoteHint(inv) {
   if (!inv || inv.can_sign) return "";
   return `${signBlockerText(inv)}。不能直接签发，把人工判断写入草稿备注。`;
 }
+
+export function workingNoteText(text) {
+  const raw = String(text || "");
+  const idx = raw.indexOf("【补证清单】");
+  return (idx < 0 ? raw : raw.slice(0, idx)).trim();
+}
+
+export function noteHistory(inv) {
+  const rows = (inv?.human_review?.notes || []).filter((row) => String(row?.text || "").trim());
+  return rows;
+}
+
+export function noteTemplateFor(inv) {
+  if (!inv || inv.can_sign) return "";
+  const codes = new Set(collectSignBlockers(inv).map((row) => row.code));
+  if (codes.has("rule_judge_conflict_low_conf")) {
+    return "规则对照与 AI 建议分歧。我的判断是：……。依据：……。";
+  }
+  if (codes.has("fact_check")) {
+    return "事实回查未通过的编号已人工核对：……。维持原判断/改为……。";
+  }
+  if (codes.has("cf_invalid") || codes.has("cf_not_dependent")) {
+    return "证据充分性存疑。已复核必要证据：……。判断：……。";
+  }
+  if (
+    codes.has("judge_contract") ||
+    codes.has("missing_predicate") ||
+    codes.has("predicate_failed") ||
+    codes.has("citation_failed")
+  ) {
+    return "证据契约未过。已补看材料：……。人工判断：……。";
+  }
+  return "不能直接签发。人工判断：……。已核材料：……。";
+}

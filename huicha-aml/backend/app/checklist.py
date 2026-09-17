@@ -586,14 +586,7 @@ def merge_note(existing: str, items: list[dict]) -> str:
     return f"{text}\n\n{block}"
 
 
-def apply_remarks_to_report(report: dict, note: str) -> None:
-    report["remarks"] = note
-    full = str(report.get("full_text") or "")
-    section = f"【补证备注】{note}"
-    if "【补证备注】" in full:
-        head, _sep, _tail = full.partition("【补证备注】")
-        nxt = _tail.find("\n【")
-        rest = _tail[nxt:] if nxt >= 0 else ""
-        report["full_text"] = head.rstrip() + "\n" + section + rest
-    else:
-        report["full_text"] = (full.rstrip() + "\n" + section).strip()
+def apply_remarks_to_report(report: dict, note: str, *, entries: list[dict] | None = None) -> None:
+    from .notes import apply_remarks_to_report as _apply
+
+    _apply(report, note, entries=entries)

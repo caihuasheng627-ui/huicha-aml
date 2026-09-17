@@ -114,7 +114,9 @@ function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSave
   const canConfirm = Boolean(reviewer && submitted && factOk && !finalized);
   const canModify = Boolean(reviewer && submitted && !finalized);
   const canReject = Boolean(user && hasDraft && !finalized);
-  const canWriteNote = Boolean(user && hasDraft && note.trim());
+  const canWriteNote = Boolean(user && hasDraft && note.trim() && !finalized);
+  const history = noteHistory(inv);
+  const template = !factOk && hasDraft && !finalized ? noteTemplateFor(inv) : "";
   let status = "先选左侧告警";
   if (current) {
     if (!hasDraft) status = "尚无草稿";
@@ -136,18 +138,48 @@ function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSave
   return (
     <div className={`sign-dock${!factOk && hasDraft ? " is-blocked" : ""}`} data-contest="sign">
       {!factOk && hasDraft ? <p className="sign-dock-block">{blockedSignNoteHint(inv)}</p> : null}
+      {history.length ? (
+        <ol className="sign-note-log">
+          {history.map((row, idx) => (
+            <li key={`${row.at || "note"}-${idx}`}>
+              <span className="sign-note-log-meta">
+                {[row.at, row.by_name].filter(Boolean).join(" ")}
+              </span>
+              <span className="sign-note-log-text">{row.text}</span>
+              {row.fact_warnings?.length ? (
+                <span className="sign-note-log-warn">
+                  系统提示：{row.fact_warnings.map((w) => w.token).filter(Boolean).join("、")} 未在工具事实中出现
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
       <Input.TextArea
         id="investigator-note"
         rows={4}
         placeholder={
-          !factOk && hasDraft
+          finalized
+            ? "本案已签发，不能改写草稿备注"
+            : !factOk && hasDraft
             ? "不能直接签发。写明人工判断后点「写入备注」，或带说明提交复核。"
             : "处理意见（提交说明 / 复核意见 / 退回原因）"
         }
         value={note}
         onChange={(e) => onNote(e.target.value)}
-        disabled={!current}
+        disabled={!current || finalized}
       />
+      {template ? (
+        <button
+          type="button"
+          className="sign-dock-link sign-note-template"
+          onClick={() => {
+            if (!note.trim()) onNote(template);
+          }}
+        >
+          填入备注模板
+        </button>
+      ) : null}
       <div className="sign-dock-row">
         <div className="sign-dock-actions">
           {(!user || investigator) && (
@@ -235,7 +267,7 @@ const AUDIT_ACTION = {
   note: "写入备注",
 };
 
-import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, reliabilityStance, signBlockerText } from "./signBlockers.js";
+import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
@@ -420,6 +452,7 @@ function MetricBoard({ metrics, feedback }) {
     ["证据契约", quality.evidence_contract_pass_rate == null ? "—" : `${Math.round(quality.evidence_contract_pass_rate * 100)}%`, `${quality.evidence_contract_checked || 0} 次校验`],
     ["拦截无效 Claim", quality.rejected_claims ?? "—", "伪造/跨案/谓词失败"],
     ["事实回查阻断", quality.fact_check_blocked ?? "—", "阻止直接签发"],
+    ["拦截后写备注", quality.blocked_note_rate == null ? "—" : `${Math.round(quality.blocked_note_rate * 100)}%`, `${quality.blocked_with_note || 0}/${quality.blocked_unsigned || 0} 件未签发草稿`],
     ["平均调查耗时", quality.avg_investigation_ms == null ? "—" : `${quality.avg_investigation_ms} ms`, "从调查开始到草稿"],
     ["消耗 Token", metrics?.tokens == null ? "—" : formatCount(metrics.tokens), "Judge + Reporter 合计"],
     ["人工采纳率", decided ? `${Math.round((feedback.decisions.confirm / decided) * 100)}%` : "—", decided ? `${decided} 次已处置` : "尚无人工样本"],
@@ -535,7 +568,7 @@ export default function App() {
     const d = await fetchDetail(id);
     if (seq !== openSeq.current) return;
     setDetail(d);
-    setNote(d.human_note || "");
+    setNote(workingNoteText(d.human_note || ""));
     if (d.investigation) {
       setChecklistLoading(true);
       fetchChecklist(id)
@@ -561,7 +594,7 @@ export default function App() {
     try {
       const data = await appendChecklist(current, itemIds);
       setChecklist(data);
-      setNote(data.human_note || "");
+      setNote(workingNoteText(data.human_note || ""));
       message.success(`已将 ${data.appended?.length || itemIds.length} 条写入草稿备注`);
       requestAnimationFrame(() => {
         document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -668,6 +701,10 @@ export default function App() {
       setLoginOpen(true);
       return;
     }
+    if (detail?.human_decision === "confirm" || detail?.human_decision === "modify") {
+      message.warning("本案已签发，不能改写草稿备注");
+      return;
+    }
     if (!note.trim()) {
       message.warning("请先填写处理意见");
       document.getElementById("investigator-note")?.focus();
@@ -675,9 +712,15 @@ export default function App() {
     }
     setSavingNote(true);
     try {
-      await saveNote(current, note);
+      const saved = await saveNote(current, note);
       await open(current);
-      message.success("已写入草稿备注，未改变签发状态");
+      if (saved.note_fact_warnings?.length) {
+        message.warning(
+          `已写入备注。系统提示：${saved.note_fact_warnings.map((w) => w.token).filter(Boolean).join("、")} 未在工具事实中出现`
+        );
+      } else {
+        message.success("已写入草稿备注，未改变签发状态");
+      }
     } catch (e) {
       if (String(e.message || "").includes("登录")) {
         clearSession();
@@ -1355,7 +1398,7 @@ export default function App() {
               {inv && <CounterfactualBox cf={inv.counterfactual} />}
               {inv && <RegulationBox cites={inv.structured_report?.regulation_basis} onSelect={selectEvidence} />}
               {inv && <RejectedClaims rows={inv.rejected_claims} onSelect={selectEvidence} />}
-              {inv && !inv.can_sign && (
+              {inv && !inv.can_sign && detail?.human_decision !== "confirm" && detail?.human_decision !== "modify" && (
                 <Alert
                   type="error"
                   showIcon

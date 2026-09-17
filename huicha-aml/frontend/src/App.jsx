@@ -7,10 +7,8 @@ import {
   Form,
   Input,
   Modal,
-  Space,
   Switch,
   Table,
-  Tag,
   Timeline,
   Tooltip,
   message,
@@ -53,6 +51,8 @@ import {
   persistLabMode,
   readLabMode,
 } from "./workstation.js";
+import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
+import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const EMPTY_KEYS = [
   ["比赛演示（案例 L 主线）", "0"],
@@ -70,22 +70,35 @@ function WelcomeBrief({ labMode }) {
   if (!labMode) {
     return (
       <div className="welcome">
-        <div className="welcome-logo">
-          <BrandLogo size={68} />
+        <div className="welcome-letterhead">
+          <div className="welcome-logo">
+            <BrandLogo size={52} />
+          </div>
+          <div>
+            <div className="welcome-title">循证慧查</div>
+            <p className="welcome-unit">反洗钱调查工作台</p>
+          </div>
         </div>
-        <div className="welcome-title">循证慧查</div>
-        <div className="welcome-subtitle">反洗钱调查工作台 · 从左侧待办领取案件</div>
-        <p className="welcome-note">生成草稿后由调查员提交复核，合规岗签发。系统不自动报送。</p>
+        <p className="welcome-subtitle">
+          从左侧待办领取案件。生成草稿后由调查员提交复核，合规岗签发。系统不自动报送。
+        </p>
       </div>
     );
   }
   return (
     <div className="welcome">
-      <div className="welcome-logo">
-        <BrandLogo size={68} />
+      <div className="welcome-letterhead">
+        <div className="welcome-logo">
+          <BrandLogo size={52} />
+        </div>
+        <div>
+          <div className="welcome-title">循证慧查</div>
+          <p className="welcome-unit">合规调查工作台 · 实验室</p>
+        </div>
       </div>
-      <div className="welcome-title">循证慧查</div>
-      <div className="welcome-subtitle">实验室 · 快捷键 0 进入比赛演示</div>
+      <p className="welcome-subtitle">
+        从左侧告警池选定案件。系统只出调查草稿，签发由人工完成。快捷键 0 进入案例 L 演示主线。
+      </p>
       <table className="welcome-keys">
         <tbody>
           {EMPTY_KEYS.map(([action, key]) => (
@@ -241,14 +254,18 @@ const HUMAN = {
   reject: "已退回",
 };
 
+function Chip({ tone = "idle", children }) {
+  return <span className={`st-chip ${tone}`}>{children}</span>;
+}
+
 const STATUS = {
-  pending: { text: "待调查", color: "default" },
-  investigating: { text: "调查中", color: "processing" },
-  pending_review: { text: "待复核", color: "warning" },
-  closed: { text: "已排除关闭", color: "success" },
-  monitoring: { text: "持续监测", color: "warning" },
-  ready_to_file: { text: "待报送", color: "error" },
-  modified: { text: "复核已改", color: "warning" },
+  pending: { text: "待调查", tone: "idle" },
+  investigating: { text: "调查中", tone: "work" },
+  pending_review: { text: "待复核", tone: "watch" },
+  closed: { text: "已排除关闭", tone: "ok" },
+  monitoring: { text: "持续监测", tone: "watch" },
+  ready_to_file: { text: "待报送", tone: "risk" },
+  modified: { text: "复核已改", tone: "watch" },
 };
 
 const CONC = {
@@ -266,9 +283,6 @@ const AUDIT_ACTION = {
   checklist: "补证清单",
   note: "写入备注",
 };
-
-import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
-import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
   { id: "ALT-A-20260910", key: "1", label: "案例 A 排除" },
@@ -406,7 +420,7 @@ function FlowBars({ baseline }) {
 
 function conclusionTone(label) {
   if (label === "排除") return "ok";
-  if (label === "继续观察") return "warn";
+  if (label === "观察" || label === "继续观察") return "watch";
   return "risk";
 }
 
@@ -460,23 +474,22 @@ function MetricBoard({ metrics, feedback }) {
   return (
     <section className="metric-board" aria-label="系统成效指标">
       <div className="metric-board-hd">
-        <div>
-          <b>系统成效</b>
-          <span>把防错机制变成可核验指标</span>
-        </div>
-        <em>synthetic · 非生产准确率</em>
+        <b>系统成效</b>
+        <em>合成样本 · 非生产准确率</em>
       </div>
-      <div className="metric-grid">
+      <dl className="metric-ledger">
         {cards.map(([label, value, note]) => (
-          <div className="metric-card" key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-            <small>{note}</small>
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>
+              <strong>{value}</strong>
+              <small>{note}</small>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
       <div className="metric-foot">
-        已记录 {metrics?.drafts ?? "—"} 份调查草稿 · 消耗 Token {formatCount(metrics?.tokens)} · 审计校验 {quality.audited_validations ?? "—"} 次 · 人工处置 {quality.human_decisions ?? "—"} 次
+        草稿 {metrics?.drafts ?? "—"}　Token {formatCount(metrics?.tokens)}　校验 {quality.audited_validations ?? "—"}　处置 {quality.human_decisions ?? "—"}
       </div>
     </section>
   );
@@ -919,12 +932,13 @@ export default function App() {
           <div className="brand-text">
             <div className="brand-title-row">
               <strong>循证慧查</strong>
-              {labMode ? <span className="brand-tag">实验室</span> : <span className="brand-tag">调查工作台</span>}
+              <span className="brand-unit">{labMode ? "实验室" : "合规调查"}</span>
             </div>
-            <span>{labMode ? "实验室 · 快捷键 0 进入比赛演示" : "反洗钱调查工作台 · 调查员提交 / 复核岗签发"}</span>
+            <span>{labMode ? "实验室 · 快捷键 0 进入比赛演示" : "告警池之后的调查与底稿 · 调查员提交 / 复核岗签发"}</span>
           </div>
         </div>
         <div className="staff">
+          <span className="env-chip">演示环境 合成数据</span>
           <span className="top-clock">{clock}</span>
           {labMode && (
             <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
@@ -1059,6 +1073,7 @@ export default function App() {
       </div>
 
       <Modal
+        className="desk-modal"
         title="登录工作台"
         open={loginOpen}
         onCancel={() => setLoginOpen(false)}
@@ -1160,7 +1175,7 @@ export default function App() {
         <aside className="col">
           <div className="col-title">
             <h3>{labMode ? "待办告警" : "我的待办"}</h3>
-            <Tag>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : todoCount} 条</Tag>
+            <Chip>{labMode ? (queueKind === "demo" ? demoCount : normalCount) : todoCount} 条</Chip>
           </div>
           <div
             className={`queue-filter${(labMode ? queueKind === "normal" : queueKind === "done") ? " is-right" : ""}`}
@@ -1228,22 +1243,23 @@ export default function App() {
               >
                 <div className="t">
                   <code className="case-no">{a.case_no || a.id}</code>
-                  {labMode && a.demo_tag ? (
-                    <Tag color="red" style={{ marginRight: 6 }}>
-                      {a.demo_tag}
-                    </Tag>
-                  ) : null}
+                  {labMode && a.demo_tag ? <span className="demo-stamp">{a.demo_tag}</span> : null}
                   {a.title}
                 </div>
                 <div className="m">
-                  <span>
-                    {displayName(a.customer_name)} · {yuan(a.amount)}
+                  <span className="q-who">
+                    {displayName(a.customer_name)}
                     {a.account_masked ? ` · ${a.account_masked}` : ""}
                   </span>
-                  <span className="queue-tags">
-                    {a.conclusion ? <Tag>{CONC[a.conclusion] || a.conclusion}</Tag> : null}
-                    <Tag color={st.color}>{st.text}</Tag>
-                  </span>
+                  <span className="q-amt">{yuan(a.amount)}</span>
+                </div>
+                <div className="q-flags">
+                  {a.conclusion ? (
+                    <Chip tone={conclusionTone(CONC[a.conclusion] || a.conclusion)}>
+                      {CONC[a.conclusion] || a.conclusion}
+                    </Chip>
+                  ) : null}
+                  <Chip tone={st.tone}>{st.text}</Chip>
                 </div>
               </div>
             );
@@ -1252,10 +1268,31 @@ export default function App() {
 
         <main className={`col is-stage${!current ? " is-welcome" : ""}`}>
           <div className="stage-body">
-          {current && (
+          {current && detail?.alert && (
+            <div className="dossier-hd">
+              <div className="dossier-hd-main">
+                <div className="dossier-title">
+                  {detail.alert.demo_tag ? <span className="demo-stamp">{detail.alert.demo_tag}</span> : null}
+                  <h3>{detail.alert.title}</h3>
+                </div>
+                <div className="dossier-meta">
+                  <span>{detail.alert.alert_type}</span>
+                  {inv?.customer?.name ? <span>{inv.customer.name}</span> : null}
+                  <span>{yuan(detail.alert.amount)}</span>
+                  {detail.alert.created_at ? <span>{String(detail.alert.created_at).slice(0, 10)}</span> : null}
+                </div>
+              </div>
+              <div className="dossier-hd-side">
+                <code>{detail.alert.case_no || detail.alert.id}</code>
+                <Chip tone={(STATUS[detail.alert.status] || STATUS.pending).tone}>
+                  {(STATUS[detail.alert.status] || STATUS.pending).text}
+                </Chip>
+              </div>
+            </div>
+          )}
+          {current && !detail?.alert && (
             <div className="col-title">
               <h3>调查作业</h3>
-              {detail?.alert && <span className="hint">{detail.alert.case_no || detail.alert.id}</span>}
             </div>
           )}
           {!current && <WelcomeBrief labMode={labMode} />}
@@ -1307,68 +1344,85 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
-              <Space wrap style={{ marginBottom: 10 }}>
+              <div className="dossier-actions">
                 <Button type="primary" disabled={loading || llmOff} onClick={() => onInvestigate()}>
                   {loading ? stageHint || "调查中…" : inv ? "重新调查" : "开始调查"}
                 </Button>
-                {detail?.human_decision ? (
-                  <>
-                    <Tag color="gold">{HUMAN[detail.human_decision]}</Tag>
-                    {(detail.signed_by_name || detail.signed_by_id) && (
-                      <Tag color="blue">
-                        处理人 {detail.signed_by_name}
-                        {detail.signed_by_id ? ` · ${detail.signed_by_id}` : ""}
-                      </Tag>
-                    )}
-                  </>
-                ) : (
-                  <Tag>待提交</Tag>
-                )}
-                {!user && <Tag color="default">未登录</Tag>}
-                {inv && caseChallengerEnabled && labMode && (
-                  <>
-                    <Tag color="green">慧查agent 已参与本次调查</Tag>
-                    <Tag>自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Tag>
-                  </>
-                )}
-                {inv && caseChallengerEnabled === false && labMode && (
-                  <Tag color="orange">本案为消融结果</Tag>
-                )}
-                {inv?.inject_hallucination && labMode && <Tag color="red">已注入幻觉</Tag>}
-                {inv?.llm?.reporter || inv?.llm?.judge ? (
-                  labMode ? <Tag color="blue">{inv.llm.model || "百炼已调用"}</Tag> : null
-                ) : null}
-                {inv?.privacy && (
-                  <Tag color="geekblue">
-                    进模脱敏 姓名 {inv.privacy.masked_names ?? 0} · 账号 {inv.privacy.masked_accounts ?? 0}
-                    {inv.privacy.egress_calls ? ` · 出站 ${inv.privacy.egress_calls} 次已检漏` : ""}
-                  </Tag>
-                )}
-              </Space>
-              <div className="client-box">
-                {detail?.alert?.upstream}
-                {inv?.customer?.summary ? `。${inv.customer.summary}` : ""}
-                {inv?.comparison
-                  ? ` 工具 ${inv.comparison.tools_called} 次 · 要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total} · 证据可回溯。`
-                  : ""}
+                <div className="dossier-flags">
+                  {detail?.human_decision ? (
+                    <Chip tone="brass">
+                      {HUMAN[detail.human_decision]}
+                      {detail.signed_by_name ? ` · ${detail.signed_by_name}` : ""}
+                      {detail.signed_by_id ? ` · ${detail.signed_by_id}` : ""}
+                    </Chip>
+                  ) : (
+                    <Chip>待提交</Chip>
+                  )}
+                  {!user && <Chip tone="watch">未登录</Chip>}
+                  {inv && caseChallengerEnabled && labMode && (
+                    <Chip tone="ok">自评把握度 {Number(inv.judge?.confidence ?? 0).toFixed(2)} · 未校准</Chip>
+                  )}
+                  {inv && caseChallengerEnabled === false && labMode && <Chip tone="watch">消融结果</Chip>}
+                  {inv?.inject_hallucination && labMode && <Chip tone="risk">已注入幻觉</Chip>}
+                  {labMode && experimentMode && (
+                    <Chip tone="brass">实验模式 · 下次重跑{currentChallengerEnabled ? "启用" : "关闭"}慧查agent</Chip>
+                  )}
+                </div>
               </div>
-              {labMode && (
-              <div className="ch-state-strip">
-                <span>
-                  当前运行策略：
-                  {experimentMode
-                    ? `实验模式 · 下次重跑 ${currentChallengerEnabled ? "启用" : "关闭"} 慧查agent`
-                    : "正常模式 · 下次重跑默认启用慧查agent"}
-                </span>
-                {inv && (
-                  <span>
-                    本案历史结果：
-                    {caseChallengerEnabled
-                      ? "生成时已启用慧查agent"
-                      : "生成时未启用（消融结果，不是当前系统关闭）"}
-                  </span>
-                )}
-              </div>
+              {inv && (
+                <dl className="dossier-sum">
+                  <div>
+                    <dt>上游来源</dt>
+                    <dd>{detail?.alert?.upstream || "—"}</dd>
+                  </div>
+                  {inv.customer?.summary ? (
+                    <div>
+                      <dt>客户摘要</dt>
+                      <dd>{inv.customer.summary}</dd>
+                    </div>
+                  ) : null}
+                  {inv.case_v2 ? (
+                    <div>
+                      <dt>案件建议</dt>
+                      <dd>
+                        {detail?.alert?.case_no || inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level}
+                        ，须复核后报送，系统不自动报送
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>本次生成</dt>
+                    <dd>
+                      {caseChallengerEnabled ? "慧查agent 已参与" : "未启用慧查agent"}
+                      {labMode && inv.llm?.model ? `，模型 ${inv.llm.model}` : ""}
+                      {inv.comparison
+                        ? `，调用工具 ${inv.comparison.tools_called} 次，要素 ${inv.comparison.elements_filled}/${inv.comparison.elements_total}，证据可回溯`
+                        : ""}
+                    </dd>
+                  </div>
+                  {labMode ? (
+                    <div>
+                      <dt>运行策略</dt>
+                      <dd>
+                        {experimentMode
+                          ? `实验模式，下次重跑${currentChallengerEnabled ? "启用" : "关闭"}慧查agent`
+                          : "正常模式，下次重跑默认启用慧查agent"}
+                        {caseChallengerEnabled
+                          ? "；本案生成时已启用慧查agent"
+                          : "；本案生成时未启用（消融结果，不是当前系统关闭）"}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {inv.privacy ? (
+                    <div>
+                      <dt>进模脱敏</dt>
+                      <dd>
+                        姓名 {inv.privacy.masked_names ?? 0} 个，账号 {inv.privacy.masked_accounts ?? 0} 个
+                        {inv.privacy.egress_calls ? `，出站 ${inv.privacy.egress_calls} 次均已检漏` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
               )}
               {inv && caseChallengerEnabled === false && labMode && (
                 <Alert
@@ -1383,11 +1437,6 @@ export default function App() {
                 <div className="viz-row">
                   <DecisionComparison judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} label={inv.conclusion_label} ablation={caseChallengerEnabled === false} contestHot={contestMode && contestStep === "guardrail"} reliability={inv.agent_reliability} />
                   <FlowBars baseline={inv.baseline} />
-                </div>
-              )}
-              {inv?.case_v2 && (
-                <div className="client-box">
-                  案件 {detail?.alert?.case_no || inv.case_v2.case_id} · 建议 {inv.case_v2.recommendation_label} · 风险 {inv.case_v2.risk_level} · 须复核后报送，系统不自动报送
                 </div>
               )}
               {inv && <JudgePanel judge={inv.judge} baseline={inv.rule_baseline} guardrails={inv.policy_guardrails} validation={inv.judge_validation} onSelect={selectEvidence} contestHot={contestMode && contestStep === "evidence"} />}
@@ -1571,8 +1620,8 @@ export default function App() {
                     }}
                   >
                     <code>{h.id}</code>
-                    <Tag style={{ marginLeft: 6 }}>{h.kind_label}</Tag>
-                    {h.article ? <Tag style={{ marginLeft: 4 }}>{h.article}</Tag> : null}
+                    <Chip>{h.kind_label}</Chip>
+                    {h.article ? <Chip>{h.article}</Chip> : null}
                     <div style={{ fontWeight: 650, margin: "4px 0 2px" }}>{h.title}</div>
                     <div className="hint" style={{ margin: "0 0 4px" }}>
                       {h.source}
@@ -1647,8 +1696,8 @@ export default function App() {
         {kbArticle && (
           <article className="kb-article">
             <div className="kb-article-meta">
-              {kbArticle.kind_label ? <Tag>{kbArticle.kind_label}</Tag> : null}
-              {kbArticle.data_note === "official-statute" ? <Tag color="blue">官方条款</Tag> : <Tag>作业转述</Tag>}
+              {kbArticle.kind_label ? <Chip>{kbArticle.kind_label}</Chip> : null}
+              {kbArticle.data_note === "official-statute" ? <Chip tone="navy">官方条款</Chip> : <Chip>作业转述</Chip>}
               <span>{kbArticle.source || "演示知识库"}</span>
             </div>
             <h4>{kbArticle.title || kbArticle.id}</h4>

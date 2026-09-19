@@ -9,6 +9,11 @@
 
 能力指标未在独立集上评估时输出 Not evaluated yet。
 机制验证请运行：cd backend && python -m app.experiments
+
+过程对照（agent 管线 vs 直连 `rule_baseline`/`enrich_judge`，不是 F1）：
+  pytest：backend/tests/test_path_compare.py
+  脚本：python experiments/compare_agent_direct.py
+  真实调用：加 --real 或 HUICHA_COMPARE_REAL=1；仍为合成告警，禁止写成生产准确率。
 """
 
 from __future__ import annotations

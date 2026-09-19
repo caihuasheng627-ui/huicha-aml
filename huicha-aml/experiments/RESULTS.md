@@ -19,6 +19,13 @@
 
 ### 4. 幻觉演示账号拦截：通过
 
+### 5. Agent 管线 vs 直连 API（过程对照，不是 F1）
+
+- 测试：`backend/tests/test_path_compare.py`（确定性 stub，CI 可跑）
+- 可选脚本：`python experiments/compare_agent_direct.py`；真实模型需 `--real` 或 `HUICHA_COMPARE_REAL=1`
+- **是**：同一合成告警上，完整 `POST /investigate`（Planner 工具 / Collector 补证 / Skeptic·反事实 / `can_sign`）对照产品入口 `rule_baseline` + 单次 `enrich_judge`（无 agent toolkit / planner / challenger）
+- **不是**：生产准确率、Macro-F1，或「关掉 Challenger 的管线消融」（那仍会跑 Collector 工具，见 `use_challenger=False`）
+
 ---
 
 ## B. 独立集 v2 协议（历史结果，已被 v3 集替代，不得与 v3 混比）

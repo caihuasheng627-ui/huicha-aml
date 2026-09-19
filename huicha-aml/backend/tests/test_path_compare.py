@@ -22,7 +22,6 @@ import json
 
 import pytest
 
-from app.database import SessionLocal
 from app.path_compare import CAVEAT, compare_paths
 
 LAYERING = "ALT-L-20260910"
@@ -30,6 +29,9 @@ CLEAN = "ALT-A-20260910"
 
 
 def _compare(client, alert_id: str) -> dict:
+    # Import after the client fixture has swapped SessionLocal onto the StaticPool test DB.
+    from app.database import SessionLocal
+
     agent = client.post(f"/api/alerts/{alert_id}/investigate", params={"use_challenger": True})
     assert agent.status_code == 200, agent.text
     db = SessionLocal()
@@ -72,7 +74,9 @@ def test_layering_agent_vs_direct_records_process_and_rule_contrast(client):
     assert direct["signing_applicable"] is False
     assert direct["reliability_stance"] is None
     assert not direct["error"]
-    assert "layering" in direct["finding_codes"]
+    assert "layering" in agent["finding_codes"]
+    assert "get_related_accounts" in agent["tool_names"]
+    assert agent["tx_count"] > direct["tx_count"]
 
     assert contrast["tool_traces_differ"] is True
     assert contrast["challenger_only_on_agent"] is True
@@ -80,8 +84,11 @@ def test_layering_agent_vs_direct_records_process_and_rule_contrast(client):
     assert contrast["signing_gate_only_on_agent"] is True
     assert contrast["can_sign_defined_only_on_agent"] is True
     assert contrast["agent_vs_rule_disagree"] is True
+    assert contrast["agent_vs_direct_judge_disagree"] is True
+    assert direct["conclusion"] == "exclude"
     assert contrast["agent_has_get_alert"] is True
     assert contrast["direct_has_no_planner_tools"] is True
+    assert contrast["agent_collected_more_txs"] is True
     assert "get_alert" in contrast["agent_extra_tools"]
 
 

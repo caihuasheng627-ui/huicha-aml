@@ -155,6 +155,7 @@ def summarize_agent(payload: dict) -> dict:
     baseline = payload.get("rule_baseline") or {}
     llm = payload.get("llm") or {}
     usage = llm.get("usage") or {}
+    findings = payload.get("findings") or []
     return {
         "entrypoint": "POST /api/alerts/{id}/investigate",
         "alert_id": (payload.get("alert") or {}).get("id"),
@@ -175,6 +176,7 @@ def summarize_agent(payload: dict) -> dict:
         "counterfactual_performed": bool(cf.get("performed")),
         "tokens": usage_tokens(usage) if usage else int((payload.get("comparison") or {}).get("tokens") or 0),
         "tx_count": len(payload.get("transactions") or []),
+        "finding_codes": [f.get("code") for f in findings if f.get("code")],
         "prompt_versions": payload.get("prompt_versions") or {},
     }
 
@@ -203,6 +205,7 @@ def compare_paths(db: Session, alert_id: str, *, agent_payload: dict | None = No
         and direct.get("conclusion") is not None,
         "agent_has_get_alert": "get_alert" in agent_tools,
         "direct_has_no_planner_tools": direct["tools_called"] == 0 and not direct["stages"],
+        "agent_collected_more_txs": int(agent.get("tx_count") or 0) > int(direct.get("tx_count") or 0),
     }
     return {
         "alert_id": alert_id,

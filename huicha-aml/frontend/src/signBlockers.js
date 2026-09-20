@@ -48,6 +48,16 @@ export function workingNoteText(text) {
   return (idx < 0 ? raw : raw.slice(0, idx)).trim();
 }
 
+export function checklistNoteText(text) {
+  const raw = String(text || "");
+  const idx = raw.indexOf("【补证清单】");
+  return idx < 0 ? "" : raw.slice(idx).trim();
+}
+
+export function scrollToDraft() {
+  document.getElementById("report-draft")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 export function noteHistory(inv) {
   const rows = (inv?.human_review?.notes || []).filter((row) => String(row?.text || "").trim());
   return rows;

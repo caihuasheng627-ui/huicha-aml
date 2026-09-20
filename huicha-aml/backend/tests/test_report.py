@@ -68,8 +68,8 @@ def test_export_reflects_human_sign(client, auth_headers):
     text = client.get("/api/alerts/ALT-A-20260910/export", headers=auth_headers).text
     assert "已记录签发" in text
     assert "同意排除" in text
-    assert "李审（002201）" in text
-    assert "陈析" in text
+    assert "复核岗（002201）" in text
+    assert "调查员" in text
     assert "否（本文件仅为草稿）" not in text
     assert "CLOSE" in text or "排除" in text
 

@@ -19,11 +19,11 @@ def test_human_decision_audited(client, auth_headers):
     d = client.get("/api/cases/ALT-A-20260910").json()
     assert d["human_decision"] == "confirm"
     assert d["signed_by_id"] == "002201"
-    assert d["signed_by_name"] == "李审"
-    assert d["submitted_by_name"] == "陈析"
+    assert d["signed_by_name"] == "复核岗"
+    assert d["submitted_by_name"] == "调查员"
     row = [a for a in d["audit"] if a["action"] == "decide"][-1]
     detail = json.loads(row["detail"])
     assert detail["human_decision"] == "confirm"
     assert detail["challenger_enabled"] is True
     assert "人签" in detail["summary"]
-    assert any("李审" in a["actor"] for a in d["audit"] if a["action"] == "decide")
+    assert any("复核岗" in a["actor"] for a in d["audit"] if a["action"] == "decide")

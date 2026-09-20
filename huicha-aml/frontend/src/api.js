@@ -322,6 +322,7 @@ export async function downloadExport(id) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  return name;
 }
 
 export async function fetchKnowledge(q = "") {

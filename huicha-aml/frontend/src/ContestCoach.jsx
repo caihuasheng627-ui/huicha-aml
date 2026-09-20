@@ -17,7 +17,7 @@ const STEPS = [
   {
     id: "sign",
     title: "3 人工负责",
-    talk: "用户条「切换陈析 / 李审」换岗。当前岗只点高亮按钮：调查员「提交复核」，复核岗「同意签发」。系统不会自动报送。",
+    talk: "用户条「切换调查员 / 复核岗」换岗。当前岗只点高亮按钮：调查员「提交复核」，复核岗「同意签发」。系统不会自动报送。",
   },
 ];
 
@@ -65,7 +65,7 @@ export default function ContestCoach({
             已签发 · {signed.signed_by_name || user.name} · 不是已报送
           </p>
         ) : user && signed?.human_decision === "submit" ? (
-          <p className="contest-ok">已提交复核，请登录合规岗签发</p>
+          <p className="contest-ok">已提交复核，请登录复核岗签发</p>
         ) : null}
       </div>
       <div className="contest-coach-actions">

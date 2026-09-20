@@ -1,4 +1,4 @@
-import { blockedSignNoteHint, collectSignBlockers, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
+import { blockedSignNoteHint, checklistNoteText, collectSignBlockers, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
 
 const abstainInv = {
   use_challenger: true,
@@ -33,6 +33,12 @@ if (!noteTemplateFor(abstainInv).includes("证据充分性") ) {
 }
 if (workingNoteText("判断维持观察\n\n【补证清单】用途证明") !== "判断维持观察") {
   throw new Error("working note should drop checklist block");
+}
+if (checklistNoteText("判断维持观察\n\n【补证清单】用途证明") !== "【补证清单】用途证明") {
+  throw new Error("checklist note should keep the appended block");
+}
+if (checklistNoteText("只有处理意见") !== "") {
+  throw new Error("no checklist mark should yield empty checklist note");
 }
 
 console.log("sign blockers ok");

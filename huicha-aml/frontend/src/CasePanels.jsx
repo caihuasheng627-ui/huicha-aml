@@ -452,14 +452,14 @@ export function EvidenceSufficiencyPanel({ data, onSelect }) {
 const SLIP_PRI = { high: "高", medium: "中", low: "低" };
 const SLIP_ST = { missing: "待补", optional: "可选", satisfied: "已齐" };
 
-export function SupplementChecklist({ data, loading, writing, onWrite }) {
+export function SupplementChecklist({ data, loading, writing, onWrite, onJumpDraft }) {
   const items = (data?.items || []).filter((it) => !/^AI-GAP-/.test(it.id || "") || materialGaps([it.title]).length);
   const actionable = items.filter((it) => it.status !== "satisfied");
   const [picked, setPicked] = useState(() => new Set());
 
   const slipKey = items.map((it) => `${it.id}:${it.status}:${it.appended}`).join("|");
   useEffect(() => {
-    setPicked(new Set(items.filter((it) => it.status === "missing").map((it) => it.id)));
+    setPicked(new Set(items.filter((it) => it.status === "missing" && !it.appended).map((it) => it.id)));
   }, [slipKey]);
 
   if (!items.length && !loading) return null;
@@ -473,7 +473,7 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
     });
   }
 
-  const selected = actionable.filter((it) => picked.has(it.id));
+  const selected = actionable.filter((it) => picked.has(it.id) && !it.appended);
 
   return (
     <div className="slip">
@@ -489,7 +489,7 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
       {loading && !items.length ? <div className="hint">正在对照案件要素…</div> : null}
       <ul className="slip-list">
         {items.map((it) => {
-          const locked = it.status === "satisfied";
+          const locked = it.status === "satisfied" || it.appended;
           const on = picked.has(it.id);
           return (
             <li key={it.id} className={`slip-row is-${it.status} is-${it.priority}${on ? " is-on" : ""}`}>
@@ -528,9 +528,14 @@ export function SupplementChecklist({ data, loading, writing, onWrite }) {
         >
           {writing ? "写入中…" : `写入草稿备注${selected.length ? `（${selected.length}）` : ""}`}
         </button>
-        <span>勾选后写入调查员意见，便于签发或「修改后采纳」时一并带上。</span>
+        <span>勾选后写入中栏「可疑交易报告草稿」末尾，底部签发栏只读展示，不自动报送。</span>
         {String(data?.human_note || "").includes("【补证清单】") ? (
-          <em className="slip-echo">已落入下方草稿备注，不自动报送。</em>
+          <em className="slip-echo">
+            已写入调查草稿。
+            <button type="button" className="sign-dock-link" onClick={() => onJumpDraft?.()}>
+              去看草稿
+            </button>
+          </em>
         ) : null}
       </div>
     </div>

@@ -571,19 +571,37 @@ def format_item_line(item: dict) -> str:
     )
 
 
+def _line_key(line: str) -> str:
+    text = (line or "").strip()
+    if text.startswith("- ["):
+        head = text[3:]
+        end = head.find("] ")
+        if end >= 0:
+            title = head[end + 2 :].split("：", 1)[0].split(":", 1)[0].strip()
+            if title:
+                return title
+    return text
+
+
 def merge_note(existing: str, items: list[dict]) -> str:
-    block = "\n".join(
-        [
-            f"{NOTE_MARK}签发前待补材料（规则提示，非监管结论，不自动报送）",
-            *[format_item_line(it) for it in items],
-        ]
-    )
-    text = (existing or "").rstrip()
-    if not text:
-        return block
-    if NOTE_MARK in text:
-        return f"{text}\n{chr(10).join(format_item_line(it) for it in items)}"
-    return f"{text}\n\n{block}"
+    raw = existing or ""
+    idx = raw.find(NOTE_MARK)
+    free = raw[:idx].rstrip() if idx >= 0 else raw.strip()
+    old_block = raw[idx:].strip() if idx >= 0 else ""
+    by_key: dict[str, str] = {}
+    for line in old_block.splitlines():
+        if not line.startswith("- "):
+            continue
+        by_key[_line_key(line)] = line
+    for it in items:
+        line = format_item_line(it)
+        by_key[str(it.get("title") or "").strip() or _line_key(line)] = line
+    header = f"{NOTE_MARK}签发前待补材料（规则提示，非监管结论，不自动报送）"
+    lines = [header, *by_key.values()] if by_key else [header]
+    block = "\n".join(lines)
+    if free:
+        return f"{free}\n\n{block}"
+    return block
 
 
 def apply_remarks_to_report(report: dict, note: str, *, entries: list[dict] | None = None) -> None:

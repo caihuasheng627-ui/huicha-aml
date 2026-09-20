@@ -10,10 +10,10 @@ from typing import Any
 
 from fastapi import Header, HTTPException, Request
 
-# 演示账号：工号 + 口令。竞赛原型，明文即可。
+# 演示账号：工号 + 口令。竞赛原型，明文即可。界面只显示岗位，不使用具体人名。
 DEMO_USERS: dict[str, dict[str, str]] = {
-    "002183": {"password": "aml123", "name": "陈析", "role": "反洗钱调查员"},
-    "002201": {"password": "aml123", "name": "李审", "role": "合规复核"},
+    "002183": {"password": "aml123", "name": "调查员", "role": "反洗钱调查员"},
+    "002201": {"password": "aml123", "name": "复核岗", "role": "合规复核"},
 }
 
 # token -> {staff_id, name, role, exp}

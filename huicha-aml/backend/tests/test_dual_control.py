@@ -21,14 +21,14 @@ def test_case_no_and_mask():
 
 
 def test_investigator_cannot_confirm():
-    user = AuthUser(staff_id="002183", name="陈析", role="反洗钱调查员")
+    user = AuthUser(staff_id="002183", name="调查员", role="反洗钱调查员")
     with pytest.raises(HTTPException) as ei:
         assert_decision_allowed(user, "confirm", current_decision="", can_sign=True, note="")
     assert ei.value.status_code == 403
 
 
 def test_reviewer_cannot_confirm_before_submit():
-    user = AuthUser(staff_id="002201", name="李审", role="合规复核")
+    user = AuthUser(staff_id="002201", name="复核岗", role="合规复核")
     with pytest.raises(HTTPException) as ei:
         assert_decision_allowed(user, "confirm", current_decision="", can_sign=True, note="")
     assert ei.value.status_code == 400
@@ -60,12 +60,12 @@ def test_submit_then_reviewer_confirm(client):
     assert signed.status_code == 200, signed.text
     body = signed.json()
     assert body["human_decision"] == "confirm"
-    assert body["signed_by_name"] == "李审"
+    assert body["signed_by_name"] == "复核岗"
     assert body["final_action"] == "human_only"
     detail = client.get("/api/alerts/ALT-A-20260910").json()
     assert detail["human_decision"] == "confirm"
-    assert detail["signed_by_name"] == "李审"
-    assert detail["submitted_by_name"] == "陈析"
+    assert detail["signed_by_name"] == "复核岗"
+    assert detail["submitted_by_name"] == "调查员"
     listed = client.get("/api/alerts").json()
     row = next(x for x in listed if x["id"] == "ALT-A-20260910")
     assert row["case_no"] == "20260910-A"
@@ -99,11 +99,11 @@ def test_submit_does_not_write_signed_by(client):
     assert body["signed_by_name"] == ""
     detail = client.get("/api/alerts/ALT-A-20260910").json()
     assert detail["human_decision"] == "submit"
-    assert detail["submitted_by_name"] == "陈析"
+    assert detail["submitted_by_name"] == "调查员"
     assert not detail["signed_by_id"]
     assert not detail["signed_by_name"]
     text = client.get("/api/alerts/ALT-A-20260910/export", headers=inv_h).text
-    assert "陈析" in text
+    assert "调查员" in text
     assert "（未签发）" in text
 
 
@@ -329,11 +329,11 @@ def test_blocked_sign_can_write_note_without_deciding(client):
     assert "幻觉账号已人工核对，维持观察待补证" in full
     review = (detail.get("investigation") or {}).get("human_review") or {}
     assert review.get("note") == "幻觉账号已人工核对，维持观察待补证"
-    assert review.get("note_by_name") == "陈析"
+    assert review.get("note_by_name") == "调查员"
     notes = review.get("notes") or []
     assert len(notes) == 1
     assert notes[0]["text"] == "幻觉账号已人工核对，维持观察待补证"
-    assert notes[0]["by_name"] == "陈析"
+    assert notes[0]["by_name"] == "调查员"
     assert any(row.get("code") == "fact_check" for row in notes[0].get("blockers") or [])
     audits = [row for row in detail["audit"] if row["action"] == "note"]
     assert audits
@@ -392,7 +392,7 @@ def test_reviewer_note_does_not_change_decision(client):
         "调查员先记下幻觉账号待核对",
         "复核岗补充：维持观察，不改处置",
     ]
-    assert notes[1]["by_name"] == "李审"
+    assert notes[1]["by_name"] == "复核岗"
 
 
 def test_note_keeps_checklist_block(client):

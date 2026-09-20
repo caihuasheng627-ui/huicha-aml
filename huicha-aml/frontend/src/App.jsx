@@ -116,6 +116,7 @@ function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSave
   const canReject = Boolean(user && hasDraft && !finalized);
   const canWriteNote = Boolean(user && hasDraft && note.trim() && !finalized);
   const history = noteHistory(inv);
+  const checklistNote = checklistNoteText(signed?.human_note || inv?.human_review?.note || "");
   const template = !factOk && hasDraft && !finalized ? noteTemplateFor(inv) : "";
   let status = "先选左侧告警";
   if (current) {
@@ -155,12 +156,25 @@ function SignDock({ current, inv, user, note, signed, savingNote, onNote, onSave
           ))}
         </ol>
       ) : null}
+      {checklistNote ? (
+        <div className="sign-note-checklist">
+          <div className="sign-note-checklist-hd">
+            <b>已写入补证清单</b>
+            <button type="button" className="sign-dock-link" onClick={scrollToDraft}>
+              在调查草稿中查看
+            </button>
+          </div>
+          <pre>{checklistNote}</pre>
+        </div>
+      ) : null}
       <Input.TextArea
         id="investigator-note"
-        rows={4}
+        rows={3}
         placeholder={
           finalized
             ? "本案已签发，不能改写草稿备注"
+            : checklistNote && !note.trim()
+            ? "补证清单已写入上方只读区和中栏调查草稿末尾。这里只填你的处理意见，再点「写入备注」。"
             : !factOk && hasDraft
             ? "不能直接签发。写明人工判断后点「写入备注」，或带说明提交复核。"
             : "处理意见（提交说明 / 复核意见 / 退回原因）"
@@ -267,7 +281,7 @@ const AUDIT_ACTION = {
   note: "写入备注",
 };
 
-import { blockedSignNoteHint, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, signBlockerText, workingNoteText } from "./signBlockers.js";
+import { blockedSignNoteHint, checklistNoteText, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, scrollToDraft, signBlockerText, workingNoteText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const DEMOS = [
@@ -514,6 +528,7 @@ export default function App() {
   const [checklist, setChecklist] = useState(null);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [checklistWriting, setChecklistWriting] = useState(false);
+  const [draftFlash, setDraftFlash] = useState(false);
   const [kbArticle, setKbArticle] = useState(null);
   const [kbLoading, setKbLoading] = useState(false);
   const [contestMode, setContestMode] = useState(false);
@@ -595,9 +610,12 @@ export default function App() {
       const data = await appendChecklist(current, itemIds);
       setChecklist(data);
       setNote(workingNoteText(data.human_note || ""));
-      message.success(`已将 ${data.appended?.length || itemIds.length} 条写入草稿备注`);
+      await open(current);
+      setDraftFlash(true);
+      window.setTimeout(() => setDraftFlash(false), 2400);
+      message.success(`已将 ${data.appended?.length || itemIds.length} 条写入调查草稿末尾`);
       requestAnimationFrame(() => {
-        document.getElementById("investigator-note")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        scrollToDraft();
       });
     } catch (e) {
       message.error(e.message);
@@ -946,7 +964,7 @@ export default function App() {
               disabled={loginLoading}
               title="复用演示登录，口令 aml123"
             >
-              切换陈析 / 李审
+              切换调查员 / 复核岗
             </button>
           )}
           {user ? (
@@ -1067,7 +1085,7 @@ export default function App() {
         width={420}
       >
         <p className="hint" style={{ marginTop: 0 }}>
-          作业分岗：调查员提交复核，合规岗签发。口令均为 <code>aml123</code>。
+          作业分岗：调查员提交复核，复核岗签发。口令均为 <code>aml123</code>。
         </p>
         {demoAccounts.length > 0 && (
           <div className="login-accounts">
@@ -1255,7 +1273,14 @@ export default function App() {
           {current && (
             <div className="col-title">
               <h3>调查作业</h3>
-              {detail?.alert && <span className="hint">{detail.alert.case_no || detail.alert.id}</span>}
+              <span className="hint" style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 12 }}>
+                {detail?.alert?.case_no || detail?.alert?.id || ""}
+                {inv?.report ? (
+                  <button type="button" className="sign-dock-link" onClick={scrollToDraft}>
+                    查看调查草稿
+                  </button>
+                ) : null}
+              </span>
             </div>
           )}
           {!current && <WelcomeBrief labMode={labMode} />}
@@ -1484,12 +1509,15 @@ export default function App() {
                   <Divider plain orientation="left">
                     可疑交易报告草稿 · 非报送报文
                   </Divider>
-                  <ReportText text={inv.report.full_text} issues={inv.fact_issues} onSelect={selectEvidence} />
+                  <div id="report-draft" className={`report-draft-anchor${draftFlash ? " is-flash" : ""}`}>
+                    <ReportText text={inv.report.full_text} issues={inv.fact_issues} onSelect={selectEvidence} />
+                  </div>
                   <SupplementChecklist
                     data={checklist || inv.checklist}
                     loading={checklistLoading}
                     writing={checklistWriting}
                     onWrite={onWriteChecklist}
+                    onJumpDraft={scrollToDraft}
                   />
                 </>
               )}
@@ -1507,7 +1535,11 @@ export default function App() {
             onSaveNote={onSaveNote}
             onDecide={onDecide}
             onLogin={() => setLoginOpen(true)}
-            onExport={() => downloadExport(current).catch((e) => message.error(e.message))}
+            onExport={() =>
+              downloadExport(current)
+                .then((name) => message.success(`已下载 ${name || "调查底稿"}，请到浏览器下载目录查看`))
+                .catch((e) => message.error(e.message))
+            }
             contestHotAction={
               contestMode && contestStep === "sign" ? (isReviewer(user) ? "confirm" : "submit") : ""
             }

@@ -157,7 +157,9 @@ def test_merge_note_is_idempotent_on_mark():
     assert "资金用途说明" in first
     second = merge_note(first, [item])
     assert second.count("【补证清单】") == 1
-    assert format_item_line(item) in second
+    assert second.count(format_item_line(item)) == 1
+    third = merge_note(second, [item, item])
+    assert third.count(format_item_line(item)) == 1
 
 
 def test_context_from_payload_reads_elements_and_reco():
@@ -214,6 +216,15 @@ def test_checklist_api_get_and_append(client):
 
     again = client.get("/api/alerts/ALT-B-20260910/checklist").json()
     assert any(i["id"] in pick and i.get("appended") for i in again["items"])
+
+    twice = client.post("/api/alerts/ALT-B-20260910/checklist/append", json={"item_ids": pick})
+    assert twice.status_code == 200, twice.text
+    note = twice.json()["human_note"]
+    title = missing[0]["title"]
+    marker = f"] {title}："
+    assert note.count(marker) == 1
+    full = ((client.get("/api/alerts/ALT-B-20260910").json().get("investigation") or {}).get("report") or {}).get("full_text", "")
+    assert full.count(marker) == 1
 
 
 def test_named_graph_peers_without_kyc_field_are_not_thin():

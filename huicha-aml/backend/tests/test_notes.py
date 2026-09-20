@@ -25,12 +25,12 @@ def test_apply_remarks_does_not_swallow_checklist():
     apply_remarks_to_report(
         report,
         "人工判断维持观察\n\n【补证清单】签发前待补材料\n- 用途证明",
-        entries=[{"text": "人工判断维持观察", "at": "2026-09-17 12:00:00", "by_name": "陈析"}],
+        entries=[{"text": "人工判断维持观察", "at": "2026-09-17 12:00:00", "by_name": "调查员"}],
     )
     full = report["full_text"]
     assert "【结论与理由】排除" in full
     assert "【补证备注】（人工声明，未经系统回查）" in full
-    assert "陈析：人工判断维持观察" in full
+    assert "调查员：人工判断维持观察" in full
     assert "【补证清单】签发前待补材料" in full
     assert full.index("【补证备注】") < full.index("【补证清单】")
 
@@ -83,4 +83,4 @@ def test_note_metrics_count_blocked_with_note():
     assert out["blocked_note_rate"] == 0.5
     assert out["sign_blocker_counts"]["fact_check"] == 1
     assert out["note_by_blocker"]["fact_check"] == 1
-    assert format_remarks_section([{"text": "补一句", "by_name": "陈析"}]).startswith("【补证备注】")
+    assert format_remarks_section([{"text": "补一句", "by_name": "调查员"}]).startswith("【补证备注】")

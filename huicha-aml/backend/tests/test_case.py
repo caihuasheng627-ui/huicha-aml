@@ -89,7 +89,7 @@ def test_agent_cannot_auto_report(client, auth_headers):
     body = d.json()
     assert body["final_action"] == "human_only"
     assert "自动报送" in body["note"]
-    assert body["signed_by_name"] == "李审"
+    assert body["signed_by_name"] == "复核岗"
 
 
 def test_observe_confirm_is_monitoring_not_filing(client, auth_headers):

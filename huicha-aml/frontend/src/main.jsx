@@ -15,7 +15,7 @@ createRoot(document.getElementById("root")).render(
         colorError: "#8E1E2A",
         colorSuccess: "#1A6B63",
         colorWarning: "#8A6914",
-        borderRadius: 2,
+        borderRadius: 0,
         fontFamily:
           '"Source Sans 3", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
         fontSize: 13,
@@ -26,16 +26,17 @@ createRoot(document.getElementById("root")).render(
         colorBgContainer: "#ffffff",
       },
       components: {
-        Button: { controlHeight: 30, fontWeight: 500, borderRadius: 2 },
-        Table: { headerBg: "#0A1E33", headerColor: "#F4F7FA", headerSplitColor: "#1A3348" },
+        Button: { controlHeight: 30, fontWeight: 500, borderRadius: 0 },
+        Table: { headerBg: "#0A1E33", headerColor: "#F4F7FA", headerSplitColor: "#1A3348", borderRadius: 0 },
         Tag: { borderRadiusSM: 0 },
         Switch: { colorPrimary: "#1A6B63" },
         Modal: { borderRadiusLG: 0 },
         Drawer: { colorBgElevated: "#ffffff" },
-        Input: { borderRadius: 2, controlHeight: 30 },
+        Input: { borderRadius: 0, controlHeight: 30 },
         Message: { borderRadiusLG: 0 },
         Alert: { borderRadiusLG: 0 },
         Divider: { colorSplit: "#B7C0CB" },
+        Timeline: { dotBg: "#0A1E33" },
       },
     }}
   >

@@ -40,5 +40,14 @@ if (checklistNoteText("判断维持观察\n\n【补证清单】用途证明") !=
 if (checklistNoteText("只有处理意见") !== "") {
   throw new Error("no checklist mark should yield empty checklist note");
 }
+const backendOnly = {
+  can_sign: false,
+  sign_blockers: [{ code: "x", message: "后端拦截" }],
+  fact_issues: [{ token: "6222-FAKE-9999" }],
+  agent_reliability: { reasons: [{ code: "cf_invalid", message: "不该再算一遍" }] },
+};
+if (collectSignBlockers(backendOnly).map((row) => row.message).join() !== "后端拦截") {
+  throw new Error("backend sign_blockers should be authoritative");
+}
 
 console.log("sign blockers ok");

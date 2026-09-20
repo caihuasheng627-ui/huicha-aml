@@ -11,9 +11,11 @@ export function collectSignBlockers(inv) {
     if (rows.some((row) => row.code === code || row.message === text)) return;
     rows.push({ code: code || "block", message: text });
   };
+  const fromBackend = Array.isArray(inv.sign_blockers);
   for (const row of inv.sign_blockers || []) {
     push(row.code, row.message);
   }
+  if (fromBackend) return rows;
   if (hardFactIssues(inv).length) {
     push("fact_check", "事实回查未通过");
   }
@@ -42,6 +44,27 @@ export function blockedSignNoteHint(inv) {
   return `${signBlockerText(inv)}。不能直接签发，把人工判断写入草稿备注。`;
 }
 
+export function compactChecklistAdvice(text) {
+  const raw = String(text || "");
+  const idx = raw.indexOf("【补证清单】");
+  if (idx < 0) return raw;
+  const head = raw.slice(0, idx);
+  const block = raw
+    .slice(idx)
+    .split("\n")
+    .map((line) => {
+      if (!line.startsWith("- [")) return line;
+      const end = line.indexOf("] ");
+      if (end < 0) return line;
+      const tag = line.slice(3, end);
+      const rest = line.slice(end + 2);
+      const title = rest.split("：")[0].split(":")[0].trim();
+      return title ? `- [${tag}] ${title}` : line;
+    })
+    .join("\n");
+  return head + block;
+}
+
 export function workingNoteText(text) {
   const raw = String(text || "");
   const idx = raw.indexOf("【补证清单】");
@@ -51,7 +74,7 @@ export function workingNoteText(text) {
 export function checklistNoteText(text) {
   const raw = String(text || "");
   const idx = raw.indexOf("【补证清单】");
-  return idx < 0 ? "" : raw.slice(idx).trim();
+  return idx < 0 ? "" : compactChecklistAdvice(raw.slice(idx).trim());
 }
 
 export function scrollToDraft() {

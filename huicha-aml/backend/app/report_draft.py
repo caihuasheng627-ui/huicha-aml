@@ -141,3 +141,20 @@ def apply_full_text(report: dict, full_text: str, conclusion: str) -> None:
         {"key": "反证与缺失证据", "value": text if ("反证" in text or "缺失证据" in text) else ""},
         {"key": "结论与理由", "value": text if CONCLUSION_LABEL[conclusion] in text else ""},
     ]
+
+
+def apply_policy_conclusion(report: dict, guardrails: dict) -> None:
+    """护栏在成稿后才改结论：正文补一行说明，不与模型加权。"""
+    if not report or not guardrails.get("overridden"):
+        return
+    proposed = guardrails.get("proposed_conclusion") or ""
+    final = guardrails.get("final_conclusion") or ""
+    from_label = CONCLUSION_LABEL.get(proposed) or proposed
+    to_label = CONCLUSION_LABEL.get(final) or final
+    line = f"【政策护栏】结论由{from_label}调整为{to_label}，不与模型加权。"
+    text = str(report.get("full_text") or "").rstrip()
+    if "【政策护栏】" not in text:
+        report["full_text"] = f"{text}\n{line}".strip()
+    reason = str(report.get("reason") or "")
+    if line not in reason:
+        report["reason"] = f"{reason} {line}".strip()

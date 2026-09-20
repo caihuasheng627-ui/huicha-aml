@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...decision import apply_guardrails, normalize_judge, verify_judge
+from ...decision import normalize_judge, verify_judge
 from ...predicates import case_facts
 from ...typology import tags_from_findings
 from ..state import InvestigationState, StageContext
@@ -25,7 +25,6 @@ class JudgeStage:
         cite_set = state.cite_set
         baseline_result = state.baseline_result
         privacy = state.privacy
-        watch_hits = state.bundle["watch_hits"]
         use_challenger = options.use_challenger
 
         judge_usage: dict = {}
@@ -151,8 +150,7 @@ class JudgeStage:
                 "reason": "实验模式：慧查agent 已关闭",
             }
 
-        guardrails = apply_guardrails(judge, watch_hits=watch_hits)
-        conclusion = guardrails["final_conclusion"]
+        conclusion = judge.get("disposition") or baseline_result["conclusion"]
         confidence = float(judge.get("confidence") or 0)
         confidence = max(0.0, min(1.0, confidence))
 
@@ -161,6 +159,5 @@ class JudgeStage:
         state.judge_repaired = judge_repaired
         state.fallback_reason = fallback_reason
         state.judge_usage = judge_usage
-        state.guardrails = guardrails
         state.conclusion = conclusion
         state.confidence = confidence

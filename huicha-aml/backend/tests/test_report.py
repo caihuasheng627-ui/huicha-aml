@@ -56,6 +56,10 @@ def test_export_is_draft_not_filing(client, auth_headers):
     assert "否（本文件仅为草稿）" in text
     assert "风险等级" in text
     assert "进模脱敏" in text
+    assert "规则对照分" in text
+    assert "AI 自评把握度" in text
+    assert "delta" not in text.lower()
+    assert "先验" not in text
 
 
 from tests.conftest import dual_confirm
@@ -88,3 +92,17 @@ def test_apply_abstain_tone_rewrites_conclusion_section():
     line = next(item for item in report["full_text"].split("\n") if item.startswith("【结论与理由】"))
     assert line.startswith("【结论与理由】AI 倾向、未形成可直接签发结论。")
     assert report["elements"][0]["value"] == report["reason"]
+
+
+def test_apply_policy_conclusion_appends_guardrail_line():
+    from app.report_draft import apply_policy_conclusion
+
+    report = {"full_text": "【结论与理由】排除。须人工签发。", "reason": "建议排除。"}
+    apply_policy_conclusion(
+        report,
+        {"overridden": True, "proposed_conclusion": "exclude", "final_conclusion": "observe"},
+    )
+    assert "【政策护栏】" in report["full_text"]
+    assert "排除" in report["full_text"] and "观察" in report["full_text"]
+    apply_policy_conclusion(report, {"overridden": True, "proposed_conclusion": "exclude", "final_conclusion": "observe"})
+    assert report["full_text"].count("【政策护栏】") == 1

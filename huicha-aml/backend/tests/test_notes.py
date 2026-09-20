@@ -35,6 +35,26 @@ def test_apply_remarks_does_not_swallow_checklist():
     assert full.index("【补证备注】") < full.index("【补证清单】")
 
 
+def test_apply_remarks_strips_checklist_advice():
+    report = {
+        "full_text": (
+            "【结论与理由】观察。须人工签发。\n"
+            "【补证清单】签发前待补材料\n"
+            "- [其他/高] 贸易合同：慧查agent在支持/反向证据对照中标记该材料缺失。 建议：由调查员核实。"
+        ),
+        "elements": [],
+    }
+    apply_remarks_to_report(
+        report,
+        "维持观察\n\n【补证清单】签发前待补材料\n- [其他/高] 贸易合同：慧查agent……建议：上传原件。",
+        entries=[{"text": "维持观察", "at": "2026-09-20 12:00:00", "by_name": "调查员"}],
+    )
+    full = report["full_text"]
+    assert "- [其他/高] 贸易合同" in full
+    assert "建议：" not in full
+    assert "慧查agent" not in full
+
+
 def test_note_fact_warnings_are_soft():
     payload = {
         "alert": {"id": "ALT-A-20260910", "account_id": "6222-A-8801", "amount": 100, "created_at": "2026-09-10"},

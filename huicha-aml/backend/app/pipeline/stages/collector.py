@@ -7,7 +7,6 @@ from ...tools import (
     get_related_accounts,
     get_timeline,
     get_transactions,
-    plan_tool_names,
     search_regulation,
 )
 from ..state import InvestigationState, StageContext
@@ -18,7 +17,12 @@ class CollectorStage:
     role = "Collector"
 
     def run(self, state: InvestigationState, ctx: StageContext) -> None:
-        collected = _collect_stage(ctx.db, state.alert_id, search_knowledge=ctx.deps.search_knowledge)
+        collected = _collect_stage(
+            ctx.db,
+            state.alert_id,
+            search_knowledge=ctx.deps.search_knowledge,
+            planned=state.planned or None,
+        )
         state.bundle = collected["bundle"]
         state.alert = collected["alert"]
         state.customer = collected["customer"]
@@ -30,11 +34,11 @@ class CollectorStage:
         state.timeline = collected["timeline"]
 
 
-def _collect_stage(db, alert_id: str, *, search_knowledge) -> dict:
-    bundle = collect_bundle(db, alert_id)
+def _collect_stage(db, alert_id: str, *, search_knowledge, planned: list[str] | None = None) -> dict:
+    bundle = collect_bundle(db, alert_id, tool_names=planned)
     alert = bundle["alert"]
     customer = bundle["customer"]
-    planned = bundle.get("planned_tools") or plan_tool_names(alert["alert_type"])
+    planned = list(bundle.get("planned_tools") or planned or [])
     as_of = (alert.get("created_at") or "")[:10]
     txs = bundle["transactions"]
     account_id = alert["account_id"]

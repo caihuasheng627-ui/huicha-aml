@@ -5,6 +5,7 @@ import { ApproachComparison } from "./CasePanels.jsx";
 const STEPS = [
   ["选告警", "左栏「我的待办」：调查员待办是待调查/调查中，提交复核后进已办；合规岗待办只看待复核。也可按客户名、告警类型或案件号搜索。"],
   ["生成草稿", "中栏点「开始调查」。系统取证并写出调查底稿，全过程可回溯。"],
+  ["看生成校验", "草稿出来后先看中栏核验区：已核验主张、证据充分性、反事实、Skeptic 拒绝。未过核验时不能直接签发。"],
   ["读建议与证据", "对照规则建议与慧查agent 建议，点编号回到流水、客户资料与制度摘录。"],
   ["提交复核", "调查员登录后填写意见，点「提交复核」。提交成功后该案从待办进入已办。事实回查未通过时须写说明。"],
   ["复核签发", "合规岗登录后在待办里签发或退回。系统不会自动报送。"],
@@ -12,8 +13,16 @@ const STEPS = [
 
 const PANELS = [
   ["左栏", "调查员：待办是未提交案件，已办含已提交待复核。合规岗：待办是待复核件，签发后进已办。"],
-  ["中栏", "案件舞台：指标卡、三方对照、进模脱敏凭证、慧查agent 面板、风险因子、时间线、反事实、法规依据、调查过程、报告草稿与待补证清单。底部是签发与导出。"],
+  ["中栏", "案件舞台：指标卡、规则与 AI 对照、进模脱敏、慧查agent 面板、生成校验（已核验主张 / 证据充分性 / 反事实 / Skeptic 拒绝）、风险因子、时间线、法规、调查过程、报告草稿与待补证。底部是签发与导出。"],
   ["右栏", "证据与关联：客户 KYC 卡、资金图谱、证据分组、制度与类型学、交易流水和操作审计。"],
+];
+
+const CHECKS = [
+  ["已核验主张", "封闭谓词在本案快照上重新执行后成立。成立只表示该条交易模式可核验，不是语义支持度，也不能当成准确率。"],
+  ["证据充分性（有界贪心）", "在有限轮次里找最小充分集、必要编号和冗余编号。预算耗尽时不宣称全局最小；未形成稳定核心时系统弃权。"],
+  ["关键证据反事实", "去掉必要编号再跑一轮：建议是否跟着变。该轮未通过引用校验时不判定为「建议未变化」。"],
+  ["Skeptic 拒绝", "伪造引用、跨案编号或谓词失败的主张不会进结论，也不能直接签发。"],
+  ["系统弃权", "不改三档倾向，只关掉直接签发。例如规则与 AI 分歧且把握度偏低、建议上报却形不成证据依赖、有界搜索没有稳定核心。"],
 ];
 
 const CONCLUSIONS = [
@@ -24,7 +33,8 @@ const CONCLUSIONS = [
 
 const BLOCKERS = [
   ["事实回查未通过", "报告里出现了本案证据范围之外的账号、金额或编号，签发按钮锁定，须重跑或人工修改。"],
-  ["慧查agent 证据契约未通过", "理由缺引用、引用了工具范围外的编号，或建议上报却没有支持证据，整份 AI 建议作废，只保留规则对照。"],
+  ["慧查agent 证据契约未通过", "理由缺引用、引用了工具范围外的编号、缺少可执行谓词，或建议上报却没有支持证据，整份 AI 建议作废，只保留规则对照。"],
+  ["系统弃权", "倾向档仍显示，但不能直接签发。须在底部写明人工判断后提交复核或写入备注。"],
   ["出站检漏失败", "发给模型的上下文仍含未脱敏账号或已登记姓名，本轮调查中止，不会把明文送出。"],
 ];
 
@@ -80,7 +90,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>二、五步走完一个案子</h4>
+          <h4>二、六步走完一个案子</h4>
           <ol className="manual-steps">
             {STEPS.map(([name, desc]) => (
               <li key={name}>
@@ -92,7 +102,25 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>三、三栏分别看什么</h4>
+          <h4>三、生成校验看什么</h4>
+          <p className="manual-note" style={{ marginTop: 0 }}>
+            调查动画里的「核验」对应 Skeptic：引用是否落在本轮工具结果、谓词是否为真、有界贪心找证据核心。草稿出来后，这些结果留在中栏，不是另一次人工审批。
+          </p>
+          <dl className="manual-dl">
+            {CHECKS.map(([name, desc]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{desc}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="manual-note">
+            规则对照与 AI 建议并排、不加权。生成校验失败或系统弃权时，结论区仍可能显示倾向档，签发栏会锁住；把判断写入备注不改变处置状态。
+          </p>
+        </section>
+
+        <section className="manual-sec">
+          <h4>四、三栏分别看什么</h4>
           <dl className="manual-dl">
             {PANELS.map(([name, desc]) => (
               <div key={name}>
@@ -104,7 +132,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>四、结论三档</h4>
+          <h4>五、结论三档</h4>
           <ul className="manual-list">
             {CONCLUSIONS.map(([name, tone, desc]) => (
               <li key={name}>
@@ -119,7 +147,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>五、什么情况下不能签发</h4>
+          <h4>六、什么情况下不能签发</h4>
           <ul className="manual-list">
             {BLOCKERS.map(([name, desc]) => (
               <li key={name}>
@@ -132,7 +160,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>六、隐私与出站</h4>
+          <h4>七、隐私与出站</h4>
           <p className="manual-note" style={{ marginTop: 0 }}>
             策略 {privacyPolicy}：明文只给调查员看，占位符才给模型看。这是竞赛原型脱敏，不是银行级加密或数据不出域。
           </p>
@@ -150,7 +178,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>七、顶栏策略开关</h4>
+          <h4>八、顶栏策略开关</h4>
           <dl className="manual-dl">
             {SWITCHES.map(([name, desc]) => (
               <div key={name}>
@@ -162,7 +190,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>八、快捷操作</h4>
+          <h4>九、快捷操作</h4>
           <dl className="manual-dl">
             {KEYS.map(([name, desc]) => (
               <div key={name}>
@@ -174,7 +202,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>九、比赛演示（3 分钟主线）</h4>
+          <h4>十、比赛演示（3 分钟主线）</h4>
           <p className="manual-note" style={{ marginTop: 0 }}>
             先点右上角「实验室」，再点顶栏「比赛演示」或快捷键 0，锁定案例 L。只带评委看三件事：点证据编号、护栏后不是已报送、调查员提交复核后换复核岗同意签发进审计。未开实验室时快捷键 0 无效。
             A/B/C/F/H、幻觉拦截、关闭慧查agent 都是备用枝。合成对照不是生产准确率，人效数字未测完不报提升百分比。
@@ -182,7 +210,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>十、评委常问（第一句）</h4>
+          <h4>十一、评委常问（第一句）</h4>
           <dl className="manual-dl">
             <div>
               <dt>准确率多少</dt>
@@ -209,7 +237,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>十一、运行环境</h4>
+          <h4>十二、运行环境</h4>
           <div className="manual-chips">
             <span className="st-chip">版本 {health?.version || "—"}</span>
             <span className={`st-chip ${health?.llm && health.llm !== "off" ? "navy" : "risk"}`}>
@@ -224,7 +252,7 @@ export default function SystemManual({ open, onClose, health }) {
         </section>
 
         <section className="manual-sec">
-          <h4>十二、诚实边界</h4>
+          <h4>十三、诚实边界</h4>
           <ul className="manual-limits">
             {(health?.limitations || []).map((x) => (
               <li key={x}>{x}</li>

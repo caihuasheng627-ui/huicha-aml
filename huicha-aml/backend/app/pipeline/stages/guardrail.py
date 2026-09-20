@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...decision import apply_guardrails
+from ...report_draft import apply_policy_conclusion
 from ..state import InvestigationState, StageContext
 
 
@@ -16,3 +17,4 @@ class GuardrailStage:
         )
         state.guardrails = guardrails
         state.conclusion = guardrails["final_conclusion"]
+        apply_policy_conclusion(state.report, guardrails)

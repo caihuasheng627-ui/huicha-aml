@@ -51,7 +51,7 @@ import {
   persistLabMode,
   readLabMode,
 } from "./workstation.js";
-import { blockedSignNoteHint, checklistNoteText, collectSignBlockers, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, scrollToDraft, signBlockerText, workingNoteText } from "./signBlockers.js";
+import { blockedSignNoteHint, checklistNoteText, collectSignBlockers, compactChecklistAdvice, hardFactIssues, noteHistory, noteTemplateFor, reliabilityStance, scrollToDraft, signBlockerText, workingNoteText } from "./signBlockers.js";
 import { isEvidenceToken, splitEvidenceParts } from "./evidenceTokens.js";
 
 const EMPTY_KEYS = [
@@ -356,7 +356,7 @@ function auditText(x) {
 
 function ReportText({ text, issues, onSelect }) {
   const bad = new Set((issues || []).map((x) => x.token));
-  const parts = splitEvidenceParts(text);
+  const parts = splitEvidenceParts(compactChecklistAdvice(text));
   return (
     <div className="report-box">
       {parts.map((p, i) => {
@@ -946,13 +946,9 @@ export default function App() {
     <div className={`app${contestMode ? " is-contest" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <BrandLogo size={36} />
+          <BrandLogo size={28} />
           <div className="brand-text">
-            <div className="brand-title-row">
-              <strong>循证慧查</strong>
-              <span className="brand-unit">{labMode ? "实验室" : "合规调查"}</span>
-            </div>
-            <span>{labMode ? "实验室 · 快捷键 0 进入比赛演示" : "告警池之后的调查与底稿 · 调查员提交 / 复核岗签发"}</span>
+            <strong>循证慧查</strong>
           </div>
         </div>
         <div className="staff">
@@ -960,7 +956,7 @@ export default function App() {
           <span className="top-clock">{clock}</span>
           {labMode && (
             <Tooltip title="锁定案例 L 主线，按 H 打开说明书">
-              <button type="button" className="ghost-btn primary" onClick={() => startContest()}>
+              <button type="button" className="ghost-btn" onClick={() => startContest()}>
                 比赛演示
               </button>
             </Tooltip>
@@ -1285,7 +1281,6 @@ export default function App() {
         </aside>
 
         <main className={`col is-stage${!current ? " is-welcome" : ""}`}>
-          <div className="stage-body">
           {current && detail?.alert && (
             <div className="dossier-hd">
               <div className="dossier-hd-main">
@@ -1293,18 +1288,18 @@ export default function App() {
                   {detail.alert.demo_tag ? <span className="demo-stamp">{detail.alert.demo_tag}</span> : null}
                   <h3>{detail.alert.title}</h3>
                 </div>
-                <div className="dossier-meta">
-                  <span>{detail.alert.alert_type}</span>
-                  {inv?.customer?.name ? <span>{inv.customer.name}</span> : null}
-                  <span>{yuan(detail.alert.amount)}</span>
-                  {detail.alert.created_at ? <span>{String(detail.alert.created_at).slice(0, 10)}</span> : null}
+                <div className="dossier-hd-side">
+                  <code>{detail.alert.case_no || detail.alert.id}</code>
+                  <Chip tone={(STATUS[detail.alert.status] || STATUS.pending).tone}>
+                    {(STATUS[detail.alert.status] || STATUS.pending).text}
+                  </Chip>
                 </div>
               </div>
-              <div className="dossier-hd-side">
-                <code>{detail.alert.case_no || detail.alert.id}</code>
-                <Chip tone={(STATUS[detail.alert.status] || STATUS.pending).tone}>
-                  {(STATUS[detail.alert.status] || STATUS.pending).text}
-                </Chip>
+              <div className="dossier-meta">
+                <span>{detail.alert.alert_type}</span>
+                {inv?.customer?.name ? <span>{inv.customer.name}</span> : null}
+                <span>{yuan(detail.alert.amount)}</span>
+                {detail.alert.created_at ? <span>{String(detail.alert.created_at).slice(0, 10)}</span> : null}
               </div>
             </div>
           )}
@@ -1318,6 +1313,7 @@ export default function App() {
               ) : null}
             </div>
           )}
+          <div className="stage-body">
           {!current && <WelcomeBrief labMode={labMode} />}
           {current && showTheater && (
             <InvestigateTheater
@@ -1344,15 +1340,13 @@ export default function App() {
                     </div>
                   )}
                   <div className="hint" style={{ margin: "6px 0 0" }}>
-                    {inv
-                      ? `<0.35 排除 / <0.55 观察。AI 把握度 ${Number(inv.judge?.confidence ?? inv.confidence ?? 0).toFixed(2)} 是确定程度，不是风险。`
-                      : "低于 0.35 为排除档"}
+                    {inv ? `排除 <0.35 · 观察 <0.55` : "低于 0.35 为排除档"}
                   </div>
                 </div>
                 <div className="kpi-card">
                   <div className="k">耗时 / 工具次数</div>
                   <div className="v">
-                    {inv?.comparison ? `${inv.comparison.agent_ms} ms · ${inv.comparison.tools_called} 次` : "—"}
+                    {inv?.comparison ? `${inv.comparison.agent_ms}ms / ${inv.comparison.tools_called}次` : "—"}
                   </div>
                 </div>
                 <div className="kpi-card">

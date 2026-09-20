@@ -155,11 +155,26 @@ def test_merge_note_is_idempotent_on_mark():
     first = merge_note("", [item])
     assert first.startswith("【补证清单】")
     assert "资金用途说明" in first
+    assert "建议：" not in first
+    assert "索取用途说明" not in first
+    assert "备注多为存入" not in first
+    assert format_item_line(item) == "- [资金用途/高] 资金用途说明"
     second = merge_note(first, [item])
     assert second.count("【补证清单】") == 1
     assert second.count(format_item_line(item)) == 1
     third = merge_note(second, [item, item])
     assert third.count(format_item_line(item)) == 1
+
+
+def test_merge_note_strips_legacy_advice():
+    existing = (
+        "【补证清单】签发前待补材料\n"
+        "- [其他/高] 贸易合同：慧查agent在支持/反向证据对照中标记该材料缺失。 建议：由调查员核实并上传对应原始材料。"
+    )
+    out = merge_note(existing, [])
+    assert "- [其他/高] 贸易合同" in out
+    assert "慧查agent" not in out
+    assert "建议：" not in out
 
 
 def test_context_from_payload_reads_elements_and_reco():
@@ -221,10 +236,18 @@ def test_checklist_api_get_and_append(client):
     assert twice.status_code == 200, twice.text
     note = twice.json()["human_note"]
     title = missing[0]["title"]
-    marker = f"] {title}："
+    marker = f"] {title}"
     assert note.count(marker) == 1
     full = ((client.get("/api/alerts/ALT-B-20260910").json().get("investigation") or {}).get("report") or {}).get("full_text", "")
     assert full.count(marker) == 1
+
+    rerun = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True})
+    assert rerun.status_code == 200, rerun.text
+    after = client.get("/api/alerts/ALT-B-20260910").json()
+    assert after.get("human_decision") in {"", None}
+    assert "【补证清单】" in (after.get("human_note") or "")
+    assert title in (after.get("human_note") or "")
+    assert "建议：" not in (after.get("human_note") or "")
 
 
 def test_named_graph_peers_without_kyc_field_are_not_thin():

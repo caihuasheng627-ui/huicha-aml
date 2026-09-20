@@ -25,10 +25,12 @@ def split_checklist(text: str) -> tuple[str, str]:
 
 
 def compose_human_note(existing: str, new_note: str) -> str:
+    from .checklist import compact_checklist_block
+
     _free, checklist = split_checklist(existing)
     parts = [sanitize_note(new_note)]
     if checklist:
-        parts.append(checklist)
+        parts.append(compact_checklist_block(checklist))
     return "\n\n".join(p for p in parts if p)
 
 
@@ -151,14 +153,16 @@ def _replace_section(full: str, mark: str, section: str) -> str:
 
 
 def apply_remarks_to_report(report: dict, note: str, *, entries: list[dict] | None = None) -> None:
+    from .checklist import compact_checklist_block
+
     free, checklist = split_checklist(note)
     report["remarks"] = free
-    full = str(report.get("full_text") or "")
+    full = compact_checklist_block(str(report.get("full_text") or ""))
     remarks = format_remarks_section(entries, free)
     if remarks:
         full = _replace_section(full, REMARKS_MARK, remarks)
     if checklist:
-        full = _replace_section(full, CHECKLIST_MARK, checklist)
+        full = _replace_section(full, CHECKLIST_MARK, compact_checklist_block(checklist))
     report["full_text"] = full
 
 

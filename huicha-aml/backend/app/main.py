@@ -18,6 +18,7 @@ from .checklist import (
     enrich_counterparties,
     generate_checklist,
     merge_note,
+    scrub_payload_checklist,
 )
 from .notes import (
     FINALIZED,
@@ -114,13 +115,14 @@ def _end_investigation(alert_id: str) -> None:
         _INVESTIGATE_RUNNING.discard(alert_id)
 
 
-def _reset_alert_for_investigate(db: Session, alert: Alert) -> Investigation | None:
-    """重跑必须覆盖 pending_review / monitoring，并清掉人工处置痕迹。"""
+def _reset_alert_for_investigate(db: Session, alert: Alert) -> dict:
+    """重跑覆盖待复核/已监测状态，签发必须对新草稿重走双控；人工备注与补证清单保留。"""
+    leftover = {"human_note": "", "checklist_appended": None, "prior_review": None}
     alert.status = "investigating"
     inv = get_investigation(db, alert.id)
     if inv:
+        leftover["human_note"] = inv.human_note or ""
         inv.human_decision = ""
-        inv.human_note = ""
         inv.signed_by_id = ""
         inv.signed_by_name = ""
         inv.decided_at = None
@@ -128,6 +130,18 @@ def _reset_alert_for_investigate(db: Session, alert: Alert) -> Investigation | N
             payload = json.loads(inv.payload_json or "{}")
         except (TypeError, json.JSONDecodeError):
             payload = {}
+        appended = payload.get("checklist_appended")
+        if isinstance(appended, dict):
+            leftover["checklist_appended"] = appended
+        review = payload.get("human_review") if isinstance(payload.get("human_review"), dict) else {}
+        if leftover["human_note"] or review.get("submitted_by_id") or review.get("signed_by_id"):
+            leftover["prior_review"] = {
+                "human_decision": review.get("decision") or "",
+                "submitted_by_id": review.get("submitted_by_id") or "",
+                "submitted_by_name": review.get("submitted_by_name") or "",
+                "signed_by_id": review.get("signed_by_id") or "",
+                "signed_by_name": review.get("signed_by_name") or "",
+            }
         if isinstance(payload.get("human_review"), dict):
             payload["human_review"] = {}
         v2 = payload.get("case_v2")
@@ -141,7 +155,7 @@ def _reset_alert_for_investigate(db: Session, alert: Alert) -> Investigation | N
         rec.human_decision = ""
         rec.status = "OPEN"
         rec.updated_at = utcnow()
-    return inv
+    return leftover
 
 
 @asynccontextmanager
@@ -338,6 +352,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
         .all()
     )
     payload = json.loads(inv.payload_json) if inv else None
+    payload, human_note = scrub_payload_checklist(payload, inv.human_note if inv else "")
     return {
         "alert": {
             "id": alert.id,
@@ -355,7 +370,7 @@ def get_alert_detail(alert_id: str, db: Session = Depends(get_db)):
         },
         "investigation": payload,
         "human_decision": inv.human_decision if inv else "",
-        "human_note": inv.human_note if inv else "",
+        "human_note": human_note,
         "signed_by_id": (inv.signed_by_id if inv else "") or "",
         "signed_by_name": (inv.signed_by_name if inv else "") or "",
         "submitted_by_id": ((payload or {}).get("human_review") or {}).get("submitted_by_id") or "",
@@ -392,7 +407,7 @@ def investigate(
         raise HTTPException(404, "告警不存在")
     _try_begin_investigation(alert_id)
     try:
-        _reset_alert_for_investigate(db, alert)
+        leftover = _reset_alert_for_investigate(db, alert)
         db.commit()
         try:
             result = run_investigation(
@@ -413,6 +428,7 @@ def investigate(
             use_challenger=use_challenger,
             inject_hallucination=inject_hallucination,
             experiment_mode=experiment_mode,
+            leftover=leftover,
         )
         db.commit()
         return result
@@ -428,20 +444,39 @@ def _finalize_investigation(
     use_challenger: bool,
     inject_hallucination: bool,
     experiment_mode: bool,
+    leftover: dict | None = None,
 ) -> None:
     alert_id = alert.id
+    carry = leftover or {}
+    kept_note = str(carry.get("human_note") or "")
+    if kept_note:
+        report = result.setdefault("report", {})
+        apply_remarks_to_report(report, kept_note)
+        result["report"] = report
+    appended = carry.get("checklist_appended")
+    if isinstance(appended, dict) and appended.get("item_ids"):
+        result["checklist_appended"] = appended
+        attach_checklist(result, human_note=kept_note)
+    prior = carry.get("prior_review")
+    if prior:
+        result["prior_human_review"] = prior
     inv = get_investigation(db, alert_id)
     blob = json.dumps(result, ensure_ascii=False)
     if inv:
         inv.payload_json = blob
         inv.conclusion = result["conclusion"]
         inv.human_decision = ""
-        inv.human_note = ""
+        inv.human_note = kept_note
         inv.signed_by_id = ""
         inv.signed_by_name = ""
         inv.decided_at = None
     else:
-        inv = Investigation(alert_id=alert_id, payload_json=blob, conclusion=result["conclusion"])
+        inv = Investigation(
+            alert_id=alert_id,
+            payload_json=blob,
+            conclusion=result["conclusion"],
+            human_note=kept_note,
+        )
         db.add(inv)
     alert.status = "investigating"
     scoring = result.get("scoring") or {}
@@ -540,7 +575,7 @@ def investigate_stream(
             def emit(event: dict) -> None:
                 events.put(event)
 
-            _reset_alert_for_investigate(session, row)
+            leftover = _reset_alert_for_investigate(session, row)
             session.commit()
             result = run_investigation(
                 session,
@@ -557,6 +592,7 @@ def investigate_stream(
                 use_challenger=use_challenger,
                 inject_hallucination=inject_hallucination,
                 experiment_mode=experiment_mode,
+                leftover=leftover,
             )
             session.commit()
             events.put({"event": "done", "payload": result})
@@ -627,11 +663,12 @@ def _checklist_payload(db: Session, alert_id: str) -> tuple[Alert, Investigation
 def get_checklist(alert_id: str, db: Session = Depends(get_db)):
     alert, inv, payload = _checklist_payload(db, alert_id)
     blob = payload.get("checklist") or {}
+    _payload, human_note = scrub_payload_checklist(payload, inv.human_note or "")
     return {
         "alert_id": alert_id,
         "recommendation": blob.get("recommendation") or (payload.get("case_v2") or {}).get("recommendation") or "",
         "can_sign": payload.get("can_sign"),
-        "human_note": inv.human_note or "",
+        "human_note": human_note,
         "human_decision": inv.human_decision or "",
         **blob,
     }
@@ -1007,6 +1044,7 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
     if not inv:
         raise HTTPException(404, "尚无草稿")
     payload = json.loads(inv.payload_json)
+    payload, human_note = scrub_payload_checklist(payload, inv.human_note or "")
     report = payload.get("report", {})
     signed = inv.human_decision or ""
     signed_line = DECIDE_LABEL.get(signed, signed) if signed else "否（本文件仅为草稿）"
@@ -1020,7 +1058,6 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
     else:
         signer = "（未签发）"
     v2 = payload.get("case_v2") or {}
-    scoring = payload.get("scoring") or {}
     priv = payload.get("privacy") or {}
     rejected = payload.get("rejected_claims") or []
     verified = [
@@ -1050,12 +1087,12 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         f"- 建议结论：{payload.get('conclusion_label')}",
         f"- AI 建议档：{v2.get('recommendation') or ''}",
         f"- 风险等级：{v2.get('risk_level') or ''}",
-        f"- 打分：底 {scoring.get('base')} / 先验 {scoring.get('rule_prior')} / delta {scoring.get('llm_delta')} / 终 {scoring.get('final')}",
-        f"- 规则分：{payload.get('confidence')}（{payload.get('confidence_kind') or 'rule_score_not_calibrated'}，非校准置信度）",
+        f"- 规则对照分：{(payload.get('rule_baseline') or {}).get('score', '—')}（仅对照，不与 AI 相加）",
+        f"- AI 自评把握度：{payload.get('confidence')}（{payload.get('confidence_kind') or 'llm_self_assessed_not_calibrated'}，非校准概率）",
         f"- 人工签发：{signed_line}",
         f"- 提交人：{submitted_name}",
         f"- 签发人：{signer}",
-        f"- 调查员意见：{(inv.human_note or '').strip() or '（无）'}",
+        f"- 调查员意见：{(human_note or '').strip() or '（无）'}",
         *note_history,
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",

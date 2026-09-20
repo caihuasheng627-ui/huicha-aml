@@ -41,6 +41,18 @@ def test_investigate_payload_includes_trace_and_models(client):
     assert data["llm"]["usage"]["total_tokens"] == data["comparison"]["tokens"]
 
 
+def test_planner_writes_tool_plan(client):
+    data = client.post("/api/alerts/ALT-B-20260910/investigate", params={"use_challenger": True}).json()
+    from app.tools import ALLOWED_TOOLS, plan_tool_names
+
+    expected = [name for name in plan_tool_names(data["alert"]["alert_type"]) if name in ALLOWED_TOOLS]
+    blob = data.get("investigation_plan") or {}
+    planned = [step["tool"] for step in blob.get("investigation_plan") or []]
+    assert planned == expected
+    planner_step = next(s for s in data["steps"] if s["role"] == "Planner")
+    assert "白名单工具" in planner_step["content"]
+
+
 def test_investigate_stream_emits_stages_and_done(client):
     post = client.post("/api/alerts/ALT-C-20260910/investigate", params={"use_challenger": True})
     assert post.status_code == 200, post.text

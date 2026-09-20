@@ -565,26 +565,52 @@ def summarize(items: list[dict], ctx: dict) -> dict:
 
 def format_item_line(item: dict) -> str:
     pri = {"high": "高", "medium": "中", "low": "低"}.get(item.get("priority") or "", item.get("priority") or "")
-    return (
-        f"- [{item.get('category')}/{pri}] {item.get('title')}："
-        f"{item.get('reason')} 建议：{item.get('suggested_action')}"
-    )
+    return f"- [{item.get('category')}/{pri}] {item.get('title')}"
+
+
+def compact_item_line(line: str) -> str:
+    """草稿只记待补材料名，不把规则/模型的操作建议写进底稿。"""
+    text = (line or "").rstrip()
+    stripped = text.strip()
+    if not stripped.startswith("- ["):
+        return text
+    head = stripped[3:]
+    end = head.find("] ")
+    if end < 0:
+        return text
+    tag = head[:end].strip()
+    title = head[end + 2 :].split("：", 1)[0].split(":", 1)[0].strip()
+    if not title:
+        return text
+    return f"- [{tag}] {title}"
+
+
+def compact_checklist_block(text: str) -> str:
+    raw = text or ""
+    idx = raw.find(NOTE_MARK)
+    if idx < 0:
+        return raw
+    prefix = raw[:idx]
+    lines = []
+    for line in raw[idx:].splitlines():
+        lines.append(compact_item_line(line) if line.startswith("- ") else line)
+    return prefix + "\n".join(lines)
 
 
 def _line_key(line: str) -> str:
-    text = (line or "").strip()
+    text = compact_item_line(line or "").strip()
     if text.startswith("- ["):
         head = text[3:]
         end = head.find("] ")
         if end >= 0:
-            title = head[end + 2 :].split("：", 1)[0].split(":", 1)[0].strip()
+            title = head[end + 2 :].strip()
             if title:
                 return title
     return text
 
 
 def merge_note(existing: str, items: list[dict]) -> str:
-    raw = existing or ""
+    raw = compact_checklist_block(existing or "")
     idx = raw.find(NOTE_MARK)
     free = raw[:idx].rstrip() if idx >= 0 else raw.strip()
     old_block = raw[idx:].strip() if idx >= 0 else ""
@@ -592,7 +618,8 @@ def merge_note(existing: str, items: list[dict]) -> str:
     for line in old_block.splitlines():
         if not line.startswith("- "):
             continue
-        by_key[_line_key(line)] = line
+        compact = compact_item_line(line)
+        by_key[_line_key(compact)] = compact
     for it in items:
         line = format_item_line(it)
         by_key[str(it.get("title") or "").strip() or _line_key(line)] = line
@@ -608,3 +635,19 @@ def apply_remarks_to_report(report: dict, note: str, *, entries: list[dict] | No
     from .notes import apply_remarks_to_report as _apply
 
     _apply(report, note, entries=entries)
+
+
+def scrub_payload_checklist(payload: dict | None, human_note: str = "") -> tuple[dict | None, str]:
+    note = compact_checklist_block(human_note or "")
+    if not isinstance(payload, dict):
+        return payload, note
+    report = payload.get("report")
+    if isinstance(report, dict) and report.get("full_text"):
+        report["full_text"] = compact_checklist_block(str(report.get("full_text") or ""))
+    review = payload.get("human_review")
+    if isinstance(review, dict) and review.get("note"):
+        review["note"] = compact_checklist_block(str(review.get("note") or ""))
+    appended = payload.get("checklist_appended")
+    if isinstance(appended, dict) and appended.get("text"):
+        appended["text"] = compact_checklist_block(str(appended.get("text") or ""))
+    return payload, note

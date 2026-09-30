@@ -47,6 +47,7 @@ from .security import (
 )
 from .workflow import assert_decision_allowed
 from .privacy import POLICY_VERSION, PrivacyLeakError
+from .logging_util import warning
 from .seed import seed_if_empty
 
 DECIDE_LABEL = {
@@ -599,11 +600,14 @@ def investigate_stream(
         except PrivacyLeakError:
             session.rollback()
             events.put({"event": "error", "detail": "出站检漏失败，本轮已中止"})
-        except RuntimeError:
+        except RuntimeError as exc:
             session.rollback()
-            events.put({"event": "error", "detail": INVESTIGATE_FAIL})
-        except Exception:
+            detail = str(exc).strip()[:400] or INVESTIGATE_FAIL
+            warning(f"investigate stream runtime: {detail}")
+            events.put({"event": "error", "detail": detail})
+        except Exception as exc:
             session.rollback()
+            warning(f"investigate stream failed: {exc}")
             events.put({"event": "error", "detail": INVESTIGATE_FAIL})
         finally:
             session.close()
@@ -618,7 +622,11 @@ def investigate_stream(
 
     def generate():
         while True:
-            item = events.get()
+            try:
+                item = events.get(timeout=8)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
             if item is None:
                 break
             event = item.get("event") or "message"
@@ -1097,7 +1105,7 @@ def export_report(alert_id: str, request: Request, db: Session = Depends(get_db)
         f"- 补证清单：缺失 {(payload.get('checklist') or {}).get('missing_count', '—')} 项（规则提示，非报送）",
         f"- Challenger：{'开' if payload.get('use_challenger', True) else '关'}",
         f"- 数据：{payload.get('data_note') or 'synthetic'}",
-        f"- 进模脱敏：{priv.get('policy') or 'privacy_v2'} · 姓名 {priv.get('masked_names', 0)} · 账号 {priv.get('masked_accounts', 0)} · 客户号 {priv.get('masked_customer_ids', 0)} · 出站 {priv.get('egress_calls', 0)} 次",
+        f"- 进模脱敏：{priv.get('policy') or 'privacy_v3'} · 姓名 {priv.get('masked_names', 0)} · 账号 {priv.get('masked_accounts', 0)} · 客户号 {priv.get('masked_customer_ids', 0)} · 出站 {priv.get('egress_calls', 0)} 次",
         f"- 导出人：{user.label()}",
         "",
         report.get("full_text", ""),

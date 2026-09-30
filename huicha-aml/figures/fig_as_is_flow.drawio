@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="as_is" id="as_is">
+    <mxGraphModel dx="1100" dy="520" grid="1" gridSize="10" page="1" pageWidth="1100" pageHeight="480">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="现行做法：一条告警如何变成底稿" style="text;html=1;align=left;fontFamily=Microsoft YaHei;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="24" y="12" width="420" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane1" value="监测" style="rounded=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=Microsoft YaHei;fontSize=12;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="24" y="56" width="48" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="监测系统&lt;br&gt;产出告警" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="100" y="66" width="200" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane2" value="调查" style="rounded=0;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Microsoft YaHei;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="24" y="160" width="48" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1" value="多系统摘抄&lt;br&gt;客户、账户、流水、关系" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="100" y="198" width="250" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2" value="从空白起稿&lt;br&gt;四段底稿从头写" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="420" y="198" width="250" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3" value="排除理由留痕&lt;br&gt;排除也要写下理由" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="198" width="250" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane3" value="复核" style="rounded=0;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Microsoft YaHei;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="24" y="324" width="48" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="c1" value="阅读底稿" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="100" y="340" width="200" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="c2" value="退回或同意签发" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Microsoft YaHei;fontSize=12;strokeWidth=1.2;" vertex="1" parent="1">
+          <mxGeometry x="380" y="340" width="220" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="a1" target="b1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="b1" target="b2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="b2" target="b3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="b3" target="c1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="865" y="310"/>
+              <mxPoint x="200" y="310"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c1" target="c2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note" value="红色三格是痛点。图中不写耗时。与后文上线后的双控流程对照。" style="text;html=1;align=left;fontFamily=Microsoft YaHei;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="24" y="430" width="700" height="24" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

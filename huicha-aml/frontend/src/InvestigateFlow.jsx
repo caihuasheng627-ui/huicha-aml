@@ -47,7 +47,7 @@ const PIPELINE = [
     title: "研判",
     caption: "输出完整建议与证据引用",
     dwell: 1600,
-    linger: false,
+    linger: true,
     ticks: ["区分支持与反向证据", "识别缺失材料", "输出三档建议"],
     logs: ["enrich_judge", "structured_decision", "evidence_contract"],
   },
@@ -218,7 +218,7 @@ export function PipelineRail({ playback, hasDraft, signed, useChallenger }) {
   );
 }
 
-export function InvestigateTheater({ playback, useChallenger, injectHallucination, onRetry, onBack }) {
+export function InvestigateTheater({ playback, useChallenger, injectHallucination, onRetry, onBack, hint }) {
   const { index, phase, progress, stage } = playback;
   const current = stage || PIPELINE[0];
   const ticks = current.ticks || [];
@@ -269,7 +269,9 @@ export function InvestigateTheater({ playback, useChallenger, injectHallucinatio
         {injectHallucination && current.id === "reporter" && (
           <p className="theater-warn">幻觉演示已开：签发将被事实回查拦住</p>
         )}
-        {phase === "holding" && <p className="theater-hold">正在等待模型返回草稿…</p>}
+        {phase === "holding" && (
+          <p className="theater-hold">{hint || "正在调用模型… Judge / 反事实 / 成稿可能各要几十秒。"}</p>
+        )}
       </div>
 
       {failed && (

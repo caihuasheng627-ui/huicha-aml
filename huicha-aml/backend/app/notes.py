@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .tools import fact_check
+from .tools import fact_check, source_literal_tokens
 
 NOTE_MAX_LEN = 2000
 REMARKS_MARK = "【补证备注】"
@@ -93,6 +93,13 @@ def facts_from_payload(payload: dict | None) -> dict:
     if opened:
         dates.add(opened[:10])
     evidence_ids = [e.get("id") for e in (data.get("evidence") or []) if isinstance(e, dict) and e.get("id")]
+    texts = [customer.get("summary") or "", baseline.get("peer_note") or "", alert.get("alert_type") or ""]
+    for tx in txs:
+        texts.append(tx.get("remark") or "")
+    for finding in data.get("findings") or []:
+        if isinstance(finding, dict):
+            texts.append(finding.get("detail") or "")
+            texts.append(finding.get("title") or "")
     return {
         "amounts": sorted(a for a in amounts if a is not None),
         "tx_ids": [t["id"] for t in txs if t.get("id")],
@@ -101,6 +108,7 @@ def facts_from_payload(payload: dict | None) -> dict:
         "names": sorted(n for n in names if n),
         "kb_ids": [h["id"] for h in kb if isinstance(h, dict) and h.get("id")],
         "ref_ids": [x for x in [alert.get("id"), *evidence_ids] if x],
+        "literals": source_literal_tokens(*texts),
     }
 
 

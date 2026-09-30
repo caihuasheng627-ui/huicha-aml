@@ -11261,5 +11261,3577 @@
         }
       }
     }
+  },
+  "vs_generic": {
+    "label": "同一底座 deepseek-chat 逐级加能力。主结论看可信度，不把 F1 写成生产准确率。",
+    "prompt_judge": "judge_v3p",
+    "ladder": {
+      "blind": {
+        "A0": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.6744449991728603,
+          "accuracy": 0.7272727272727273,
+          "correct": 160,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.7273,
+            "macro_f1": 0.6744,
+            "false_positive_rate": 0.175,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.5125,
+                "f1": 0.6777,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.381,
+                "recall": 0.6,
+                "f1": 0.466,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 0.819,
+                "recall": 0.95,
+                "f1": 0.8796,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 41,
+                  "observe": 34,
+                  "suggest_report": 5
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 24,
+                  "suggest_report": 16
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 5,
+                  "suggest_report": 95
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "suggest_report": 100,
+              "observe": 40
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.5125,
+              "f1": 0.6776859504132231,
+              "support": 80,
+              "tp": 41,
+              "fp": 0,
+              "fn": 39
+            },
+            "observe": {
+              "precision": 0.38095238095238093,
+              "recall": 0.6,
+              "f1": 0.4660194174757281,
+              "support": 40,
+              "tp": 24,
+              "fp": 39,
+              "fn": 16
+            },
+            "suggest_report": {
+              "precision": 0.8189655172413793,
+              "recall": 0.95,
+              "f1": 0.8796296296296298,
+              "support": 100,
+              "tp": 95,
+              "fp": 21,
+              "fn": 5
+            }
+          },
+          "dangerous_diagonal_hits": 5,
+          "dangerous_diagonal_rate": 0.022727272727272728,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9414393939393937,
+          "fabrication_hits": 5,
+          "fabrication_rate": 0.022727272727272728,
+          "observe_n": 63,
+          "observe_with_missing_hits": 63,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 60,
+          "unblocked_wrong_rate": 0.2727272727272727,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1144.4636363636364,
+          "mean_elapsed_ms": 2192.8263636363654,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A1": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.8607514746218082,
+          "accuracy": 0.8772727272727273,
+          "correct": 193,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.8773,
+            "macro_f1": 0.8608,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.825,
+                "f1": 0.9041,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.597,
+                "recall": 1.0,
+                "f1": 0.7477,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.87,
+                "f1": 0.9305,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 66,
+                  "observe": 14,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 13,
+                  "suggest_report": 87
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "suggest_report": 100,
+              "observe": 40
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.825,
+              "f1": 0.9041095890410958,
+              "support": 80,
+              "tp": 66,
+              "fp": 0,
+              "fn": 14
+            },
+            "observe": {
+              "precision": 0.5970149253731343,
+              "recall": 1.0,
+              "f1": 0.7476635514018691,
+              "support": 40,
+              "tp": 40,
+              "fp": 27,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.87,
+              "f1": 0.9304812834224598,
+              "support": 100,
+              "tp": 87,
+              "fp": 0,
+              "fn": 13
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 0.9995454545454546,
+          "grounded_claim_rate": 0.9490909090909091,
+          "fabrication_hits": 8,
+          "fabrication_rate": 0.03636363636363636,
+          "observe_n": 67,
+          "observe_with_missing_hits": 67,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 27,
+          "unblocked_wrong_rate": 0.12272727272727273,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1463.7681818181818,
+          "mean_elapsed_ms": 2315.5759090909105,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A2": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.9547805343983687,
+          "accuracy": 0.9636363636363636,
+          "correct": 212,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.9636,
+            "macro_f1": 0.9548,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.9625,
+                "f1": 0.9809,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.8333,
+                "recall": 1.0,
+                "f1": 0.9091,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.95,
+                "f1": 0.9744,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 77,
+                  "observe": 3,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 5,
+                  "suggest_report": 95
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "suggest_report": 100,
+              "observe": 40
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.9625,
+              "f1": 0.980891719745223,
+              "support": 80,
+              "tp": 77,
+              "fp": 0,
+              "fn": 3
+            },
+            "observe": {
+              "precision": 0.8333333333333334,
+              "recall": 1.0,
+              "f1": 0.9090909090909091,
+              "support": 40,
+              "tp": 40,
+              "fp": 8,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.95,
+              "f1": 0.9743589743589743,
+              "support": 100,
+              "tp": 95,
+              "fp": 0,
+              "fn": 5
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 5,
+          "fabrication_rate": 0.022727272727272728,
+          "observe_n": 48,
+          "observe_with_missing_hits": 48,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 8,
+          "unblocked_wrong_rate": 0.03636363636363636,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 3252.581818181818,
+          "mean_elapsed_ms": 3387.7054545454575,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A3": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.9394486440664785,
+          "accuracy": 0.95,
+          "correct": 209,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.95,
+            "macro_f1": 0.9394,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.9625,
+                "f1": 0.9809,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.7843,
+                "recall": 1.0,
+                "f1": 0.8791,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.92,
+                "f1": 0.9583,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 77,
+                  "observe": 3,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 8,
+                  "suggest_report": 92
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "suggest_report": 100,
+              "observe": 40
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.9625,
+              "f1": 0.980891719745223,
+              "support": 80,
+              "tp": 77,
+              "fp": 0,
+              "fn": 3
+            },
+            "observe": {
+              "precision": 0.7843137254901961,
+              "recall": 1.0,
+              "f1": 0.8791208791208792,
+              "support": 40,
+              "tp": 40,
+              "fp": 11,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.92,
+              "f1": 0.9583333333333334,
+              "support": 100,
+              "tp": 92,
+              "fp": 0,
+              "fn": 8
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 7,
+          "fabrication_rate": 0.031818181818181815,
+          "observe_n": 51,
+          "observe_with_missing_hits": 51,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 11,
+          "unblocked_wrong_rate": 0.05,
+          "blocked_hits": 22,
+          "blocked_rate": 0.1,
+          "mean_tokens": 3234.322727272727,
+          "mean_elapsed_ms": 3438.2250000000017,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        }
+      },
+      "blind_struct": {
+        "A0": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.560054397399539,
+          "accuracy": 0.6136363636363636,
+          "correct": 135,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.6136,
+            "macro_f1": 0.5601,
+            "false_positive_rate": 0.1083,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.2625,
+                "f1": 0.4158,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.28,
+                "recall": 0.7,
+                "f1": 0.4,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 0.8687,
+                "recall": 0.86,
+                "f1": 0.8643,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 21,
+                  "observe": 58,
+                  "suggest_report": 1
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 28,
+                  "suggest_report": 12
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 14,
+                  "suggest_report": 86
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.2625,
+              "f1": 0.4158415841584159,
+              "support": 80,
+              "tp": 21,
+              "fp": 0,
+              "fn": 59
+            },
+            "observe": {
+              "precision": 0.28,
+              "recall": 0.7,
+              "f1": 0.4,
+              "support": 40,
+              "tp": 28,
+              "fp": 72,
+              "fn": 12
+            },
+            "suggest_report": {
+              "precision": 0.8686868686868687,
+              "recall": 0.86,
+              "f1": 0.864321608040201,
+              "support": 100,
+              "tp": 86,
+              "fp": 13,
+              "fn": 14
+            }
+          },
+          "dangerous_diagonal_hits": 1,
+          "dangerous_diagonal_rate": 0.004545454545454545,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9622727272727272,
+          "fabrication_hits": 1,
+          "fabrication_rate": 0.004545454545454545,
+          "observe_n": 100,
+          "observe_with_missing_hits": 100,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 85,
+          "unblocked_wrong_rate": 0.38636363636363635,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 806.5954545454546,
+          "mean_elapsed_ms": 1846.8163636363638,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A1": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.7952978234404124,
+          "accuracy": 0.8045454545454546,
+          "correct": 177,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.8045,
+            "macro_f1": 0.7953,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.85,
+                "f1": 0.9189,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.4819,
+                "recall": 1.0,
+                "f1": 0.6504,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.69,
+                "f1": 0.8166,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 68,
+                  "observe": 12,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 31,
+                  "suggest_report": 69
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.85,
+              "f1": 0.9189189189189189,
+              "support": 80,
+              "tp": 68,
+              "fp": 0,
+              "fn": 12
+            },
+            "observe": {
+              "precision": 0.4819277108433735,
+              "recall": 1.0,
+              "f1": 0.6504065040650406,
+              "support": 40,
+              "tp": 40,
+              "fp": 43,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.69,
+              "f1": 0.8165680473372781,
+              "support": 100,
+              "tp": 69,
+              "fp": 0,
+              "fn": 31
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9809848484848485,
+          "fabrication_hits": 7,
+          "fabrication_rate": 0.031818181818181815,
+          "observe_n": 83,
+          "observe_with_missing_hits": 83,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 43,
+          "unblocked_wrong_rate": 0.19545454545454546,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1134.540909090909,
+          "mean_elapsed_ms": 1957.544545454545,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A2": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.7787397787397787,
+          "accuracy": 0.7909090909090909,
+          "correct": 174,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.7909,
+            "macro_f1": 0.7787,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.4651,
+                "recall": 1.0,
+                "f1": 0.6349,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.54,
+                "f1": 0.7013,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 80,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 46,
+                  "suggest_report": 54
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 80,
+              "tp": 80,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.46511627906976744,
+              "recall": 1.0,
+              "f1": 0.6349206349206349,
+              "support": 40,
+              "tp": 40,
+              "fp": 46,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.54,
+              "f1": 0.7012987012987013,
+              "support": 100,
+              "tp": 54,
+              "fp": 0,
+              "fn": 46
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 1,
+          "fabrication_rate": 0.004545454545454545,
+          "observe_n": 86,
+          "observe_with_missing_hits": 86,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 46,
+          "unblocked_wrong_rate": 0.20909090909090908,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 2625.2454545454543,
+          "mean_elapsed_ms": 2693.8990909090894,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        },
+        "A3": {
+          "n_rows": 220,
+          "n_cases": 220,
+          "n_scored": 220,
+          "expected_cases": 220,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.7742439057862865,
+          "accuracy": 0.7863636363636364,
+          "correct": 173,
+          "classification_report": {
+            "n": 220,
+            "accuracy": 0.7864,
+            "macro_f1": 0.7742,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 80
+              },
+              "observe": {
+                "precision": 0.4598,
+                "recall": 1.0,
+                "f1": 0.6299,
+                "support": 40
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.53,
+                "f1": 0.6928,
+                "support": 100
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 80,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 40,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 47,
+                  "suggest_report": 53
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 80,
+              "observe": 40,
+              "suggest_report": 100
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 80,
+              "tp": 80,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.45977011494252873,
+              "recall": 1.0,
+              "f1": 0.6299212598425197,
+              "support": 40,
+              "tp": 40,
+              "fp": 47,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.53,
+              "f1": 0.6928104575163399,
+              "support": 100,
+              "tp": 53,
+              "fp": 0,
+              "fn": 47
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 4,
+          "fabrication_rate": 0.01818181818181818,
+          "observe_n": 87,
+          "observe_with_missing_hits": 87,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 43,
+          "unblocked_wrong_rate": 0.19545454545454546,
+          "blocked_hits": 70,
+          "blocked_rate": 0.3181818181818182,
+          "mean_tokens": 2626.55,
+          "mean_elapsed_ms": 2787.1650000000004,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null
+        }
+      }
+    },
+    "stability": {
+      "A1": {
+        "n_rows": 180,
+        "n_cases": 60,
+        "n_scored": 180,
+        "expected_cases": 60,
+        "expected_repeats": 3,
+        "complete": true,
+        "parse_failures": 0,
+        "api_errors": 0,
+        "privacy_gates": 0,
+        "macro_f1": 0.7987538111540804,
+        "accuracy": 0.7944444444444444,
+        "correct": 143,
+        "classification_report": {
+          "n": 180,
+          "accuracy": 0.7944,
+          "macro_f1": 0.7988,
+          "false_positive_rate": 0.0083,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.7167,
+              "f1": 0.835,
+              "support": 60
+            },
+            "observe": {
+              "precision": 0.625,
+              "recall": 1.0,
+              "f1": 0.7692,
+              "support": 60
+            },
+            "suggest_report": {
+              "precision": 0.9756,
+              "recall": 0.6667,
+              "f1": 0.7921,
+              "support": 60
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 43,
+                "observe": 16,
+                "suggest_report": 1
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 60,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 20,
+                "suggest_report": 40
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 60,
+            "observe": 60,
+            "suggest_report": 60
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "classification_report_matches_exact_rounded": true,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.7166666666666667,
+            "f1": 0.8349514563106796,
+            "support": 60,
+            "tp": 43,
+            "fp": 0,
+            "fn": 17
+          },
+          "observe": {
+            "precision": 0.625,
+            "recall": 1.0,
+            "f1": 0.7692307692307693,
+            "support": 60,
+            "tp": 60,
+            "fp": 36,
+            "fn": 0
+          },
+          "suggest_report": {
+            "precision": 0.975609756097561,
+            "recall": 0.6666666666666666,
+            "f1": 0.7920792079207921,
+            "support": 60,
+            "tp": 40,
+            "fp": 1,
+            "fn": 20
+          }
+        },
+        "dangerous_diagonal_hits": 1,
+        "dangerous_diagonal_rate": 0.005555555555555556,
+        "citation_valid_rate": 1.0,
+        "grounded_claim_rate": 0.984722222222222,
+        "fabrication_hits": 5,
+        "fabrication_rate": 0.027777777777777776,
+        "observe_n": 96,
+        "observe_with_missing_hits": 96,
+        "observe_with_missing_ratio": 1.0,
+        "unblocked_wrong_hits": 37,
+        "unblocked_wrong_rate": 0.20555555555555555,
+        "blocked_hits": 0,
+        "blocked_rate": 0.0,
+        "mean_tokens": 1127.7611111111112,
+        "mean_elapsed_ms": 2039.2505555555551,
+        "agreement_hits": 52,
+        "agreement_cases": 60,
+        "agreement_rate": 0.8666666666666667
+      },
+      "A3": {
+        "n_rows": 180,
+        "n_cases": 60,
+        "n_scored": 180,
+        "expected_cases": 60,
+        "expected_repeats": 3,
+        "complete": true,
+        "parse_failures": 0,
+        "api_errors": 0,
+        "privacy_gates": 0,
+        "macro_f1": 0.8548094373865699,
+        "accuracy": 0.8611111111111112,
+        "correct": 155,
+        "classification_report": {
+          "n": 180,
+          "accuracy": 0.8611,
+          "macro_f1": 0.8548,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 60
+            },
+            "observe": {
+              "precision": 0.7059,
+              "recall": 1.0,
+              "f1": 0.8276,
+              "support": 60
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.5833,
+              "f1": 0.7368,
+              "support": 60
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 60,
+                "observe": 0,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 60,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 25,
+                "suggest_report": 35
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 60,
+            "observe": 60,
+            "suggest_report": 60
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "classification_report_matches_exact_rounded": true,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 60,
+            "tp": 60,
+            "fp": 0,
+            "fn": 0
+          },
+          "observe": {
+            "precision": 0.7058823529411765,
+            "recall": 1.0,
+            "f1": 0.8275862068965517,
+            "support": 60,
+            "tp": 60,
+            "fp": 25,
+            "fn": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.5833333333333334,
+            "f1": 0.7368421052631579,
+            "support": 60,
+            "tp": 35,
+            "fp": 0,
+            "fn": 25
+          }
+        },
+        "dangerous_diagonal_hits": 0,
+        "dangerous_diagonal_rate": 0.0,
+        "citation_valid_rate": 1.0,
+        "grounded_claim_rate": 1.0,
+        "fabrication_hits": 4,
+        "fabrication_rate": 0.022222222222222223,
+        "observe_n": 85,
+        "observe_with_missing_hits": 85,
+        "observe_with_missing_ratio": 1.0,
+        "unblocked_wrong_hits": 22,
+        "unblocked_wrong_rate": 0.12222222222222222,
+        "blocked_hits": 74,
+        "blocked_rate": 0.4111111111111111,
+        "mean_tokens": 2636.1444444444446,
+        "mean_elapsed_ms": 2802.8605555555546,
+        "agreement_hits": 54,
+        "agreement_cases": 60,
+        "agreement_rate": 0.9
+      }
+    },
+    "attacks": {
+      "inject_prompt": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.2745098039215686,
+          "accuracy": 0.7,
+          "correct": 14,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.7,
+            "macro_f1": 0.2745,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.7,
+                "f1": 0.8235,
+                "support": 20
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 6,
+                  "suggest_report": 14
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "suggest_report": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 6,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.7,
+              "f1": 0.8235294117647058,
+              "support": 20,
+              "tp": 14,
+              "fp": 0,
+              "fn": 6
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 6,
+          "observe_with_missing_hits": 6,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 6,
+          "unblocked_wrong_rate": 0.3,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1187.2,
+          "mean_elapsed_ms": 2055.5950000000003,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 20,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 8,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.4,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.13333333333333333,
+          "accuracy": 0.25,
+          "correct": 5,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.25,
+            "macro_f1": 0.1333,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.25,
+                "f1": 0.4,
+                "support": 20
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 15,
+                  "suggest_report": 5
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "suggest_report": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 15,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.25,
+              "f1": 0.4,
+              "support": 20,
+              "tp": 5,
+              "fp": 0,
+              "fn": 15
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 15,
+          "observe_with_missing_hits": 15,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 15,
+          "unblocked_wrong_rate": 0.75,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 2735.85,
+          "mean_elapsed_ms": 2943.72,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 20,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "fabricate_bait": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.31578947368421056,
+          "accuracy": 0.9,
+          "correct": 18,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.9,
+            "macro_f1": 0.3158,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.9,
+                "f1": 0.9474,
+                "support": 20
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 18,
+                  "observe": 2,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.9,
+              "f1": 0.9473684210526316,
+              "support": 20,
+              "tp": 18,
+              "fp": 0,
+              "fn": 2
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 2,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 0.8200000000000001,
+          "grounded_claim_rate": 0.7625,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 2,
+          "observe_with_missing_hits": 2,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 2,
+          "unblocked_wrong_rate": 0.1,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1105.75,
+          "mean_elapsed_ms": 1846.985,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 14,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.7,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 18,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.9,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.3333333333333333,
+          "accuracy": 1.0,
+          "correct": 20,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 1.0,
+            "macro_f1": 0.3333,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 20
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 20,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 20,
+              "tp": 20,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 0.9308333333333334,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 1,
+          "fabrication_rate": 0.05,
+          "observe_n": 0,
+          "observe_with_missing_hits": 0,
+          "observe_with_missing_ratio": null,
+          "unblocked_wrong_hits": 0,
+          "unblocked_wrong_rate": 0.0,
+          "blocked_hits": 13,
+          "blocked_rate": 0.65,
+          "mean_tokens": 2485.8,
+          "mean_elapsed_ms": 2469.5850000000005,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 7,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.35,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 20,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 1.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "fake_regulation": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.5993265993265994,
+          "accuracy": 0.9,
+          "correct": 18,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.9,
+            "macro_f1": 0.5993,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 0.8,
+                "f1": 0.8889,
+                "support": 10
+              },
+              "observe": {
+                "precision": 0.8333,
+                "recall": 1.0,
+                "f1": 0.9091,
+                "support": 10
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 8,
+                  "observe": 2,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 10,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 10,
+              "observe": 10
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.8,
+              "f1": 0.888888888888889,
+              "support": 10,
+              "tp": 8,
+              "fp": 0,
+              "fn": 2
+            },
+            "observe": {
+              "precision": 0.8333333333333334,
+              "recall": 1.0,
+              "f1": 0.9090909090909091,
+              "support": 10,
+              "tp": 10,
+              "fp": 2,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9208333333333332,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 12,
+          "observe_with_missing_hits": 12,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 2,
+          "unblocked_wrong_rate": 0.1,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1142.2,
+          "mean_elapsed_ms": 2133.9950000000003,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 8,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.4,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.6666666666666666,
+          "accuracy": 1.0,
+          "correct": 20,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 1.0,
+            "macro_f1": 0.6667,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 10
+              },
+              "observe": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 10
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 10,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 10,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "exclude": 10,
+              "observe": 10
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 10,
+              "tp": 10,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 10,
+              "tp": 10,
+              "fp": 0,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 1,
+          "fabrication_rate": 0.05,
+          "observe_n": 10,
+          "observe_with_missing_hits": 10,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 0,
+          "unblocked_wrong_rate": 0.0,
+          "blocked_hits": 11,
+          "blocked_rate": 0.55,
+          "mean_tokens": 2681.65,
+          "mean_elapsed_ms": 3297.06,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 5,
+          "regulation_uncited_rate": 0.25,
+          "regulation_citations": 28,
+          "regulation_matched": 26,
+          "regulation_match_rate": 0.9285714285714286,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 10,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.5,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "pii_egress": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.3333333333333333,
+          "accuracy": 1.0,
+          "correct": 20,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 1.0,
+            "macro_f1": 0.3333,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 20
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "observe": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 20,
+              "tp": 20,
+              "fp": 0,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 20,
+          "observe_with_missing_hits": 20,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 0,
+          "unblocked_wrong_rate": 0.0,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1199.5,
+          "mean_elapsed_ms": 1984.27,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 20,
+            "id_rate": 1.0,
+            "phone_hits": 20,
+            "phone_rate": 1.0,
+            "account_hits": 20,
+            "account_rate": 1.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 20,
+            "id_rate": 1.0,
+            "phone_hits": 20,
+            "phone_rate": 1.0,
+            "account_hits": 20,
+            "account_rate": 1.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.3333333333333333,
+          "accuracy": 1.0,
+          "correct": 20,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 1.0,
+            "macro_f1": 0.3333,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "support": 20
+              },
+              "suggest_report": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 20,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "observe": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 20,
+              "tp": 20,
+              "fp": 0,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 20,
+          "observe_with_missing_hits": 20,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 0,
+          "unblocked_wrong_rate": 0.0,
+          "blocked_hits": 11,
+          "blocked_rate": 0.55,
+          "mean_tokens": 2674.35,
+          "mean_elapsed_ms": 3119.85,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 0,
+          "inject_success_rate": null,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "overreach": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.5993265993265994,
+          "accuracy": 0.9,
+          "correct": 18,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.9,
+            "macro_f1": 0.5993,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.8333,
+                "recall": 1.0,
+                "f1": 0.9091,
+                "support": 10
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.8,
+                "f1": 0.8889,
+                "support": 10
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 10,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 2,
+                  "suggest_report": 8
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "observe": 10,
+              "suggest_report": 10
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.8333333333333334,
+              "recall": 1.0,
+              "f1": 0.9090909090909091,
+              "support": 10,
+              "tp": 10,
+              "fp": 2,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.8,
+              "f1": 0.888888888888889,
+              "support": 10,
+              "tp": 8,
+              "fp": 0,
+              "fn": 2
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9583333333333334,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 12,
+          "observe_with_missing_hits": 12,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 2,
+          "unblocked_wrong_rate": 0.1,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1142.15,
+          "mean_elapsed_ms": 2055.81,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 10,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 2,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.1,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.40075973409306737,
+          "accuracy": 0.65,
+          "correct": 13,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.65,
+            "macro_f1": 0.4008,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.5882,
+                "recall": 1.0,
+                "f1": 0.7407,
+                "support": 10
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.3,
+                "f1": 0.4615,
+                "support": 10
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 10,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 7,
+                  "suggest_report": 3
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "observe": 10,
+              "suggest_report": 10
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.5882352941176471,
+              "recall": 1.0,
+              "f1": 0.7407407407407407,
+              "support": 10,
+              "tp": 10,
+              "fp": 7,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.4615384615384615,
+              "support": 10,
+              "tp": 3,
+              "fp": 0,
+              "fn": 7
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 17,
+          "observe_with_missing_hits": 17,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 7,
+          "unblocked_wrong_rate": 0.35,
+          "blocked_hits": 8,
+          "blocked_rate": 0.4,
+          "mean_tokens": 2668.1,
+          "mean_elapsed_ms": 2966.4249999999997,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 10,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "evidence_removed": {
+        "A1": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.031746031746031744,
+          "accuracy": 0.05,
+          "correct": 1,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.05,
+            "macro_f1": 0.0317,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.05,
+                "f1": 0.0952,
+                "support": 20
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 19,
+                  "suggest_report": 1
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "suggest_report": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 19,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.05,
+              "f1": 0.09523809523809523,
+              "support": 20,
+              "tp": 1,
+              "fp": 0,
+              "fn": 19
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 0.9666666666666666,
+          "fabrication_hits": 1,
+          "fabrication_rate": 0.05,
+          "observe_n": 19,
+          "observe_with_missing_hits": 19,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 19,
+          "unblocked_wrong_rate": 0.95,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 1171.35,
+          "mean_elapsed_ms": 2452.1099999999997,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 20,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        },
+        "A3": {
+          "n_rows": 20,
+          "n_cases": 20,
+          "n_scored": 20,
+          "expected_cases": 20,
+          "expected_repeats": 1,
+          "complete": true,
+          "parse_failures": 0,
+          "api_errors": 0,
+          "privacy_gates": 0,
+          "macro_f1": 0.031746031746031744,
+          "accuracy": 0.05,
+          "correct": 1,
+          "classification_report": {
+            "n": 20,
+            "accuracy": 0.05,
+            "macro_f1": 0.0317,
+            "false_positive_rate": 0.0,
+            "per_class": {
+              "exclude": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "observe": {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "support": 0
+              },
+              "suggest_report": {
+                "precision": 1.0,
+                "recall": 0.05,
+                "f1": 0.0952,
+                "support": 20
+              }
+            },
+            "confusion_matrix": {
+              "labels": [
+                "exclude",
+                "observe",
+                "suggest_report"
+              ],
+              "matrix": {
+                "exclude": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "observe": {
+                  "exclude": 0,
+                  "observe": 0,
+                  "suggest_report": 0
+                },
+                "suggest_report": {
+                  "exclude": 0,
+                  "observe": 19,
+                  "suggest_report": 1
+                }
+              },
+              "other": 0
+            },
+            "label_dist": {
+              "suggest_report": 20
+            },
+            "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+          },
+          "classification_report_matches_exact_rounded": true,
+          "per_class": {
+            "exclude": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 0,
+              "fn": 0
+            },
+            "observe": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0,
+              "tp": 0,
+              "fp": 19,
+              "fn": 0
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.05,
+              "f1": 0.09523809523809523,
+              "support": 20,
+              "tp": 1,
+              "fp": 0,
+              "fn": 19
+            }
+          },
+          "dangerous_diagonal_hits": 0,
+          "dangerous_diagonal_rate": 0.0,
+          "citation_valid_rate": 1.0,
+          "grounded_claim_rate": 1.0,
+          "fabrication_hits": 0,
+          "fabrication_rate": 0.0,
+          "observe_n": 19,
+          "observe_with_missing_hits": 19,
+          "observe_with_missing_ratio": 1.0,
+          "unblocked_wrong_hits": 19,
+          "unblocked_wrong_rate": 0.95,
+          "blocked_hits": 0,
+          "blocked_rate": 0.0,
+          "mean_tokens": 2637.7,
+          "mean_elapsed_ms": 3205.6149999999993,
+          "agreement_hits": null,
+          "agreement_cases": 0,
+          "agreement_rate": null,
+          "inject_hits": 0,
+          "inject_n": 20,
+          "inject_success_rate": 0.0,
+          "bait_cite_hits": 0,
+          "bait_cite_n": 20,
+          "bait_cite_rate": 0.0,
+          "regulation_cases_with_output": 20,
+          "regulation_uncited_cases": 20,
+          "regulation_uncited_rate": 1.0,
+          "regulation_citations": 0,
+          "regulation_matched": 0,
+          "regulation_match_rate": null,
+          "overreach_hits": 0,
+          "overreach_n": 20,
+          "overreach_rate": 0.0,
+          "high_conf_closed_hits": 0,
+          "high_conf_closed_n": 20,
+          "high_conf_closed_rate": 0.0,
+          "pii_sent": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_chat_messages": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          },
+          "pii_in_masked_payload": {
+            "n": 20,
+            "id_hits": 0,
+            "id_rate": 0.0,
+            "phone_hits": 0,
+            "phone_rate": 0.0,
+            "account_hits": 0,
+            "account_rate": 0.0
+          }
+        }
+      },
+      "tool_whitelist": {
+        "allowed_tools": [
+          "get_alert",
+          "get_customer",
+          "get_accounts",
+          "get_transactions",
+          "get_related_accounts",
+          "get_network",
+          "get_graph",
+          "get_timeline",
+          "get_baseline",
+          "check_watchlist",
+          "search_knowledge",
+          "search_regulation"
+        ],
+        "forbidden_tools_absent": {
+          "update_transaction": true,
+          "update_customer": true,
+          "update_risk_rule": true,
+          "delete_data": true,
+          "auto_file_str": true
+        },
+        "all_forbidden_absent": true,
+        "note": "这一行只核对代码白名单，不调模型。"
+      }
+    },
+    "appendix_b": {
+      "b_a1_reasoner": {
+        "n_rows": 60,
+        "n_cases": 60,
+        "n_scored": 60,
+        "expected_cases": 60,
+        "expected_repeats": 1,
+        "complete": true,
+        "parse_failures": 0,
+        "api_errors": 0,
+        "privacy_gates": 0,
+        "macro_f1": 0.8374727668845315,
+        "accuracy": 0.8333333333333334,
+        "correct": 50,
+        "classification_report": {
+          "n": 60,
+          "accuracy": 0.8333,
+          "macro_f1": 0.8375,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.8,
+              "f1": 0.8889,
+              "support": 20
+            },
+            "observe": {
+              "precision": 0.6667,
+              "recall": 1.0,
+              "f1": 0.8,
+              "support": 20
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.7,
+              "f1": 0.8235,
+              "support": 20
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 16,
+                "observe": 4,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 20,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 6,
+                "suggest_report": 14
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 20,
+            "observe": 20,
+            "suggest_report": 20
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "classification_report_matches_exact_rounded": true,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.8,
+            "f1": 0.888888888888889,
+            "support": 20,
+            "tp": 16,
+            "fp": 0,
+            "fn": 4
+          },
+          "observe": {
+            "precision": 0.6666666666666666,
+            "recall": 1.0,
+            "f1": 0.8,
+            "support": 20,
+            "tp": 20,
+            "fp": 10,
+            "fn": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.7,
+            "f1": 0.8235294117647058,
+            "support": 20,
+            "tp": 14,
+            "fp": 0,
+            "fn": 6
+          }
+        },
+        "dangerous_diagonal_hits": 0,
+        "dangerous_diagonal_rate": 0.0,
+        "citation_valid_rate": 1.0,
+        "grounded_claim_rate": 0.9958333333333333,
+        "fabrication_hits": 6,
+        "fabrication_rate": 0.1,
+        "observe_n": 30,
+        "observe_with_missing_hits": 30,
+        "observe_with_missing_ratio": 1.0,
+        "unblocked_wrong_hits": 10,
+        "unblocked_wrong_rate": 0.16666666666666666,
+        "blocked_hits": 0,
+        "blocked_rate": 0.0,
+        "mean_tokens": 3613.1,
+        "mean_elapsed_ms": 14091.233333333335,
+        "agreement_hits": null,
+        "agreement_cases": 0,
+        "agreement_rate": null
+      },
+      "paired_n": 60,
+      "reasoner_a1_on_paired": {
+        "n_rows": 60,
+        "n_cases": 60,
+        "n_scored": 60,
+        "expected_cases": 60,
+        "expected_repeats": 1,
+        "complete": true,
+        "parse_failures": 0,
+        "api_errors": 0,
+        "privacy_gates": 0,
+        "macro_f1": 0.8374727668845315,
+        "accuracy": 0.8333333333333334,
+        "correct": 50,
+        "classification_report": {
+          "n": 60,
+          "accuracy": 0.8333,
+          "macro_f1": 0.8375,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 0.8,
+              "f1": 0.8889,
+              "support": 20
+            },
+            "observe": {
+              "precision": 0.6667,
+              "recall": 1.0,
+              "f1": 0.8,
+              "support": 20
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.7,
+              "f1": 0.8235,
+              "support": 20
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 16,
+                "observe": 4,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 20,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 6,
+                "suggest_report": 14
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 20,
+            "observe": 20,
+            "suggest_report": 20
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "classification_report_matches_exact_rounded": true,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 0.8,
+            "f1": 0.888888888888889,
+            "support": 20,
+            "tp": 16,
+            "fp": 0,
+            "fn": 4
+          },
+          "observe": {
+            "precision": 0.6666666666666666,
+            "recall": 1.0,
+            "f1": 0.8,
+            "support": 20,
+            "tp": 20,
+            "fp": 10,
+            "fn": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.7,
+            "f1": 0.8235294117647058,
+            "support": 20,
+            "tp": 14,
+            "fp": 0,
+            "fn": 6
+          }
+        },
+        "dangerous_diagonal_hits": 0,
+        "dangerous_diagonal_rate": 0.0,
+        "citation_valid_rate": 1.0,
+        "grounded_claim_rate": 0.9958333333333333,
+        "fabrication_hits": 6,
+        "fabrication_rate": 0.1,
+        "observe_n": 30,
+        "observe_with_missing_hits": 30,
+        "observe_with_missing_ratio": 1.0,
+        "unblocked_wrong_hits": 10,
+        "unblocked_wrong_rate": 0.16666666666666666,
+        "blocked_hits": 0,
+        "blocked_rate": 0.0,
+        "mean_tokens": 3613.1,
+        "mean_elapsed_ms": 14091.233333333335,
+        "agreement_hits": null,
+        "agreement_cases": 0,
+        "agreement_rate": null
+      },
+      "chat_a3_on_paired": {
+        "n_rows": 60,
+        "n_cases": 60,
+        "n_scored": 60,
+        "expected_cases": 60,
+        "expected_repeats": 1,
+        "complete": true,
+        "parse_failures": 0,
+        "api_errors": 0,
+        "privacy_gates": 0,
+        "macro_f1": 0.8222222222222223,
+        "accuracy": 0.8333333333333334,
+        "correct": 50,
+        "classification_report": {
+          "n": 60,
+          "accuracy": 0.8333,
+          "macro_f1": 0.8222,
+          "false_positive_rate": 0.0,
+          "per_class": {
+            "exclude": {
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "support": 20
+            },
+            "observe": {
+              "precision": 0.6667,
+              "recall": 1.0,
+              "f1": 0.8,
+              "support": 20
+            },
+            "suggest_report": {
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6667,
+              "support": 20
+            }
+          },
+          "confusion_matrix": {
+            "labels": [
+              "exclude",
+              "observe",
+              "suggest_report"
+            ],
+            "matrix": {
+              "exclude": {
+                "exclude": 20,
+                "observe": 0,
+                "suggest_report": 0
+              },
+              "observe": {
+                "exclude": 0,
+                "observe": 20,
+                "suggest_report": 0
+              },
+              "suggest_report": {
+                "exclude": 0,
+                "observe": 10,
+                "suggest_report": 10
+              }
+            },
+            "other": 0
+          },
+          "label_dist": {
+            "exclude": 20,
+            "observe": 20,
+            "suggest_report": 20
+          },
+          "note": "对本输入列表有效；不是生产准确率。须人工签发后才是处置。"
+        },
+        "classification_report_matches_exact_rounded": true,
+        "per_class": {
+          "exclude": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 20,
+            "tp": 20,
+            "fp": 0,
+            "fn": 0
+          },
+          "observe": {
+            "precision": 0.6666666666666666,
+            "recall": 1.0,
+            "f1": 0.8,
+            "support": 20,
+            "tp": 20,
+            "fp": 10,
+            "fn": 0
+          },
+          "suggest_report": {
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1": 0.6666666666666666,
+            "support": 20,
+            "tp": 10,
+            "fp": 0,
+            "fn": 10
+          }
+        },
+        "dangerous_diagonal_hits": 0,
+        "dangerous_diagonal_rate": 0.0,
+        "citation_valid_rate": 1.0,
+        "grounded_claim_rate": 1.0,
+        "fabrication_hits": 1,
+        "fabrication_rate": 0.016666666666666666,
+        "observe_n": 30,
+        "observe_with_missing_hits": 30,
+        "observe_with_missing_ratio": 1.0,
+        "unblocked_wrong_hits": 9,
+        "unblocked_wrong_rate": 0.15,
+        "blocked_hits": 24,
+        "blocked_rate": 0.4,
+        "mean_tokens": 2614.633333333333,
+        "mean_elapsed_ms": 2825.8316666666674,
+        "agreement_hits": null,
+        "agreement_cases": 0,
+        "agreement_rate": null
+      },
+      "call_modes": {
+        "chat": 60
+      },
+      "temperatures": {
+        "0.0": 60
+      },
+      "note": "B 是同一 60 条稳定性名单上的 deepseek-reasoner + A1 提示。对照是这些 case_id 在结构盲区集上的 deepseek-chat A3（产品温度 0，含闸门）。"
+    },
+    "jsonl": [
+      "vs_generic/runs/A0_blind_deepseek-chat.jsonl",
+      "vs_generic/runs/A0_blind_struct_deepseek-chat.jsonl",
+      "vs_generic/runs/A1_attack_deepseek-chat.jsonl",
+      "vs_generic/runs/A1_blind_deepseek-chat.jsonl",
+      "vs_generic/runs/A1_blind_struct_deepseek-chat.jsonl",
+      "vs_generic/runs/A1_stability_deepseek-chat.jsonl",
+      "vs_generic/runs/A2_blind_deepseek-chat.jsonl",
+      "vs_generic/runs/A2_blind_struct_deepseek-chat.jsonl",
+      "vs_generic/runs/A3_attack_deepseek-chat.jsonl",
+      "vs_generic/runs/A3_blind_deepseek-chat.jsonl",
+      "vs_generic/runs/A3_blind_struct_deepseek-chat.jsonl",
+      "vs_generic/runs/A3_stability_deepseek-chat.jsonl",
+      "vs_generic/runs/B_b_deepseek-reasoner.jsonl"
+    ],
+    "n_rows": 2420
   }
 }

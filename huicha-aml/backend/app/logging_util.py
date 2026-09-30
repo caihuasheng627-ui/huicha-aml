@@ -6,6 +6,8 @@ import logging
 import re
 
 _ACCOUNT = re.compile(r"6222-[A-Z0-9\-]+")
+_ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+_MOBILE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _COMPANY = re.compile(r"[\u4e00-\u9fff]{2,20}(?:有限公司|股份有限公司|公司)")
 
 AUDIT = 25
@@ -18,6 +20,8 @@ if not log.handlers:
 
 def redact(text: str) -> str:
     out = _ACCOUNT.sub("[REDACTED]", text or "")
+    out = _ID_CARD.sub("[REDACTED]", out)
+    out = _MOBILE.sub("[REDACTED]", out)
     return _COMPANY.sub("[REDACTED]", out)
 
 

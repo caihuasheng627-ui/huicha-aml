@@ -7,7 +7,11 @@ export default defineConfig({
     port: 5173,
     host: true,
     proxy: {
-      "/api": "http://127.0.0.1:8000",
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        timeout: 360000,
+        proxyTimeout: 360000,
+      },
     },
   },
 });

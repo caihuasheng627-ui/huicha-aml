@@ -47,7 +47,7 @@ def test_prepare_for_llm_drops_city_and_asserts_clean():
     assert out["account"] == "ACCOUNT_001"
     assert "city" not in out["customer"]
     assert p.egress_calls == 1
-    assert p.receipt()["policy"] == "privacy_v2"
+    assert p.receipt()["policy"] == "privacy_v3"
 
 
 def test_assert_clean_rejects_raw_name():
@@ -63,9 +63,31 @@ def test_inspect_outbound_blocks_account_token():
     inspect_outbound([{"role": "user", "content": "账户 ACCOUNT_001"}])
 
 
+def test_mask_freeform_id_phone_and_account():
+    p = PrivacyMap()
+    raw = "备注 身份证件号999999190001019999，联系手机13800001111，收款账号6222-SYNTH-EXP-0001。"
+    masked = p.mask_text(raw)
+    assert "999999190001019999" not in masked
+    assert "13800001111" not in masked
+    assert "6222-SYNTH-EXP-0001" not in masked
+    assert "IDCARD_" in masked and "PHONE_" in masked and "ACCOUNT_" in masked
+    assert p.unmask_text(masked) == raw
+    clean = p.prepare_for_llm({"summary": raw})
+    blob = json.dumps(clean, ensure_ascii=False)
+    assert "999999190001019999" not in blob
+    assert "13800001111" not in blob
+    assert "6222-SYNTH-EXP-0001" not in blob
+    with pytest.raises(PrivacyLeakError, match="身份证号"):
+        inspect_outbound([{"role": "user", "content": "证件 110101199001011234"}])
+    with pytest.raises(PrivacyLeakError, match="手机号"):
+        inspect_outbound([{"role": "user", "content": "电话 13800138000"}])
+
+
 def test_logs_redact_account_like_tokens():
     assert "6222-A-8801" not in redact("调查 6222-A-8801")
     assert "[REDACTED]" in redact("调查 6222-A-8801")
+    assert "110101199001011234" not in redact("证件 110101199001011234")
+    assert "13800138000" not in redact("电话 13800138000")
     assert "有限公司" not in redact("华东百货批发有限公司开户")
     assert "生成调查草稿" in redact("生成调查草稿")
 
@@ -93,7 +115,7 @@ def test_case_h_llm_context_has_no_raw_pii(client, monkeypatch):
     assert "江南连锁" not in blob
     assert "CLIENT_" in blob or ctx["customer"]["name"].startswith("CLIENT_")
     assert any(t["id"].startswith("TX-H-CASH") for t in ctx["transactions"])
-    assert data["privacy"]["policy"] == "privacy_v2"
+    assert data["privacy"]["policy"] == "privacy_v3"
     assert data["privacy"]["egress_calls"] >= 1
     assert data["privacy"]["masked_names"] >= 1
     assert data["privacy"]["masked_accounts"] >= 1

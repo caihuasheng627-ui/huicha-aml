@@ -44,7 +44,7 @@ CANDIDATE_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}|"
     r"\d+(?:\.\d+)?\s*万元|"
     r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|"
-    r"\d{5,}"
+    r"\d{5,}(?:\.\d+)?"
 )
 
 REFERENCE_AMOUNTS = {50_000, 49_000, 100_000, 200_000, 300_000, 500_000, 800_000, 2_400_000}
@@ -100,6 +100,21 @@ def amount_known_forms(amt: float) -> set[str]:
             forms.add(f"{int(round(wan))} 万元")
             forms.add(f"{int(round(wan))}万元")
     return {f for f in forms if f}
+
+
+def source_literal_tokens(*texts: str) -> list[str]:
+    """工具原文里已经出现的编号和数字。模型照抄这些，不算编造。"""
+    found: list[str] = []
+    seen: set[str] = set()
+    for text in texts:
+        if not text:
+            continue
+        for match in CANDIDATE_RE.finditer(str(text)):
+            token = match.group(0).strip()
+            if token and token not in seen:
+                seen.add(token)
+                found.append(token)
+    return found
 
 
 def _customer_by_account(db: Session, account_id: str) -> Customer | None:
@@ -501,6 +516,12 @@ def collect_bundle(db: Session, alert_id: str, *, tool_names: list[str] | None =
         "dates": sorted({t["occurred_at"][:10] for t in txs} | {alert["created_at"][:10], customer["opened_at"]}),
         "names": sorted(n for n in name_set if n),
         "ref_ids": [alert["id"]],
+        "literals": source_literal_tokens(
+            *[t.get("remark") or "" for t in txs],
+            customer.get("summary") or "",
+            baseline.get("peer_note") or "",
+            alert.get("alert_type") or "",
+        ),
     }
     return {
         "alert": alert,
@@ -607,6 +628,7 @@ def fact_check(text: str, facts: dict) -> list[dict]:
     known.update(facts.get("names", []))
     known.update(facts.get("kb_ids", []))
     known.update(facts.get("ref_ids", []))
+    known.update(facts.get("literals") or [])
 
     issues = []
     seen = set()

@@ -1,5 +1,5 @@
 const API = "";
-const INVESTIGATE_TIMEOUT_MS = 90000;
+const INVESTIGATE_TIMEOUT_MS = 360000;
 const TOKEN_KEY = "huicha_demo_token";
 const SESSION_KEY = "huicha_session";
 const USER_KEY = "huicha_user";
@@ -184,7 +184,8 @@ export function parseSseBlocks(buffer) {
   const parts = String(buffer || "").split("\n\n");
   const rest = parts.pop() ?? "";
   for (const block of parts) {
-    if (!block.trim()) continue;
+    const trimmed = block.trim();
+    if (!trimmed || trimmed.startsWith(":")) continue;
     let event = "message";
     const dataLines = [];
     for (const line of block.split("\n")) {

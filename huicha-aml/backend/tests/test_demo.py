@@ -146,6 +146,23 @@ def test_parse_model_json_reports_truncation():
     assert _parse_model_json('```json\n{"a": 1}\n```', {"finish_reason": "stop"}, role="Judge") == {"a": 1}
 
 
+def test_fact_check_keeps_decimal_and_remark_literals():
+    from app.tools import source_literal_tokens
+
+    facts = {
+        "amounts": [246806.75],
+        "tx_ids": ["TX-1"],
+        "accounts": [],
+        "dates": [],
+        "names": [],
+        "literals": source_literal_tokens("学费退回 学籍2026561"),
+    }
+    assert fact_check("转出246806.75元", facts) == []
+    assert fact_check("学籍2026561", facts) == []
+    issues = fact_check("转出999999.99元", facts)
+    assert any(i["token"] == "999999.99" for i in issues)
+
+
 def test_amount_known_forms_include_wan():
     forms = amount_known_forms(188000)
     assert any("万元" in f for f in forms)

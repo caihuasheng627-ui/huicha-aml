@@ -4,10 +4,13 @@ import json
 import re
 from dataclasses import dataclass, field
 
-POLICY_VERSION = "privacy_v2"
+POLICY_VERSION = "privacy_v3"
 
 # 演示账号形态；真实核心号段不会进本仓库，但仍作为出站硬拦截。
 ACCOUNT_TOKEN = re.compile(r"6222-[A-Z0-9\-]+")
+# 自由文本里的证件号、手机号。登记字段之外也要换成占位符，不能只靠发送前拦截。
+_ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+_MOBILE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _CUSTOMER_ID = re.compile(r"^(C-[A-Z0-9]+|P-\d+)$")
 _KEEP_PREFIXES = ("CASH-", "POS-", "RELATIVE-", "UNK-")
 _ID_KEEP_PREFIXES = ("TX-", "ALT-", "EV-", "KB-", "CLIENT_", "ACCOUNT_", "CUST_")
@@ -28,11 +31,17 @@ def _as_text(obj) -> str:
 
 
 def inspect_outbound(messages) -> None:
-    """HTTP 出站前门：未脱敏的 6222- 账号一律拦截。"""
+    """HTTP 出站前门：未脱敏的账号、身份证、手机号一律拦截。"""
     blob = _as_text(messages)
     hit = ACCOUNT_TOKEN.search(blob)
     if hit:
         raise PrivacyLeakError(f"出站消息含账号形态 token {hit.group(0)}，已拦截")
+    hit = _ID_CARD.search(blob)
+    if hit:
+        raise PrivacyLeakError(f"出站消息含身份证号形态 token {hit.group(0)}，已拦截")
+    hit = _MOBILE.search(blob)
+    if hit:
+        raise PrivacyLeakError(f"出站消息含手机号形态 token {hit.group(0)}，已拦截")
 
 
 @dataclass
@@ -45,9 +54,15 @@ class PrivacyMap:
     mask_to_acct: dict[str, str] = field(default_factory=dict)
     customer_to_mask: dict[str, str] = field(default_factory=dict)
     mask_to_customer: dict[str, str] = field(default_factory=dict)
+    id_to_mask: dict[str, str] = field(default_factory=dict)
+    mask_to_id: dict[str, str] = field(default_factory=dict)
+    phone_to_mask: dict[str, str] = field(default_factory=dict)
+    mask_to_phone: dict[str, str] = field(default_factory=dict)
     _name_i: int = 0
     _acct_i: int = 0
     _cust_i: int = 0
+    _id_i: int = 0
+    _phone_i: int = 0
     egress_calls: int = 0
 
     def register_name(self, name: str) -> str:
@@ -94,6 +109,28 @@ class PrivacyMap:
             self.mask_to_customer[mask] = cid
         return self.customer_to_mask[cid]
 
+    def register_id_card(self, raw: str) -> str:
+        raw = (raw or "").strip()
+        if not raw:
+            return raw
+        if raw not in self.id_to_mask:
+            self._id_i += 1
+            mask = f"IDCARD_{self._id_i:03d}"
+            self.id_to_mask[raw] = mask
+            self.mask_to_id[mask] = raw
+        return self.id_to_mask[raw]
+
+    def register_phone(self, raw: str) -> str:
+        raw = (raw or "").strip()
+        if not raw:
+            return raw
+        if raw not in self.phone_to_mask:
+            self._phone_i += 1
+            mask = f"PHONE_{self._phone_i:03d}"
+            self.phone_to_mask[raw] = mask
+            self.mask_to_phone[mask] = raw
+        return self.phone_to_mask[raw]
+
     def _apply(self, text: str, mapping: dict[str, str]) -> str:
         out = text
         for raw, mask in sorted(mapping.items(), key=lambda x: -len(x[0])):
@@ -109,13 +146,20 @@ class PrivacyMap:
         out = self._apply(out, self.acct_to_mask)
         out = self._apply(out, self.name_to_mask)
         out = self._apply(out, self.customer_to_mask)
-        return out
+        return self._mask_residual(out)
+
+    def _mask_residual(self, text: str) -> str:
+        """备注、摘要里没登记过的证件号、手机号、6222 账号。"""
+        text = ACCOUNT_TOKEN.sub(lambda m: self.register_account(m.group(0)), text)
+        text = _ID_CARD.sub(lambda m: self.register_id_card(m.group(0)), text)
+        text = _MOBILE.sub(lambda m: self.register_phone(m.group(0)), text)
+        return text
 
     def unmask_text(self, text: str) -> str:
         if not text:
             return text
         out = text
-        for mapping in (self.mask_to_acct, self.mask_to_name, self.mask_to_customer):
+        for mapping in (self.mask_to_acct, self.mask_to_name, self.mask_to_customer, self.mask_to_id, self.mask_to_phone):
             out = self._apply(out, mapping)
         return out
 
@@ -140,6 +184,10 @@ class PrivacyMap:
                 found.append(raw)
         if ACCOUNT_TOKEN.search(blob):
             found.append("account-token")
+        if _ID_CARD.search(blob):
+            found.append("id-card")
+        if _MOBILE.search(blob):
+            found.append("mobile")
         return list(dict.fromkeys(found))
 
     def assert_clean(self, obj) -> None:
@@ -161,6 +209,8 @@ class PrivacyMap:
             "masked_names": len(self.name_to_mask),
             "masked_accounts": len(self.acct_to_mask),
             "masked_customer_ids": len(self.customer_to_mask),
+            "masked_id_cards": len(self.id_to_mask),
+            "masked_phones": len(self.phone_to_mask),
             "egress_calls": self.egress_calls,
             "leaks_blocked": 0,
             "note": "仅 LLM 出站脱敏；工作台与签发稿为受控明文，SQLite 不加密",

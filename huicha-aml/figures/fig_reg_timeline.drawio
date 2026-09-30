@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="reg_timeline" id="reg_timeline">
+    <mxGraphModel dx="1400" dy="480" grid="1" gridSize="10" page="1" pageWidth="1320" pageHeight="420">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="调查环节相关规定" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=16;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="8" width="600" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="bar" value="" style="shape=singleArrow;direction=east;arrowWidth=0.55;arrowSize=0.08;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="36" y="186" width="1248" height="36" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1" value="新《反洗钱法》通过&lt;br&gt;机构报告责任写入法律" style="text;html=1;align=center;verticalAlign=bottom;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="16" y="48" width="200" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s1" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="116" y="104" as="sourcePoint"/>
+            <mxPoint x="116" y="186" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p1" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="110" y="178" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d1" value="2024年11月8日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="40" y="192" width="152" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="新《反洗钱法》施行&lt;br&gt;留痕与排除理由可检查、可处罚" style="text;html=1;align=center;verticalAlign=top;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="216" y="250" width="210" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s2" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="321" y="222" as="sourcePoint"/>
+            <mxPoint x="321" y="248" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p2" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="315" y="214" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d2" value="2025年1月1日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="246" y="192" width="150" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" value="大额可疑办法施行&lt;br&gt;报告要素与人工分析写入办法" style="text;html=1;align=center;verticalAlign=bottom;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="416" y="48" width="220" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="526" y="104" as="sourcePoint"/>
+            <mxPoint x="526" y="186" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p3" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="520" y="178" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d3" value="2025年12月1日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="446" y="192" width="160" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a4" value="客户尽调办法施行&lt;br&gt;调查要能调取身份和交易记录" style="text;html=1;align=center;verticalAlign=top;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="626" y="250" width="230" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s4" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="741" y="222" as="sourcePoint"/>
+            <mxPoint x="741" y="248" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p4" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="735" y="214" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d4" value="2026年1月1日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="666" y="192" width="150" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a5" value="受益所有人办法施行&lt;br&gt;缺材料时要列出待补项" style="text;html=1;align=center;verticalAlign=bottom;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="836" y="48" width="220" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s5" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="946" y="104" as="sourcePoint"/>
+            <mxPoint x="946" y="186" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p5" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="940" y="178" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d5" value="2026年1月20日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="866" y="192" width="160" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="a6" value="8号文印发&lt;br&gt;高风险场景须人审，过程可审计" style="text;html=1;align=center;verticalAlign=top;fontFamily=Microsoft YaHei;fontSize=13;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="1046" y="250" width="240" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="s6" value="" style="endArrow=none;html=1;strokeWidth=1.25;strokeColor=#5B4B8A;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1166" y="222" as="sourcePoint"/>
+            <mxPoint x="1166" y="248" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p6" value="" style="ellipse;html=1;fillColor=#5B4B8A;strokeColor=#5B4B8A;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="214" width="12" height="12" as="geometry"/>
+        </mxCell>
+        <mxCell id="d6" value="2026年6月18日" style="text;html=1;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=11;fontStyle=1;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="1086" y="192" width="160" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="foot" value="约18个月内落地6项规定。调查底稿从内控要求，变成能检查、能处罚的硬约束。" style="text;html=1;align=left;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="36" y="330" width="900" height="24" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1320,6 +1320,7 @@ export default function App() {
               playback={playback}
               useChallenger={nextChallengerEnabled}
               injectHallucination={injectHallucination}
+              hint={stageHint}
               onRetry={() => onInvestigate()}
               onBack={() => playback.reset()}
             />

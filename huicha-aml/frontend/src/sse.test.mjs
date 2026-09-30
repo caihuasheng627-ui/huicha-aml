@@ -26,4 +26,9 @@ const partial = parseSseBlocks("event: stage\ndata: {\"role\":\"Planner\"");
 if (partial.events.length !== 0) throw new Error("incomplete block must stay in rest");
 if (!partial.rest.includes("Planner")) throw new Error("incomplete block should be retained");
 
+const keep = parseSseBlocks(": keepalive\n\nevent: done\ndata: {\"ok\":true}\n\n");
+if (keep.events.length !== 1 || keep.events[0].event !== "done") {
+  throw new Error("SSE comments should be ignored");
+}
+
 console.log("sse parse ok");
